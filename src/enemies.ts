@@ -1,4 +1,4 @@
-import { MAP_WIDTH, MAP_HEIGHT, wrappedDistance, wrappedAngle, randomRange, wrapPosition } from './utils';
+import { wrappedAngle, randomRange, wrapPosition } from './utils';
 import { Camera } from './camera';
 
 interface EnemyTypeConfig {
