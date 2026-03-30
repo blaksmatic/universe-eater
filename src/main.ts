@@ -1,11 +1,13 @@
 import { Camera } from './camera';
 import { Player } from './player';
+import { Background } from './background';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 
 const camera = new Camera(window.innerWidth, window.innerHeight);
 const player = new Player();
+const background = new Background();
 
 let lastTime = 0;
 
@@ -27,6 +29,9 @@ function gameLoop(timestamp: number): void {
 
   ctx.fillStyle = '#0a0a1a';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  background.update(dt);
+  background.draw(ctx, camera, timestamp / 1000);
 
   player.draw(ctx, camera);
 
