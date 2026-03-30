@@ -19,6 +19,7 @@ export class LaserBeam implements Weapon {
   private isFiring = false;
   private targetX = 0;
   private targetY = 0;
+  private time = 0;
 
   private getStats() {
     const lvl = this.level;
@@ -35,6 +36,7 @@ export class LaserBeam implements Weapon {
 
   update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void {
     const stats = this.getStats();
+    this.time += dt;
 
     if (this.isFiring) {
       this.firingTimer -= dt;
@@ -91,34 +93,123 @@ export class LaserBeam implements Weapon {
     const endX = screen.x + dx;
     const endY = screen.y + dy;
 
-    if (this.level >= 3) {
+    // Beam geometry
+    const beamLength = Math.sqrt(dx * dx + dy * dy);
+    const beamAngle = Math.atan2(dy, dx);
+    // Perpendicular direction
+    const perpX = -Math.sin(beamAngle);
+    const perpY = Math.cos(beamAngle);
+
+    // Wave parameters — amplitude grows with level
+    const amplitude = 0.5 + this.level * 0.6;
+    const frequency = 3.5;
+    const waveSpeed = 8;
+    const segments = 20;
+
+    // Build wavy path points
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const along = t * beamLength;
+      const wave = Math.sin(t * frequency * Math.PI * 2 + this.time * waveSpeed) * amplitude;
+      points.push({
+        x: screen.x + Math.cos(beamAngle) * along + perpX * wave,
+        y: screen.y + Math.sin(beamAngle) * along + perpY * wave,
+      });
+    }
+
+    const drawWavyPath = () => {
       ctx.beginPath();
-      ctx.moveTo(screen.x, screen.y);
-      ctx.lineTo(endX, endY);
-      ctx.strokeStyle = `rgba(100, 180, 255, ${stats.glowAlpha})`;
-      ctx.lineWidth = stats.width * 4;
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i <= segments; i++) ctx.lineTo(points[i].x, points[i].y);
+    };
+
+    // --- Outer glow layer (wide, blue-tinted) ---
+    if (this.level >= 3) {
+      drawWavyPath();
+      ctx.strokeStyle = `rgba(80, 160, 255, ${stats.glowAlpha})`;
+      ctx.lineWidth = stats.width * 5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.stroke();
     }
 
-    ctx.beginPath();
-    ctx.moveTo(screen.x, screen.y);
-    ctx.lineTo(endX, endY);
-    ctx.strokeStyle = `rgba(150, 200, 255, ${0.3 + stats.glowAlpha})`;
-    ctx.lineWidth = stats.width * 2;
-    ctx.stroke();
+    // --- Mid layer (tapered via per-segment varying width, slightly blue→white→cyan) ---
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      // Taper: wide at source, narrow at tip
+      const taper = 1.0 - t * 0.5;
+      // Color: blue at source → white in middle → cyan at tip
+      const r = Math.round(100 + t * 155);
+      const g = Math.round(180 + t * 20);
+      const b = 255;
+      ctx.beginPath();
+      ctx.moveTo(points[i].x, points[i].y);
+      ctx.lineTo(points[i + 1].x, points[i + 1].y);
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.35 + stats.glowAlpha})`;
+      ctx.lineWidth = stats.width * 2.5 * taper;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
 
-    ctx.beginPath();
-    ctx.moveTo(screen.x, screen.y);
-    ctx.lineTo(endX, endY);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = stats.width;
-    ctx.stroke();
+    // --- Core layer (bright, tapered, white→cyan) ---
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      const taper = 1.0 - t * 0.6;
+      const g = Math.round(220 + t * 35);
+      const b = Math.round(240 + t * 15);
+      ctx.beginPath();
+      ctx.moveTo(points[i].x, points[i].y);
+      ctx.lineTo(points[i + 1].x, points[i + 1].y);
+      ctx.strokeStyle = `rgba(255, ${g}, ${b}, 0.95)`;
+      ctx.lineWidth = stats.width * taper;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
 
+    // --- Impact flash at target ---
+    const flashRadius = stats.width * 3 + 4;
+    const flashGrad = ctx.createRadialGradient(endX, endY, 0, endX, endY, flashRadius * 2.5);
+    flashGrad.addColorStop(0, 'rgba(200, 240, 255, 0.9)');
+    flashGrad.addColorStop(0.4, 'rgba(100, 200, 255, 0.5)');
+    flashGrad.addColorStop(1, 'rgba(80, 160, 255, 0)');
+    ctx.beginPath();
+    ctx.arc(endX, endY, flashRadius * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = flashGrad;
+    ctx.fill();
+    // Bright core dot of impact
+    ctx.beginPath();
+    ctx.arc(endX, endY, flashRadius * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(220, 250, 255, 0.95)';
+    ctx.fill();
+
+    // --- Energy buildup orb at player origin (level 5+) ---
+    if (this.level >= 5) {
+      const orbPulse = 0.6 + 0.4 * Math.sin(this.time * 12);
+      const orbRadius = stats.width * 2.5 * orbPulse;
+      const orbGrad = ctx.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, orbRadius * 3);
+      orbGrad.addColorStop(0, `rgba(180, 220, 255, ${0.8 * orbPulse})`);
+      orbGrad.addColorStop(0.5, `rgba(80, 150, 255, ${0.4 * orbPulse})`);
+      orbGrad.addColorStop(1, 'rgba(60, 120, 255, 0)');
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, orbRadius * 3, 0, Math.PI * 2);
+      ctx.fillStyle = orbGrad;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, orbRadius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(210, 235, 255, ${0.9 * orbPulse})`;
+      ctx.fill();
+    }
+
+    // --- Particles along beam ---
     for (let i = 0; i < stats.particleCount; i++) {
       const t = Math.random();
-      const px = screen.x + dx * t + (Math.random() - 0.5) * stats.width * 3;
-      const py = screen.y + dy * t + (Math.random() - 0.5) * stats.width * 3;
-      ctx.fillStyle = `rgba(200, 220, 255, ${0.5 + Math.random() * 0.5})`;
+      const segIdx = Math.floor(t * segments);
+      const px = points[segIdx].x + (Math.random() - 0.5) * stats.width * 3;
+      const py = points[segIdx].y + (Math.random() - 0.5) * stats.width * 3;
+      ctx.fillStyle = `rgba(200, 230, 255, ${0.5 + Math.random() * 0.5})`;
       ctx.beginPath();
       ctx.arc(px, py, Math.random() * 2, 0, Math.PI * 2);
       ctx.fill();
@@ -253,19 +344,10 @@ export class NovaBlast implements Weapon {
 
     this.cooldownTimer -= dt;
     if (this.cooldownTimer <= 0 && !this.isBlasting) {
-      let hasTarget = false;
-      for (const enemy of enemies) {
-        if (!enemy.dead && wrappedDistance(playerX, playerY, enemy.x, enemy.y) < stats.maxRadius) {
-          hasTarget = true;
-          break;
-        }
-      }
-      if (hasTarget) {
-        this.isBlasting = true;
-        this.cooldownTimer = stats.cooldown;
-        this.blastRadius = 0;
-        this.hasDealtDamage = false;
-      }
+      this.isBlasting = true;
+      this.cooldownTimer = stats.cooldown;
+      this.blastRadius = 0;
+      this.hasDealtDamage = false;
     }
   }
 
