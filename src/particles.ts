@@ -1,4 +1,5 @@
 import { Camera } from './camera';
+import { parseHexColor } from './utils';
 
 class DeathParticle {
   private elapsed = 0;
@@ -23,10 +24,7 @@ class DeathParticle {
     this.wobbleAmp = 5 + Math.random() * 10;
     this.wobbleOffset = Math.random() * Math.PI * 2;
 
-    // Parse hex color
-    this.r = parseInt(outlineColor.slice(1, 3), 16);
-    this.g = parseInt(outlineColor.slice(3, 5), 16);
-    this.b = parseInt(outlineColor.slice(5, 7), 16);
+    [this.r, this.g, this.b] = parseHexColor(outlineColor);
   }
 
   update(dt: number): void {
@@ -60,7 +58,7 @@ class ExplosionParticle {
   private b: number;
   private particleRadius: number;
   private lifetime: number;
-  private gravity = 60; // pixels per second^2 downward
+  private gravity = 60;
   done = false;
 
   constructor(
@@ -69,16 +67,13 @@ class ExplosionParticle {
     outlineColor: string,
   ) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 100 + Math.random() * 150; // 100-250 px/s
+    const speed = 100 + Math.random() * 150;
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
-    this.particleRadius = 1 + Math.random() * 2; // 1-3 px
-    this.lifetime = 0.5 + Math.random() * 0.3; // 0.5-0.8 seconds
+    this.particleRadius = 1 + Math.random() * 2;
+    this.lifetime = 0.5 + Math.random() * 0.3;
 
-    // Parse hex color
-    this.r = parseInt(outlineColor.slice(1, 3), 16);
-    this.g = parseInt(outlineColor.slice(3, 5), 16);
-    this.b = parseInt(outlineColor.slice(5, 7), 16);
+    [this.r, this.g, this.b] = parseHexColor(outlineColor);
   }
 
   update(dt: number): void {
@@ -139,14 +134,14 @@ export class ParticleSystem {
 
   spawnDeath(x: number, y: number, radius: number, outlineColor: string): void {
     this.particles.push(new DeathParticle(x, y, radius, outlineColor));
-    this.spawnExplosion(x, y, radius, outlineColor);
+    this.spawnExplosion(x, y, outlineColor);
     if (radius > 25) {
       this.spawnFlash(x, y, radius);
     }
   }
 
-  spawnExplosion(x: number, y: number, _radius: number, outlineColor: string): void {
-    const count = 8 + Math.floor(Math.random() * 8); // 8-15
+  private spawnExplosion(x: number, y: number, outlineColor: string): void {
+    const count = 8 + Math.floor(Math.random() * 8);
     for (let i = 0; i < count; i++) {
       this.particles.push(new ExplosionParticle(x, y, outlineColor));
     }

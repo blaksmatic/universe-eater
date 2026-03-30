@@ -1,6 +1,6 @@
-export const MAP_WIDTH = 5000;
-export const MAP_HEIGHT = 5000;
-export const WRAP_PADDING = 200;
+export const MAP_WIDTH = 50000;
+export const MAP_HEIGHT = 50000;
+export const WRAP_PADDING = 500;
 
 export interface Point {
   x: number;
@@ -35,22 +35,53 @@ export function wrapPosition(x: number, y: number): Point {
   return { x: wx, y: wy };
 }
 
-export function wrappedDistance(x1: number, y1: number, x2: number, y2: number): number {
+export function wrappedDelta(x1: number, y1: number, x2: number, y2: number): Point {
   let dx = x2 - x1;
   let dy = y2 - y1;
   if (dx > MAP_WIDTH / 2) dx -= MAP_WIDTH;
   if (dx < -MAP_WIDTH / 2) dx += MAP_WIDTH;
   if (dy > MAP_HEIGHT / 2) dy -= MAP_HEIGHT;
   if (dy < -MAP_HEIGHT / 2) dy += MAP_HEIGHT;
-  return Math.sqrt(dx * dx + dy * dy);
+  return { x: dx, y: dy };
+}
+
+export function wrappedDistance(x1: number, y1: number, x2: number, y2: number): number {
+  const d = wrappedDelta(x1, y1, x2, y2);
+  return Math.sqrt(d.x * d.x + d.y * d.y);
 }
 
 export function wrappedAngle(x1: number, y1: number, x2: number, y2: number): number {
-  let dx = x2 - x1;
-  let dy = y2 - y1;
-  if (dx > MAP_WIDTH / 2) dx -= MAP_WIDTH;
-  if (dx < -MAP_WIDTH / 2) dx += MAP_WIDTH;
-  if (dy > MAP_HEIGHT / 2) dy -= MAP_HEIGHT;
-  if (dy < -MAP_HEIGHT / 2) dy += MAP_HEIGHT;
-  return Math.atan2(dy, dx);
+  const d = wrappedDelta(x1, y1, x2, y2);
+  return Math.atan2(d.y, d.x);
+}
+
+export function parseHexColor(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+export function formatTime(seconds: number): string {
+  const t = Math.ceil(seconds);
+  const min = Math.floor(t / 60);
+  const sec = t % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+export function drawSphereShading(
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number,
+  r: number, g: number, b: number,
+): void {
+  const hlX = cx - radius * 0.3;
+  const hlY = cy - radius * 0.3;
+  const grad = ctx.createRadialGradient(hlX, hlY, radius * 0.1, cx, cy, radius);
+  grad.addColorStop(0, `rgba(${Math.min(255, r + 80)}, ${Math.min(255, g + 80)}, ${Math.min(255, b + 80)}, 0.25)`);
+  grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, 0.08)`);
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius - 1, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
 }

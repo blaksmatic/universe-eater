@@ -1,6 +1,8 @@
 import { MAP_WIDTH, MAP_HEIGHT, randomRange } from './utils';
 import { Camera } from './camera';
 
+const PARALLAX_FACTORS = [0.2, 0.5, 0.8] as const;
+
 interface Star {
   x: number;
   y: number;
@@ -69,20 +71,27 @@ export class Background {
   private nebulae: Nebula[] = [];
   private dust: DustParticle[] = [];
   private driftIntensity = 0;
+  private velocityX = 0;
+  private velocityY = 0;
 
   constructor() {
     for (let i = 0; i < 300; i++) this.stars.push(createStar(0));
     for (let i = 0; i < 150; i++) this.stars.push(createStar(1));
     for (let i = 0; i < 80; i++) this.stars.push(createStar(2));
-    for (let i = 0; i < 8; i++) this.nebulae.push(createNebula());
-    for (let i = 0; i < 100; i++) this.dust.push(createDust());
+    for (let i = 0; i < 6; i++) this.nebulae.push(createNebula());
+    for (let i = 0; i < 50; i++) this.dust.push(createDust());
   }
 
-  update(dt: number, playerSpeed = 0): void {
+  update(dt: number, playerSpeed = 0, vx = 0, vy = 0): void {
     // Smoothly ramp drift intensity up when idle, down when moving
     const targetDrift = playerSpeed < 10 ? 1 : 0;
     const rampSpeed = 3; // transitions over ~0.3 seconds
     this.driftIntensity += (targetDrift - this.driftIntensity) * Math.min(1, rampSpeed * dt);
+
+    // Smooth velocity tracking for star streaking
+    const smoothing = Math.min(1, 8 * dt);
+    this.velocityX += (vx - this.velocityX) * smoothing;
+    this.velocityY += (vy - this.velocityY) * smoothing;
 
     for (const d of this.dust) {
       d.x += d.vx * dt;
@@ -106,8 +115,13 @@ export class Background {
       ctx.fillRect(px - n.radius, py - n.radius, n.radius * 2, n.radius * 2);
     }
 
-    // Stars with parallax
-    const parallaxFactors = [0.2, 0.5, 0.8];
+    // Stars with parallax, perspective scaling, and motion streaking
+    const parallaxFactors = PARALLAX_FACTORS;
+    const cx = camera.width / 2;
+    const cy = camera.height / 2;
+    const speed = Math.sqrt(this.velocityX * this.velocityX + this.velocityY * this.velocityY);
+    const streakFactors = [0, 0.03, 0.07]; // far stars don't streak, close ones do
+
     for (const star of this.stars) {
       const factor = parallaxFactors[star.layer];
       const sx = star.x - camera.x * factor;
@@ -115,25 +129,57 @@ export class Background {
       let screenX = ((sx % camera.width) + camera.width) % camera.width;
       let screenY = ((sy % camera.height) + camera.height) % camera.height;
 
-      // Idle star drift: smooth radial oscillation for 3D "flying through space" feel
+      // Perspective scaling: stars near screen edges appear slightly larger
+      const offX = (screenX - cx) / cx; // -1..1
+      const offY = (screenY - cy) / cy;
+      const edgeDist = Math.sqrt(offX * offX + offY * offY); // 0 at center, ~1.4 at corners
+      const perspScale = 1 + edgeDist * 0.075 * (star.layer * 0.5);
+      const drawSize = star.size * perspScale;
+
+      // Idle star drift
       if (this.driftIntensity > 0.01) {
-        const cx = camera.width / 2;
-        const cy = camera.height / 2;
-        const driftX = (screenX - cx) / camera.width;
-        const driftY = (screenY - cy) / camera.height;
         const driftFactor = [5, 12, 20][star.layer];
         const oscillation = Math.sin(time * 0.4) * 0.5 + 0.5;
-        screenX += driftX * driftFactor * oscillation * this.driftIntensity;
-        screenY += driftY * driftFactor * oscillation * this.driftIntensity;
+        screenX += offX * driftFactor * oscillation * this.driftIntensity;
+        screenY += offY * driftFactor * oscillation * this.driftIntensity;
       }
 
       const twinkle = 0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
       const alpha = star.brightness * twinkle;
 
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(screenX, screenY, star.size, 0, Math.PI * 2);
-      ctx.fill();
+      // Depth-of-field: far layer stars are softer
+      const dofAlpha = star.layer === 0 ? alpha * 0.5 : alpha;
+
+      // Glow halo for foreground stars
+      if (star.layer === 2 && star.size > 2) {
+        const glowR = drawSize * 3;
+        const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, glowR);
+        glow.addColorStop(0, `rgba(200, 220, 255, ${dofAlpha * 0.3})`);
+        glow.addColorStop(1, 'rgba(200, 220, 255, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, glowR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Motion streaking: elongate stars in velocity direction when moving
+      const streakLen = speed * streakFactors[star.layer];
+      if (streakLen > 1) {
+        const nx = this.velocityX / speed;
+        const ny = this.velocityY / speed;
+        ctx.beginPath();
+        ctx.moveTo(screenX - nx * streakLen, screenY - ny * streakLen);
+        ctx.lineTo(screenX + nx * streakLen, screenY + ny * streakLen);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${dofAlpha * 0.7})`;
+        ctx.lineWidth = drawSize * 0.8;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(255, 255, 255, ${dofAlpha})`;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, drawSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Cosmic dust

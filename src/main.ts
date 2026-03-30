@@ -27,6 +27,7 @@ function init(): void {
   spawner = new EnemySpawner();
   particles = new ParticleSystem();
   weaponManager = new WeaponManager();
+  weaponManager.setOnLaserFire((angle) => player.addRipple(angle));
   game = new Game();
 }
 
@@ -34,6 +35,8 @@ let lastTime = 0;
 let prevPlayerX = 0;
 let prevPlayerY = 0;
 let playerSpeed = 0;
+let playerVx = 0;
+let playerVy = 0;
 
 function resize(): void {
   canvas.width = window.innerWidth;
@@ -47,13 +50,15 @@ init();
 
 // Input handlers
 window.addEventListener('keydown', (e) => {
-  if (game.state === GameState.LEVEL_UP) {
-    const num = parseInt(e.key);
-    if (num >= 1 && num <= game.levelUpChoices.length) {
-      game.applyLevelUpChoice(num - 1, weaponManager);
-      game.state = GameState.PLAYING;
-    }
-  } else if (game.state === GameState.TITLE) {
+  if (e.key === 'Escape' && game.state === GameState.PLAYING) {
+    game.state = GameState.PAUSED;
+    return;
+  }
+  if (e.key === 'Escape' && game.state === GameState.PAUSED) {
+    game.state = GameState.PLAYING;
+    return;
+  }
+  if (game.state === GameState.TITLE) {
     game.state = GameState.PLAYING;
   } else if (game.state === GameState.GAME_OVER || game.state === GameState.VICTORY) {
     init();
@@ -61,34 +66,17 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-canvas.addEventListener('click', (e) => {
-  if (game.state === GameState.LEVEL_UP) {
-    const choices = game.levelUpChoices;
-    const boxW = 200, boxH = 80, gap = 20;
-    const totalW = choices.length * boxW + (choices.length - 1) * gap;
-    const startX = (canvas.width - totalW) / 2;
-    const boxY = canvas.height / 2 - 30;
-
-    for (let i = 0; i < choices.length; i++) {
-      const bx = startX + i * (boxW + gap);
-      if (e.clientX >= bx && e.clientX <= bx + boxW && e.clientY >= boxY && e.clientY <= boxY + boxH) {
-        game.applyLevelUpChoice(i, weaponManager);
-        game.state = GameState.PLAYING;
-        break;
-      }
-    }
-  }
-});
-
 function gameLoop(timestamp: number): void {
   const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
   lastTime = timestamp;
 
-  // Track player speed for idle star drift
+  // Track player velocity for star drift and streaking
   if (dt > 0) {
     const dx = player.x - prevPlayerX;
     const dy = player.y - prevPlayerY;
-    playerSpeed = Math.sqrt(dx * dx + dy * dy) / dt;
+    playerVx = dx / dt;
+    playerVy = dy / dt;
+    playerSpeed = Math.sqrt(playerVx * playerVx + playerVy * playerVy);
   }
   prevPlayerX = player.x;
   prevPlayerY = player.y;
@@ -97,7 +85,7 @@ function gameLoop(timestamp: number): void {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (game.state === GameState.TITLE) {
-    background.update(dt, playerSpeed);
+    background.update(dt, playerSpeed, playerVx, playerVy);
     background.draw(ctx, camera, timestamp / 1000);
     ui.drawTitleScreen(ctx, canvas);
 
@@ -107,8 +95,9 @@ function gameLoop(timestamp: number): void {
     if (player.isDead()) { game.state = GameState.GAME_OVER; }
 
     player.update(dt);
+    player.regenerate(dt);
     camera.follow(player.x, player.y);
-    background.update(dt, playerSpeed);
+    background.update(dt, playerSpeed, playerVx, playerVy);
     spawner.update(dt, game.elapsedTime, player.x, player.y, camera);
 
     // Collision damage
@@ -117,10 +106,18 @@ function gameLoop(timestamp: number): void {
       if (wrappedDistance(player.x, player.y, enemy.x, enemy.y) < player.radius + enemy.radius) {
         player.takeDamage(baseDmg * enemy.damageMultiplier * dt);
       }
+      // Boss projectile hits
+      for (const p of enemy.projectiles) {
+        if (wrappedDistance(player.x, player.y, p.x, p.y) < player.radius + p.radius) {
+          player.takeDamage(8);
+          p.lifetime = 0;
+        }
+      }
     }
 
     // Weapons
     weaponManager.update(dt, player.x, player.y, spawner.enemies);
+    player.updateRipples(dt);
 
     // XP from dead enemies
     for (const enemy of spawner.enemies) {
@@ -129,31 +126,44 @@ function gameLoop(timestamp: number): void {
         player.kills++;
         const leveledUp = player.addXp(enemy.xpDrop);
         if (leveledUp && !weaponManager.allMaxed()) {
-          game.generateLevelUpChoices(weaponManager);
-          game.state = GameState.LEVEL_UP;
+          game.applyRandomUpgrade(weaponManager);
         }
       }
     }
     spawner.removeDead();
     particles.update(dt);
+    game.updateNotifications(dt);
 
     // Draw
     background.draw(ctx, camera, timestamp / 1000);
-    spawner.draw(ctx, camera);
+    spawner.draw(ctx, camera, timestamp / 1000);
     particles.draw(ctx, camera);
-    weaponManager.draw(ctx, camera, player.x, player.y);
+    weaponManager.draw(ctx, camera, player.x, player.y, player.radius);
+    player.draw(ctx, camera);
+    background.drawWrapZone(ctx, camera);
+    ui.drawHUD(ctx, canvas, game, player, weaponManager);
+    ui.drawNotifications(ctx, canvas, game);
+
+  } else if (game.state === GameState.PAUSED) {
+    background.draw(ctx, camera, timestamp / 1000);
+    spawner.draw(ctx, camera, timestamp / 1000);
+    weaponManager.draw(ctx, camera, player.x, player.y, player.radius);
     player.draw(ctx, camera);
     background.drawWrapZone(ctx, camera);
     ui.drawHUD(ctx, canvas, game, player, weaponManager);
 
-  } else if (game.state === GameState.LEVEL_UP) {
-    background.draw(ctx, camera, timestamp / 1000);
-    spawner.draw(ctx, camera);
-    particles.draw(ctx, camera);
-    weaponManager.draw(ctx, camera, player.x, player.y);
-    player.draw(ctx, camera);
-    ui.drawHUD(ctx, canvas, game, player, weaponManager);
-    ui.drawLevelUpScreen(ctx, canvas, game);
+    // Dim overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Pause text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 10);
+    ctx.font = '18px monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillText('Press ESC to resume', canvas.width / 2, canvas.height / 2 + 30);
 
   } else if (game.state === GameState.GAME_OVER) {
     background.draw(ctx, camera, timestamp / 1000);

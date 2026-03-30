@@ -1,6 +1,7 @@
 import { Game } from './game';
 import { Player } from './player';
 import { WeaponManager } from './weapons';
+import { formatTime } from './utils';
 
 export class UI {
   drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game, player: Player, wm: WeaponManager): void {
@@ -54,46 +55,32 @@ export class UI {
     ctx.fillText('Press any key to start', canvas.width / 2, canvas.height / 2 + 30);
   }
 
-  drawLevelUpScreen(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game): void {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawNotifications(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game): void {
+    const notifications = game.notifications;
+    if (notifications.length === 0) return;
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 32px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('LEVEL UP!', canvas.width / 2, canvas.height / 2 - 120);
+    for (let i = 0; i < notifications.length; i++) {
+      const n = notifications[i];
+      const y = 80 + i * 40;
 
-    ctx.font = '16px monospace';
-    ctx.fillText('Choose an upgrade (1/2/3 or click)', canvas.width / 2, canvas.height / 2 - 80);
+      // Background pill
+      ctx.font = 'bold 18px monospace';
+      const textWidth = ctx.measureText(n.text).width;
+      const pillW = textWidth + 30;
+      const pillH = 30;
+      const pillX = (canvas.width - pillW) / 2;
 
-    const choices = game.levelUpChoices;
-    const boxW = 200, boxH = 80, gap = 20;
-    const totalW = choices.length * boxW + (choices.length - 1) * gap;
-    const startX = (canvas.width - totalW) / 2;
-    const boxY = canvas.height / 2 - 30;
+      ctx.fillStyle = `rgba(100, 200, 255, ${0.2 * n.alpha})`;
+      ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 * n.alpha})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(pillX, y - pillH / 2 - 4, pillW, pillH, 6);
+      ctx.fill();
+      ctx.stroke();
 
-    for (let i = 0; i < choices.length; i++) {
-      const bx = startX + i * (boxW + gap);
-      const sel = i === game.selectedChoice;
-
-      ctx.fillStyle = sel ? 'rgba(100, 200, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)';
-      ctx.strokeStyle = sel ? '#64c8ff' : '#555';
-      ctx.lineWidth = 2;
-      ctx.fillRect(bx, boxY, boxW, boxH);
-      ctx.strokeRect(bx, boxY, boxW, boxH);
-
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 16px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(choices[i].name, bx + boxW / 2, boxY + 30);
-
-      ctx.fillStyle = '#aaa';
-      ctx.font = '12px monospace';
-      ctx.fillText(choices[i].description, bx + boxW / 2, boxY + 55);
-
-      ctx.fillStyle = '#666';
-      ctx.font = '14px monospace';
-      ctx.fillText(`[${i + 1}]`, bx + boxW / 2, boxY + boxH + 20);
+      ctx.fillStyle = `rgba(255, 255, 255, ${n.alpha})`;
+      ctx.fillText(n.text, canvas.width / 2, y);
     }
   }
 
@@ -108,10 +95,7 @@ export class UI {
 
     ctx.fillStyle = '#fff';
     ctx.font = '20px monospace';
-    const survived = Math.floor(game.elapsedTime);
-    const min = Math.floor(survived / 60);
-    const sec = survived % 60;
-    ctx.fillText(`Survived: ${min}:${sec.toString().padStart(2, '0')}`, canvas.width / 2, canvas.height / 2 + 10);
+    ctx.fillText(`Survived: ${formatTime(game.elapsedTime)}`, canvas.width / 2, canvas.height / 2 + 10);
     ctx.fillText(`Kills: ${player.kills}`, canvas.width / 2, canvas.height / 2 + 40);
 
     ctx.fillStyle = '#888';

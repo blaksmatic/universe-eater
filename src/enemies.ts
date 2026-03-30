@@ -1,5 +1,7 @@
-import { wrappedAngle, randomRange, wrapPosition } from './utils';
+import { wrappedAngle, wrappedDistance, randomRange, wrapPosition, drawSphereShading } from './utils';
 import { Camera } from './camera';
+
+const CHARGE_SPEED = 500;
 
 interface EnemyTypeConfig {
   baseRadius: number;
@@ -33,6 +35,15 @@ const ENEMY_TYPES: Record<string, EnemyTypeConfig> = {
 
 export type EnemyType = 'swarmer' | 'drifter' | 'titan' | 'overlord';
 
+export interface BossProjectile {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  lifetime: number;
+  radius: number;
+}
+
 export class Enemy {
   x: number;
   y: number;
@@ -46,10 +57,16 @@ export class Enemy {
   damageMultiplier: number;
   dead = false;
   type: EnemyType;
-  isSquare: boolean;
-  rotation: number;
-  summonTimer: number;
-  canSummon: boolean;
+  rotation = 0;
+  summonTimer = 0;
+  canSummon = false;
+  shootTimer = 0;
+  projectiles: BossProjectile[] = [];
+  chargeTimer = 0;
+  isCharging = false;
+  chargeVx = 0;
+  chargeVy = 0;
+  chargeDuration = 0;
 
   constructor(type: EnemyType, x: number, y: number) {
     const config = ENEMY_TYPES[type];
@@ -65,27 +82,83 @@ export class Enemy {
     this.outlineColor = config.outlineColor;
     this.xpDrop = config.xpDrop;
     this.damageMultiplier = config.damageMultiplier;
-    this.isSquare = type === 'overlord';
-    this.rotation = 0;
-    this.summonTimer = 3;
-    this.canSummon = false;
+    if (type === 'overlord') {
+      this.summonTimer = 3;
+      this.shootTimer = 2;
+    }
+    if (type === 'drifter') {
+      this.chargeTimer = randomRange(3, 6);
+    }
   }
 
   update(dt: number, playerX: number, playerY: number): void {
     const angle = wrappedAngle(this.x, this.y, playerX, playerY);
-    this.x += Math.cos(angle) * this.speed * dt;
-    this.y += Math.sin(angle) * this.speed * dt;
+
+    // Drifter charge attack
+    if (this.type === 'drifter') {
+      if (this.isCharging) {
+        this.chargeDuration -= dt;
+        this.x += this.chargeVx * dt;
+        this.y += this.chargeVy * dt;
+        if (this.chargeDuration <= 0) {
+          this.isCharging = false;
+          this.chargeTimer = randomRange(3, 6);
+        }
+      } else {
+        this.chargeTimer -= dt;
+        if (this.chargeTimer <= 0 && wrappedDistance(this.x, this.y, playerX, playerY) < 600) {
+          this.isCharging = true;
+          this.chargeDuration = 0.6;
+          this.chargeVx = Math.cos(angle) * CHARGE_SPEED;
+          this.chargeVy = Math.sin(angle) * CHARGE_SPEED;
+        } else {
+          this.x += Math.cos(angle) * this.speed * dt;
+          this.y += Math.sin(angle) * this.speed * dt;
+        }
+      }
+    } else {
+      this.x += Math.cos(angle) * this.speed * dt;
+      this.y += Math.sin(angle) * this.speed * dt;
+    }
+
     const wrapped = wrapPosition(this.x, this.y);
     this.x = wrapped.x;
     this.y = wrapped.y;
 
-    if (this.isSquare) {
+    if (this.type === 'overlord') {
       this.rotation += 0.5 * dt;
       this.summonTimer -= dt;
       if (this.summonTimer <= 0) {
         this.summonTimer = 3;
         this.canSummon = true;
       }
+
+      // Shoot projectiles at player
+      this.shootTimer -= dt;
+      if (this.shootTimer <= 0) {
+        this.shootTimer = 1.5;
+        const projSpeed = 250;
+        const spread = 0.15;
+        for (let i = -1; i <= 1; i++) {
+          const a = angle + i * spread;
+          this.projectiles.push({
+            x: this.x, y: this.y,
+            vx: Math.cos(a) * projSpeed,
+            vy: Math.sin(a) * projSpeed,
+            lifetime: 3,
+            radius: 4,
+          });
+        }
+      }
+    }
+
+    if (this.projectiles.length > 0) {
+      for (const p of this.projectiles) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.lifetime -= dt;
+      }
+      this.projectiles = this.projectiles.filter(p => p.lifetime > 0);
     }
   }
 
@@ -97,14 +170,46 @@ export class Enemy {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
     const screen = camera.worldToScreen(this.x, this.y);
 
-    if (this.isSquare) {
+    // Draw drifter charge trail
+    if (this.type === 'drifter' && this.isCharging) {
+      const trailLen = 20;
+      const nx = -this.chargeVx / CHARGE_SPEED;
+      const ny = -this.chargeVy / CHARGE_SPEED;
+      for (let i = 1; i <= 4; i++) {
+        const tx = screen.x + nx * trailLen * i;
+        const ty = screen.y + ny * trailLen * i;
+        ctx.beginPath();
+        ctx.arc(tx, ty, this.radius * (1 - i * 0.15), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 160, 40, ${0.15 - i * 0.03})`;
+        ctx.fill();
+      }
+    }
+
+    // Draw boss projectiles
+    for (const p of this.projectiles) {
+      const ps = camera.worldToScreen(p.x, p.y);
+      const glow = ctx.createRadialGradient(ps.x, ps.y, 0, ps.x, ps.y, p.radius * 3);
+      glow.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+      glow.addColorStop(0.4, 'rgba(255, 200, 200, 0.3)');
+      glow.addColorStop(1, 'rgba(255, 100, 100, 0)');
+      ctx.beginPath();
+      ctx.arc(ps.x, ps.y, p.radius * 3, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ps.x, ps.y, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.fill();
+    }
+
+    if (this.type === 'overlord') {
       const side = this.radius * 2;
 
       // Subtle pulsing glow
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
+      const pulse = 0.5 + 0.5 * Math.sin(time * 2.5);
       const glowSize = this.radius + 10 + pulse * 8;
       ctx.save();
       ctx.translate(screen.x, screen.y);
@@ -160,6 +265,8 @@ export class Enemy {
         ctx.fillRect(screen.x - this.radius, fillTop, this.radius * 2, this.radius * 2);
         ctx.restore();
       }
+
+      drawSphereShading(ctx, screen.x, screen.y, this.radius, ...this.color);
     }
   }
 }
@@ -244,10 +351,10 @@ export class EnemySpawner {
     }
 
     // Handle overlord summoning
-    const summoners = this.enemies.filter(e => e.canSummon);
-    for (const overlord of summoners) {
+    for (const overlord of this.enemies) {
+      if (!overlord.canSummon) continue;
       overlord.canSummon = false;
-      const count = Math.floor(randomRange(2, 4)); // 2-3 swarmers (randomRange upper is exclusive-ish)
+      const count = Math.floor(randomRange(2, 4));
       for (let i = 0; i < count; i++) {
         const sp = wrapPosition(
           overlord.x + randomRange(-80, 80),
@@ -262,10 +369,10 @@ export class EnemySpawner {
     this.enemies = this.enemies.filter(e => !e.dead);
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
     for (const enemy of this.enemies) {
       if (camera.isVisible(enemy.x, enemy.y, enemy.radius + 50)) {
-        enemy.draw(ctx, camera);
+        enemy.draw(ctx, camera, time);
       }
     }
   }

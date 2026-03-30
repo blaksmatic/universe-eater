@@ -1,19 +1,23 @@
-import { wrappedDistance, wrappedAngle, MAP_WIDTH, MAP_HEIGHT } from './utils';
+import { wrappedDistance, wrappedAngle, wrappedDelta } from './utils';
 import { Camera } from './camera';
 import { Enemy } from './enemies';
+
+export type OnFireCallback = (angle: number) => void;
 
 interface Weapon {
   name: string;
   level: number;
   maxLevel: number;
+  onFire?: OnFireCallback;
   update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void;
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number): void;
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, playerRadius: number): void;
 }
 
 export class LaserBeam implements Weapon {
   name = 'Laser Beam';
   level = 1;
   maxLevel = 10;
+  onFire?: OnFireCallback;
   private cooldownTimer = 0;
   private firingTimer = 0;
   private isFiring = false;
@@ -64,6 +68,8 @@ export class LaserBeam implements Weapon {
         this.targetY = nearest.y;
 
         const angle = wrappedAngle(playerX, playerY, nearest.x, nearest.y);
+        if (this.onFire) this.onFire(angle);
+
         for (const enemy of enemies) {
           if (enemy.dead) continue;
           const dist = wrappedDistance(playerX, playerY, enemy.x, enemy.y);
@@ -79,23 +85,19 @@ export class LaserBeam implements Weapon {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, playerRadius: number): void {
     if (!this.isFiring) return;
     const stats = this.getStats();
     const screen = camera.worldToScreen(playerX, playerY);
 
-    let dx = this.targetX - playerX;
-    let dy = this.targetY - playerY;
-    if (dx > MAP_WIDTH / 2) dx -= MAP_WIDTH;
-    if (dx < -MAP_WIDTH / 2) dx += MAP_WIDTH;
-    if (dy > MAP_HEIGHT / 2) dy -= MAP_HEIGHT;
-    if (dy < -MAP_HEIGHT / 2) dy += MAP_HEIGHT;
-    const endX = screen.x + dx;
-    const endY = screen.y + dy;
+    const delta = wrappedDelta(playerX, playerY, this.targetX, this.targetY);
+    const endX = screen.x + delta.x;
+    const endY = screen.y + delta.y;
 
-    // Beam geometry
-    const beamLength = Math.sqrt(dx * dx + dy * dy);
-    const beamAngle = Math.atan2(dy, dx);
+    const beamAngle = Math.atan2(delta.y, delta.x);
+    const originX = screen.x + Math.cos(beamAngle) * playerRadius;
+    const originY = screen.y + Math.sin(beamAngle) * playerRadius;
+    const beamLength = Math.sqrt(delta.x * delta.x + delta.y * delta.y) - playerRadius;
     // Perpendicular direction
     const perpX = -Math.sin(beamAngle);
     const perpY = Math.cos(beamAngle);
@@ -113,8 +115,8 @@ export class LaserBeam implements Weapon {
       const along = t * beamLength;
       const wave = Math.sin(t * frequency * Math.PI * 2 + this.time * waveSpeed) * amplitude;
       points.push({
-        x: screen.x + Math.cos(beamAngle) * along + perpX * wave,
-        y: screen.y + Math.sin(beamAngle) * along + perpY * wave,
+        x: originX + Math.cos(beamAngle) * along + perpX * wave,
+        y: originY + Math.sin(beamAngle) * along + perpY * wave,
       });
     }
 
@@ -254,7 +256,7 @@ export class OrbitShield implements Weapon {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, _playerRadius: number): void {
     const stats = this.getStats();
     const screen = camera.worldToScreen(playerX, playerY);
 
@@ -351,7 +353,7 @@ export class NovaBlast implements Weapon {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, _playerRadius: number): void {
     if (!this.isBlasting) return;
     const stats = this.getStats();
     const screen = camera.worldToScreen(playerX, playerY);
@@ -402,9 +404,15 @@ export class NovaBlast implements Weapon {
 
 export class WeaponManager {
   weapons: Weapon[] = [];
+  private laser: LaserBeam;
 
   constructor() {
-    this.weapons.push(new LaserBeam());
+    this.laser = new LaserBeam();
+    this.weapons.push(this.laser);
+  }
+
+  setOnLaserFire(cb: OnFireCallback): void {
+    this.laser.onFire = cb;
   }
 
   addWeapon(type: 'orbit' | 'nova'): void {
@@ -431,7 +439,7 @@ export class WeaponManager {
     for (const weapon of this.weapons) weapon.update(dt, playerX, playerY, enemies);
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number): void {
-    for (const weapon of this.weapons) weapon.draw(ctx, camera, playerX, playerY);
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, playerRadius: number): void {
+    for (const weapon of this.weapons) weapon.draw(ctx, camera, playerX, playerY, playerRadius);
   }
 }
