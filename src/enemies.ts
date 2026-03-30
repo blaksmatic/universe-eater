@@ -14,20 +14,24 @@ interface EnemyTypeConfig {
 
 const ENEMY_TYPES: Record<string, EnemyTypeConfig> = {
   swarmer: {
-    baseRadius: 10, radiusVariation: 4, speed: 150, baseHp: 15,
+    baseRadius: 10, radiusVariation: 4, speed: 150, baseHp: 38,
     color: [255, 60, 60], outlineColor: '#ff3c3c', xpDrop: 1, damageMultiplier: 1.0,
   },
   drifter: {
-    baseRadius: 20, radiusVariation: 6, speed: 80, baseHp: 40,
+    baseRadius: 20, radiusVariation: 6, speed: 80, baseHp: 100,
     color: [255, 160, 40], outlineColor: '#ffa028', xpDrop: 3, damageMultiplier: 1.5,
   },
   titan: {
-    baseRadius: 40, radiusVariation: 10, speed: 40, baseHp: 120,
+    baseRadius: 40, radiusVariation: 10, speed: 40, baseHp: 300,
     color: [160, 60, 255], outlineColor: '#a03cff', xpDrop: 8, damageMultiplier: 2.0,
+  },
+  overlord: {
+    baseRadius: 55, radiusVariation: 10, speed: 60, baseHp: 800,
+    color: [200, 20, 40], outlineColor: '#c81428', xpDrop: 15, damageMultiplier: 2.5,
   },
 };
 
-export type EnemyType = 'swarmer' | 'drifter' | 'titan';
+export type EnemyType = 'swarmer' | 'drifter' | 'titan' | 'overlord';
 
 export class Enemy {
   x: number;
@@ -42,6 +46,10 @@ export class Enemy {
   damageMultiplier: number;
   dead = false;
   type: EnemyType;
+  isSquare: boolean;
+  rotation: number;
+  summonTimer: number;
+  canSummon: boolean;
 
   constructor(type: EnemyType, x: number, y: number) {
     const config = ENEMY_TYPES[type];
@@ -57,6 +65,10 @@ export class Enemy {
     this.outlineColor = config.outlineColor;
     this.xpDrop = config.xpDrop;
     this.damageMultiplier = config.damageMultiplier;
+    this.isSquare = type === 'overlord';
+    this.rotation = 0;
+    this.summonTimer = 3;
+    this.canSummon = false;
   }
 
   update(dt: number, playerX: number, playerY: number): void {
@@ -66,6 +78,15 @@ export class Enemy {
     const wrapped = wrapPosition(this.x, this.y);
     this.x = wrapped.x;
     this.y = wrapped.y;
+
+    if (this.isSquare) {
+      this.rotation += 0.5 * dt;
+      this.summonTimer -= dt;
+      if (this.summonTimer <= 0) {
+        this.summonTimer = 3;
+        this.canSummon = true;
+      }
+    }
   }
 
   takeDamage(amount: number): void {
@@ -79,23 +100,66 @@ export class Enemy {
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const screen = camera.worldToScreen(this.x, this.y);
 
-    ctx.beginPath();
-    ctx.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
-    ctx.strokeStyle = this.outlineColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    if (this.isSquare) {
+      const side = this.radius * 2;
 
-    const hpRatio = this.hp / this.maxHp;
-    if (hpRatio > 0) {
+      // Subtle pulsing glow
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
+      const glowSize = this.radius + 10 + pulse * 8;
       ctx.save();
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, this.radius - 1, 0, Math.PI * 2);
-      ctx.clip();
-      const fillTop = screen.y + this.radius - (this.radius * 2 * hpRatio);
-      const [r, g, b] = this.color;
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      ctx.fillRect(screen.x - this.radius, fillTop, this.radius * 2, this.radius * 2);
+      ctx.translate(screen.x, screen.y);
+      ctx.rotate(this.rotation);
+      const gradient = ctx.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, glowSize * 1.4);
+      gradient.addColorStop(0, `rgba(200, 20, 40, ${0.25 + pulse * 0.15})`);
+      gradient.addColorStop(1, 'rgba(200, 20, 40, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(-glowSize * 1.4, -glowSize * 1.4, glowSize * 2.8, glowSize * 2.8);
       ctx.restore();
+
+      // Outline
+      ctx.save();
+      ctx.translate(screen.x, screen.y);
+      ctx.rotate(this.rotation);
+      ctx.strokeStyle = this.outlineColor;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-side / 2, -side / 2, side, side);
+      ctx.restore();
+
+      // HP fill clipped to square shape
+      const hpRatio = this.hp / this.maxHp;
+      if (hpRatio > 0) {
+        ctx.save();
+        ctx.translate(screen.x, screen.y);
+        ctx.rotate(this.rotation);
+        ctx.beginPath();
+        const innerSide = side - 2;
+        ctx.rect(-innerSide / 2, -innerSide / 2, innerSide, innerSide);
+        ctx.clip();
+        const fillTop = -this.radius + 1 + (innerSide * (1 - hpRatio));
+        const [r, g, b] = this.color;
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(-innerSide / 2, fillTop, innerSide, innerSide);
+        ctx.restore();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = this.outlineColor;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const hpRatio = this.hp / this.maxHp;
+      if (hpRatio > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, this.radius - 1, 0, Math.PI * 2);
+        ctx.clip();
+        const fillTop = screen.y + this.radius - (this.radius * 2 * hpRatio);
+        const [r, g, b] = this.color;
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(screen.x - this.radius, fillTop, this.radius * 2, this.radius * 2);
+        ctx.restore();
+      }
     }
   }
 }
@@ -115,10 +179,18 @@ export class EnemySpawner {
       return { spawnInterval: 1.0, types: [{ type: 'swarmer', weight: 1 }] };
     } else if (minute < 2) {
       return { spawnInterval: 0.7, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1 }] };
-    } else if (minute < 3) {
+    } else if (minute < 2.5) {
       return { spawnInterval: 0.5, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.5 }] };
+    } else if (minute < 3) {
+      return {
+        spawnInterval: 0.5,
+        types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.5 }, { type: 'overlord', weight: 0.3 }],
+      };
     }
-    return { spawnInterval: 0.3, types: [{ type: 'swarmer', weight: 2 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 1.5 }] };
+    return {
+      spawnInterval: 0.3,
+      types: [{ type: 'swarmer', weight: 2 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 1.5 }, { type: 'overlord', weight: 0.8 }],
+    };
   }
 
   private pickType(types: SpawnWeight[]): EnemyType {
@@ -169,6 +241,20 @@ export class EnemySpawner {
     }
     for (const enemy of this.enemies) {
       enemy.update(dt, playerX, playerY);
+    }
+
+    // Handle overlord summoning
+    const summoners = this.enemies.filter(e => e.canSummon);
+    for (const overlord of summoners) {
+      overlord.canSummon = false;
+      const count = Math.floor(randomRange(2, 4)); // 2-3 swarmers (randomRange upper is exclusive-ish)
+      for (let i = 0; i < count; i++) {
+        const sp = wrapPosition(
+          overlord.x + randomRange(-80, 80),
+          overlord.y + randomRange(-80, 80),
+        );
+        this.enemies.push(new Enemy('swarmer', sp.x, sp.y));
+      }
     }
   }
 
