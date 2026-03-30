@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --sourcemap",
+    "build:standalone": "esbuild src/main.ts --bundle --minify --outfile=dist/bundle.min.js && node build-standalone.js",
     "watch": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --sourcemap --watch",
     "serve": "npx serve . -p 3000",
     "dev": "npm run build && concurrently \"npm run watch\" \"npm run serve\""
