@@ -31,6 +31,9 @@ function init(): void {
 }
 
 let lastTime = 0;
+let prevPlayerX = 0;
+let prevPlayerY = 0;
+let playerSpeed = 0;
 
 function resize(): void {
   canvas.width = window.innerWidth;
@@ -81,12 +84,21 @@ function gameLoop(timestamp: number): void {
   const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
   lastTime = timestamp;
 
+  // Track player speed for idle star drift
+  if (dt > 0) {
+    const dx = player.x - prevPlayerX;
+    const dy = player.y - prevPlayerY;
+    playerSpeed = Math.sqrt(dx * dx + dy * dy) / dt;
+  }
+  prevPlayerX = player.x;
+  prevPlayerY = player.y;
+
   ctx.fillStyle = '#0a0a1a';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (game.state === GameState.TITLE) {
     background.update(dt);
-    background.draw(ctx, camera, timestamp / 1000);
+    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
     ui.drawTitleScreen(ctx, canvas);
 
   } else if (game.state === GameState.PLAYING) {
@@ -126,7 +138,7 @@ function gameLoop(timestamp: number): void {
     particles.update(dt);
 
     // Draw
-    background.draw(ctx, camera, timestamp / 1000);
+    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
     spawner.draw(ctx, camera);
     particles.draw(ctx, camera);
     weaponManager.draw(ctx, camera, player.x, player.y);
@@ -135,7 +147,7 @@ function gameLoop(timestamp: number): void {
     ui.drawHUD(ctx, canvas, game, player, weaponManager);
 
   } else if (game.state === GameState.LEVEL_UP) {
-    background.draw(ctx, camera, timestamp / 1000);
+    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
     spawner.draw(ctx, camera);
     particles.draw(ctx, camera);
     weaponManager.draw(ctx, camera, player.x, player.y);
@@ -144,11 +156,11 @@ function gameLoop(timestamp: number): void {
     ui.drawLevelUpScreen(ctx, canvas, game);
 
   } else if (game.state === GameState.GAME_OVER) {
-    background.draw(ctx, camera, timestamp / 1000);
+    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
     ui.drawGameOver(ctx, canvas, player, game);
 
   } else if (game.state === GameState.VICTORY) {
-    background.draw(ctx, camera, timestamp / 1000);
+    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
     ui.drawVictory(ctx, canvas, player);
   }
 

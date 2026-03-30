@@ -88,7 +88,7 @@ export class Background {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, playerSpeed = 0): void {
     // Nebulae (furthest back)
     for (const n of this.nebulae) {
       const px = n.x - camera.x * 0.3;
@@ -106,8 +106,19 @@ export class Background {
       const factor = parallaxFactors[star.layer];
       const sx = star.x - camera.x * factor;
       const sy = star.y - camera.y * factor;
-      const screenX = ((sx % camera.width) + camera.width) % camera.width;
-      const screenY = ((sy % camera.height) + camera.height) % camera.height;
+      let screenX = ((sx % camera.width) + camera.width) % camera.width;
+      let screenY = ((sy % camera.height) + camera.height) % camera.height;
+
+      // Idle star drift: radial outward push for 3D "flying through space" feel
+      if (playerSpeed < 10) {
+        const cx = camera.width / 2;
+        const cy = camera.height / 2;
+        const driftX = (screenX - cx) / camera.width;
+        const driftY = (screenY - cy) / camera.height;
+        const driftFactor = [5, 12, 20][star.layer]; // pixels per second, closer layers drift faster
+        screenX += driftX * driftFactor * time * 0.3;
+        screenY += driftY * driftFactor * time * 0.3;
+      }
 
       const twinkle = 0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
       const alpha = star.brightness * twinkle;
