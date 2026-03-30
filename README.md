@@ -1,6 +1,6 @@
 # Universe Eater
 
-A Vampire Survivors-like browser game set in deep space. Survive 5 minutes against escalating waves using 3 auto-firing weapons.
+A fast-paced survival browser game set in deep space. Survive 5 minutes against escalating waves of enemies using 3 auto-firing weapons.
 
 ## How to Run
 
