@@ -6,6 +6,7 @@ import { ParticleSystem } from './particles';
 import { WeaponManager } from './weapons';
 import { Game, GameState } from './game';
 import { UI } from './ui';
+import { consumePauseTap, consumeAnyTap } from './input';
 import { wrappedDistance } from './utils';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -80,6 +81,19 @@ function gameLoop(timestamp: number): void {
   }
   prevPlayerX = player.x;
   prevPlayerY = player.y;
+
+  // Touch controls
+  if (consumePauseTap()) {
+    if (game.state === GameState.PLAYING) game.state = GameState.PAUSED;
+    else if (game.state === GameState.PAUSED) game.state = GameState.PLAYING;
+  }
+  if (consumeAnyTap()) {
+    if (game.state === GameState.TITLE) game.state = GameState.PLAYING;
+    else if (game.state === GameState.GAME_OVER || game.state === GameState.VICTORY) {
+      init();
+      game.state = GameState.PLAYING;
+    }
+  }
 
   ctx.fillStyle = '#0a0a1a';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -163,7 +177,7 @@ function gameLoop(timestamp: number): void {
     ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 10);
     ctx.font = '18px monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.fillText('Press ESC to resume', canvas.width / 2, canvas.height / 2 + 30);
+    ctx.fillText('Press ESC or tap II to resume', canvas.width / 2, canvas.height / 2 + 30);
 
   } else if (game.state === GameState.GAME_OVER) {
     background.draw(ctx, camera, timestamp / 1000);

@@ -1,4 +1,4 @@
-import { isKeyDown } from './input';
+import { isKeyDown, touch } from './input';
 import { MAP_WIDTH, MAP_HEIGHT, wrapPosition, drawSphereShading } from './utils';
 import { Camera } from './camera';
 
@@ -61,15 +61,20 @@ export class Player {
     let dx = 0;
     let dy = 0;
 
-    if (isKeyDown('w') || isKeyDown('arrowup')) dy -= 1;
-    if (isKeyDown('s') || isKeyDown('arrowdown')) dy += 1;
-    if (isKeyDown('a') || isKeyDown('arrowleft')) dx -= 1;
-    if (isKeyDown('d') || isKeyDown('arrowright')) dx += 1;
+    if (touch.active) {
+      dx = touch.dx;
+      dy = touch.dy;
+    } else {
+      if (isKeyDown('w') || isKeyDown('arrowup')) dy -= 1;
+      if (isKeyDown('s') || isKeyDown('arrowdown')) dy += 1;
+      if (isKeyDown('a') || isKeyDown('arrowleft')) dx -= 1;
+      if (isKeyDown('d') || isKeyDown('arrowright')) dx += 1;
 
-    if (dx !== 0 && dy !== 0) {
-      const len = Math.sqrt(dx * dx + dy * dy);
-      dx /= len;
-      dy /= len;
+      if (dx !== 0 && dy !== 0) {
+        const len = Math.sqrt(dx * dx + dy * dy);
+        dx /= len;
+        dy /= len;
+      }
     }
 
     this.x += dx * this.speed * dt;

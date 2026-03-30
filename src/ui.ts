@@ -2,6 +2,7 @@ import { Game } from './game';
 import { Player } from './player';
 import { WeaponManager } from './weapons';
 import { formatTime } from './utils';
+import { touch, isTouchDevice, JOYSTICK_DISPLAY_RADIUS } from './input';
 
 export class UI {
   drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game, player: Player, wm: WeaponManager): void {
@@ -42,6 +43,57 @@ export class UI {
       ctx.fillText(`${w.name} Lv.${w.level}`, 20, wy);
       wy -= 22;
     }
+
+    if (isTouchDevice()) {
+      this.drawPauseButton(ctx, canvas);
+      this.drawJoystick(ctx);
+    }
+  }
+
+  private drawPauseButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const x = canvas.width - 45;
+    const y = 45;
+    const size = 20;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.arc(x, y, size + 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Two pause bars
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillRect(x - 7, y - 8, 5, 16);
+    ctx.fillRect(x + 2, y - 8, 5, 16);
+  }
+
+  private drawJoystick(ctx: CanvasRenderingContext2D): void {
+    if (!touch.active) return;
+
+    const cx = touch.centerX;
+    const cy = touch.centerY;
+    const r = JOYSTICK_DISPLAY_RADIUS;
+
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fill();
+
+    // Thumb position
+    const thumbX = cx + touch.dx * r;
+    const thumbY = cy + touch.dy * r;
+    const thumbR = 20;
+
+    ctx.beginPath();
+    ctx.arc(thumbX, thumbY, thumbR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   drawTitleScreen(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -52,7 +104,8 @@ export class UI {
 
     ctx.font = '18px monospace';
     ctx.fillStyle = '#888';
-    ctx.fillText('Press any key to start', canvas.width / 2, canvas.height / 2 + 30);
+    const startMsg = isTouchDevice() ? 'Tap to start' : 'Press any key to start';
+    ctx.fillText(startMsg, canvas.width / 2, canvas.height / 2 + 30);
   }
 
   drawNotifications(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game): void {
@@ -100,7 +153,8 @@ export class UI {
 
     ctx.fillStyle = '#888';
     ctx.font = '16px monospace';
-    ctx.fillText('Press any key to restart', canvas.width / 2, canvas.height / 2 + 90);
+    const restartMsg = isTouchDevice() ? 'Tap to restart' : 'Press any key to restart';
+    ctx.fillText(restartMsg, canvas.width / 2, canvas.height / 2 + 90);
   }
 
   drawVictory(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, player: Player): void {
@@ -119,6 +173,7 @@ export class UI {
 
     ctx.fillStyle = '#888';
     ctx.font = '16px monospace';
-    ctx.fillText('Press any key to restart', canvas.width / 2, canvas.height / 2 + 90);
+    const restartMsg2 = isTouchDevice() ? 'Tap to restart' : 'Press any key to restart';
+    ctx.fillText(restartMsg2, canvas.width / 2, canvas.height / 2 + 90);
   }
 }

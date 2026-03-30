@@ -37,6 +37,101 @@
   function isKeyDown(key) {
     return !!keys[key];
   }
+  var touch = {
+    active: false,
+    dx: 0,
+    dy: 0,
+    // Joystick state
+    touchId: -1,
+    centerX: 0,
+    centerY: 0,
+    // Pause button tap
+    pauseTapped: false,
+    // Any tap (for starting/restarting)
+    anyTap: false
+  };
+  var JOYSTICK_RADIUS = 60;
+  var DEAD_ZONE = 10;
+  function isMobile() {
+    return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  }
+  function isTouchDevice() {
+    return isMobile();
+  }
+  function isPauseButton(x, y) {
+    return x > window.innerWidth - 70 && y < 70;
+  }
+  function handleTouchStart(e) {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (isPauseButton(t.clientX, t.clientY)) {
+        touch.pauseTapped = true;
+        continue;
+      }
+      if (touch.touchId === -1 && t.clientX < window.innerWidth * 0.6) {
+        touch.touchId = t.identifier;
+        touch.centerX = t.clientX;
+        touch.centerY = t.clientY;
+        touch.active = true;
+        touch.dx = 0;
+        touch.dy = 0;
+      }
+      touch.anyTap = true;
+    }
+  }
+  function handleTouchMove(e) {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === touch.touchId) {
+        const rawDx = t.clientX - touch.centerX;
+        const rawDy = t.clientY - touch.centerY;
+        const dist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
+        if (dist < DEAD_ZONE) {
+          touch.dx = 0;
+          touch.dy = 0;
+        } else {
+          const clamped = Math.min(dist, JOYSTICK_RADIUS);
+          touch.dx = rawDx / dist * (clamped / JOYSTICK_RADIUS);
+          touch.dy = rawDy / dist * (clamped / JOYSTICK_RADIUS);
+        }
+      }
+    }
+  }
+  function handleTouchEnd(e) {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === touch.touchId) {
+        touch.touchId = -1;
+        touch.active = false;
+        touch.dx = 0;
+        touch.dy = 0;
+      }
+    }
+  }
+  if (isMobile()) {
+    document.addEventListener("touchstart", handleTouchStart, { passive: false });
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd, { passive: false });
+    document.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+  }
+  function consumePauseTap() {
+    if (touch.pauseTapped) {
+      touch.pauseTapped = false;
+      return true;
+    }
+    return false;
+  }
+  function consumeAnyTap() {
+    if (touch.anyTap) {
+      touch.anyTap = false;
+      return true;
+    }
+    return false;
+  }
+  var JOYSTICK_DISPLAY_RADIUS = JOYSTICK_RADIUS;
 
   // src/utils.ts
   var MAP_WIDTH = 5e4;
@@ -143,14 +238,19 @@
     update(dt) {
       let dx = 0;
       let dy = 0;
-      if (isKeyDown("w") || isKeyDown("arrowup")) dy -= 1;
-      if (isKeyDown("s") || isKeyDown("arrowdown")) dy += 1;
-      if (isKeyDown("a") || isKeyDown("arrowleft")) dx -= 1;
-      if (isKeyDown("d") || isKeyDown("arrowright")) dx += 1;
-      if (dx !== 0 && dy !== 0) {
-        const len = Math.sqrt(dx * dx + dy * dy);
-        dx /= len;
-        dy /= len;
+      if (touch.active) {
+        dx = touch.dx;
+        dy = touch.dy;
+      } else {
+        if (isKeyDown("w") || isKeyDown("arrowup")) dy -= 1;
+        if (isKeyDown("s") || isKeyDown("arrowdown")) dy += 1;
+        if (isKeyDown("a") || isKeyDown("arrowleft")) dx -= 1;
+        if (isKeyDown("d") || isKeyDown("arrowright")) dx += 1;
+        if (dx !== 0 && dy !== 0) {
+          const len = Math.sqrt(dx * dx + dy * dy);
+          dx /= len;
+          dy /= len;
+        }
       }
       this.x += dx * this.speed * dt;
       this.y += dy * this.speed * dt;
@@ -1309,6 +1409,45 @@
         ctx2.fillText(`${w.name} Lv.${w.level}`, 20, wy);
         wy -= 22;
       }
+      if (isTouchDevice()) {
+        this.drawPauseButton(ctx2, canvas2);
+        this.drawJoystick(ctx2);
+      }
+    }
+    drawPauseButton(ctx2, canvas2) {
+      const x = canvas2.width - 45;
+      const y = 45;
+      const size = 20;
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.15)";
+      ctx2.beginPath();
+      ctx2.arc(x, y, size + 5, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx2.fillRect(x - 7, y - 8, 5, 16);
+      ctx2.fillRect(x + 2, y - 8, 5, 16);
+    }
+    drawJoystick(ctx2) {
+      if (!touch.active) return;
+      const cx = touch.centerX;
+      const cy = touch.centerY;
+      const r = JOYSTICK_DISPLAY_RADIUS;
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx2.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      ctx2.lineWidth = 2;
+      ctx2.stroke();
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx2.fill();
+      const thumbX = cx + touch.dx * r;
+      const thumbY = cy + touch.dy * r;
+      const thumbR = 20;
+      ctx2.beginPath();
+      ctx2.arc(thumbX, thumbY, thumbR, 0, Math.PI * 2);
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.25)";
+      ctx2.fill();
+      ctx2.strokeStyle = "rgba(255, 255, 255, 0.4)";
+      ctx2.lineWidth = 2;
+      ctx2.stroke();
     }
     drawTitleScreen(ctx2, canvas2) {
       ctx2.fillStyle = "#ffffff";
@@ -1317,7 +1456,8 @@
       ctx2.fillText("UNIVERSE EATER", canvas2.width / 2, canvas2.height / 2 - 30);
       ctx2.font = "18px monospace";
       ctx2.fillStyle = "#888";
-      ctx2.fillText("Press any key to start", canvas2.width / 2, canvas2.height / 2 + 30);
+      const startMsg = isTouchDevice() ? "Tap to start" : "Press any key to start";
+      ctx2.fillText(startMsg, canvas2.width / 2, canvas2.height / 2 + 30);
     }
     drawNotifications(ctx2, canvas2, game2) {
       const notifications = game2.notifications;
@@ -1355,7 +1495,8 @@
       ctx2.fillText(`Kills: ${player2.kills}`, canvas2.width / 2, canvas2.height / 2 + 40);
       ctx2.fillStyle = "#888";
       ctx2.font = "16px monospace";
-      ctx2.fillText("Press any key to restart", canvas2.width / 2, canvas2.height / 2 + 90);
+      const restartMsg = isTouchDevice() ? "Tap to restart" : "Press any key to restart";
+      ctx2.fillText(restartMsg, canvas2.width / 2, canvas2.height / 2 + 90);
     }
     drawVictory(ctx2, canvas2, player2) {
       ctx2.fillStyle = "rgba(0, 0, 0, 0.8)";
@@ -1370,7 +1511,8 @@
       ctx2.fillText(`Level Reached: ${player2.level}`, canvas2.width / 2, canvas2.height / 2 + 40);
       ctx2.fillStyle = "#888";
       ctx2.font = "16px monospace";
-      ctx2.fillText("Press any key to restart", canvas2.width / 2, canvas2.height / 2 + 90);
+      const restartMsg2 = isTouchDevice() ? "Tap to restart" : "Press any key to restart";
+      ctx2.fillText(restartMsg2, canvas2.width / 2, canvas2.height / 2 + 90);
     }
   };
 
@@ -1437,6 +1579,17 @@
     }
     prevPlayerX = player.x;
     prevPlayerY = player.y;
+    if (consumePauseTap()) {
+      if (game.state === "playing" /* PLAYING */) game.state = "paused" /* PAUSED */;
+      else if (game.state === "paused" /* PAUSED */) game.state = "playing" /* PLAYING */;
+    }
+    if (consumeAnyTap()) {
+      if (game.state === "title" /* TITLE */) game.state = "playing" /* PLAYING */;
+      else if (game.state === "gameOver" /* GAME_OVER */ || game.state === "victory" /* VICTORY */) {
+        init();
+        game.state = "playing" /* PLAYING */;
+      }
+    }
     ctx.fillStyle = "#0a0a1a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (game.state === "title" /* TITLE */) {
@@ -1506,7 +1659,7 @@
       ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2 - 10);
       ctx.font = "18px monospace";
       ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-      ctx.fillText("Press ESC to resume", canvas.width / 2, canvas.height / 2 + 30);
+      ctx.fillText("Press ESC or tap II to resume", canvas.width / 2, canvas.height / 2 + 30);
     } else if (game.state === "gameOver" /* GAME_OVER */) {
       background.draw(ctx, camera, timestamp / 1e3);
       ui.drawGameOver(ctx, canvas, player, game);
