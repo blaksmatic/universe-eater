@@ -97,8 +97,8 @@ function gameLoop(timestamp: number): void {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (game.state === GameState.TITLE) {
-    background.update(dt);
-    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
+    background.update(dt, playerSpeed);
+    background.draw(ctx, camera, timestamp / 1000);
     ui.drawTitleScreen(ctx, canvas);
 
   } else if (game.state === GameState.PLAYING) {
@@ -108,7 +108,7 @@ function gameLoop(timestamp: number): void {
 
     player.update(dt);
     camera.follow(player.x, player.y);
-    background.update(dt);
+    background.update(dt, playerSpeed);
     spawner.update(dt, game.elapsedTime, player.x, player.y, camera);
 
     // Collision damage
@@ -138,7 +138,7 @@ function gameLoop(timestamp: number): void {
     particles.update(dt);
 
     // Draw
-    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
+    background.draw(ctx, camera, timestamp / 1000);
     spawner.draw(ctx, camera);
     particles.draw(ctx, camera);
     weaponManager.draw(ctx, camera, player.x, player.y);
@@ -147,7 +147,7 @@ function gameLoop(timestamp: number): void {
     ui.drawHUD(ctx, canvas, game, player, weaponManager);
 
   } else if (game.state === GameState.LEVEL_UP) {
-    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
+    background.draw(ctx, camera, timestamp / 1000);
     spawner.draw(ctx, camera);
     particles.draw(ctx, camera);
     weaponManager.draw(ctx, camera, player.x, player.y);
@@ -156,11 +156,11 @@ function gameLoop(timestamp: number): void {
     ui.drawLevelUpScreen(ctx, canvas, game);
 
   } else if (game.state === GameState.GAME_OVER) {
-    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
+    background.draw(ctx, camera, timestamp / 1000);
     ui.drawGameOver(ctx, canvas, player, game);
 
   } else if (game.state === GameState.VICTORY) {
-    background.draw(ctx, camera, timestamp / 1000, playerSpeed);
+    background.draw(ctx, camera, timestamp / 1000);
     ui.drawVictory(ctx, canvas, player);
   }
 

@@ -68,6 +68,7 @@ export class Background {
   private stars: Star[] = [];
   private nebulae: Nebula[] = [];
   private dust: DustParticle[] = [];
+  private driftIntensity = 0;
 
   constructor() {
     for (let i = 0; i < 300; i++) this.stars.push(createStar(0));
@@ -77,7 +78,12 @@ export class Background {
     for (let i = 0; i < 100; i++) this.dust.push(createDust());
   }
 
-  update(dt: number): void {
+  update(dt: number, playerSpeed = 0): void {
+    // Smoothly ramp drift intensity up when idle, down when moving
+    const targetDrift = playerSpeed < 10 ? 1 : 0;
+    const rampSpeed = 3; // transitions over ~0.3 seconds
+    this.driftIntensity += (targetDrift - this.driftIntensity) * Math.min(1, rampSpeed * dt);
+
     for (const d of this.dust) {
       d.x += d.vx * dt;
       d.y += d.vy * dt;
@@ -88,7 +94,7 @@ export class Background {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, playerSpeed = 0): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
     // Nebulae (furthest back)
     for (const n of this.nebulae) {
       const px = n.x - camera.x * 0.3;
@@ -109,15 +115,16 @@ export class Background {
       let screenX = ((sx % camera.width) + camera.width) % camera.width;
       let screenY = ((sy % camera.height) + camera.height) % camera.height;
 
-      // Idle star drift: radial outward push for 3D "flying through space" feel
-      if (playerSpeed < 10) {
+      // Idle star drift: smooth radial oscillation for 3D "flying through space" feel
+      if (this.driftIntensity > 0.01) {
         const cx = camera.width / 2;
         const cy = camera.height / 2;
         const driftX = (screenX - cx) / camera.width;
         const driftY = (screenY - cy) / camera.height;
-        const driftFactor = [5, 12, 20][star.layer]; // pixels per second, closer layers drift faster
-        screenX += driftX * driftFactor * time * 0.3;
-        screenY += driftY * driftFactor * time * 0.3;
+        const driftFactor = [5, 12, 20][star.layer];
+        const oscillation = Math.sin(time * 0.4) * 0.5 + 0.5;
+        screenX += driftX * driftFactor * oscillation * this.driftIntensity;
+        screenY += driftY * driftFactor * oscillation * this.driftIntensity;
       }
 
       const twinkle = 0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
