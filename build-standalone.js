@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const js = fs.readFileSync('dist/bundle.min.js', 'utf8');
+const js = fs.readFileSync('dist/bundle.js', 'utf8');
 const css = fs.readFileSync('css/style.css', 'utf8');
 
 const html = `<!DOCTYPE html>

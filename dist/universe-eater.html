@@ -1,4 +1,41 @@
-"use strict";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universe Eater</title>
+<style>:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>"use strict";
 (() => {
   // src/upgrades.ts
   var DOCTRINES = [
@@ -3492,3 +3529,6 @@
   runtime.start();
 })();
 //# sourceMappingURL=bundle.js.map
+</script>
+</body>
+</html>

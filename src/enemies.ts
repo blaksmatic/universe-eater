@@ -167,8 +167,9 @@ export class Enemy {
 
     if (this.projectiles.length > 0) {
       for (const p of this.projectiles) {
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
+        const wrappedProjectile = wrapPosition(p.x + p.vx * dt, p.y + p.vy * dt);
+        p.x = wrappedProjectile.x;
+        p.y = wrappedProjectile.y;
         p.lifetime -= dt;
       }
       this.projectiles = this.projectiles.filter(p => p.lifetime > 0);
@@ -494,19 +495,25 @@ interface SpawnWeight {
 
 export class EnemySpawner {
   enemies: Enemy[] = [];
-  private spawnTimer = 0;
+  private spawnTimer = -2.2;
 
   private getSpawnConfig(elapsed: number): { spawnInterval: number; types: SpawnWeight[] } {
-    const minute = elapsed / 60;
-    if (minute < 1) {
+    if (elapsed < 20) {
+      return { spawnInterval: 1.4, types: [{ type: 'swarmer', weight: 1 }] };
+    } else if (elapsed < 45) {
       return { spawnInterval: 1.0, types: [{ type: 'swarmer', weight: 1 }] };
-    } else if (minute < 2) {
-      return { spawnInterval: 0.7, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1 }] };
+    } else if (elapsed < 90) {
+      return { spawnInterval: 0.8, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1 }] };
+    }
+
+    const minute = elapsed / 60;
+    if (minute < 2) {
+      return { spawnInterval: 0.7, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1.25 }] };
     } else if (minute < 2.5) {
-      return { spawnInterval: 0.5, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.5 }] };
+      return { spawnInterval: 0.65, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.35 }] };
     } else if (minute < 3) {
       return {
-        spawnInterval: 0.5,
+        spawnInterval: 0.45,
         types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.5 }, { type: 'overlord', weight: 0.3 }],
       };
     }
@@ -526,8 +533,15 @@ export class EnemySpawner {
     return types[0].type;
   }
 
-  private spawnEnemy(type: EnemyType, camera: Camera): void {
-    const margin = 100;
+  private getSwarmerCount(elapsed: number): number {
+    if (elapsed < 20) return Math.floor(randomRange(1, 3));
+    if (elapsed < 45) return Math.floor(randomRange(2, 4));
+    if (elapsed < 120) return Math.floor(randomRange(2, 5));
+    return Math.floor(randomRange(3, 6));
+  }
+
+  private spawnEnemy(type: EnemyType, camera: Camera, elapsed: number): void {
+    const margin = elapsed < 45 ? 140 : 100;
     const side = Math.floor(Math.random() * 4);
     let x: number, y: number;
 
@@ -541,12 +555,12 @@ export class EnemySpawner {
     const pos = wrapPosition(x, y);
 
     if (type === 'swarmer') {
-      const count = Math.floor(randomRange(3, 6));
+      const count = this.getSwarmerCount(elapsed);
       for (let i = 0; i < count; i++) {
         const gp = wrapPosition(pos.x + randomRange(-40, 40), pos.y + randomRange(-40, 40));
         this.enemies.push(new Enemy('swarmer', gp.x, gp.y));
       }
-    } else if (type === 'drifter' && Math.random() < 0.4) {
+    } else if (type === 'drifter' && elapsed > 75 && Math.random() < 0.35) {
       this.enemies.push(new Enemy('drifter', pos.x, pos.y));
       const dp = wrapPosition(pos.x + randomRange(-30, 30), pos.y + randomRange(-30, 30));
       this.enemies.push(new Enemy('drifter', dp.x, dp.y));
@@ -560,7 +574,7 @@ export class EnemySpawner {
     this.spawnTimer += dt;
     if (this.spawnTimer >= config.spawnInterval) {
       this.spawnTimer = 0;
-      this.spawnEnemy(this.pickType(config.types), camera);
+      this.spawnEnemy(this.pickType(config.types), camera, elapsed);
     }
     for (const enemy of this.enemies) {
       enemy.update(dt, playerX, playerY);

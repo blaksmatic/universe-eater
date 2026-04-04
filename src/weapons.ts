@@ -4,12 +4,17 @@ import { Enemy } from './enemies';
 
 export type OnFireCallback = (angle: number) => void;
 
+export interface WeaponModifiers {
+  damageMultiplier: number;
+  cooldownMultiplier: number;
+}
+
 interface Weapon {
   name: string;
   level: number;
   maxLevel: number;
   onFire?: OnFireCallback;
-  update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void;
+  update(dt: number, playerX: number, playerY: number, enemies: Enemy[], modifiers: WeaponModifiers): void;
   draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, playerRadius: number): void;
 }
 
@@ -48,8 +53,10 @@ export class LaserBeam implements Weapon {
     return this.cachedStats;
   }
 
-  update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void {
+  update(dt: number, playerX: number, playerY: number, enemies: Enemy[], modifiers: WeaponModifiers): void {
     const stats = this.getStats();
+    const damage = stats.damage * modifiers.damageMultiplier;
+    const cooldown = stats.cooldown * modifiers.cooldownMultiplier;
     this.time += dt;
 
     if (this.isFiring) {
@@ -73,7 +80,7 @@ export class LaserBeam implements Weapon {
       if (nearest) {
         this.isFiring = true;
         this.firingTimer = stats.duration;
-        this.cooldownTimer = stats.cooldown;
+        this.cooldownTimer = cooldown;
         this.targetX = nearest.x;
         this.targetY = nearest.y;
 
@@ -88,7 +95,7 @@ export class LaserBeam implements Weapon {
           const diff = Math.abs(eAngle - angle);
           const normDiff = Math.min(diff, TWO_PI - diff);
           if (dist * Math.sin(normDiff) < enemy.radius + stats.width) {
-            enemy.takeDamage(stats.damage);
+            enemy.takeDamage(damage);
           }
         }
       }
@@ -257,8 +264,9 @@ export class OrbitShield implements Weapon {
     return this.cachedStats;
   }
 
-  update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void {
+  update(dt: number, playerX: number, playerY: number, enemies: Enemy[], modifiers: WeaponModifiers): void {
     const stats = this.getStats();
+    const damage = stats.damage * modifiers.damageMultiplier;
     this.angle += stats.rotationSpeed * dt;
 
     for (let i = 0; i < stats.projectileCount; i++) {
@@ -269,7 +277,7 @@ export class OrbitShield implements Weapon {
       for (const enemy of enemies) {
         if (enemy.dead) continue;
         if (wrappedDistance(px, py, enemy.x, enemy.y) < stats.hitRadius + enemy.radius) {
-          enemy.takeDamage(stats.damage * dt * 10);
+          enemy.takeDamage(damage * dt * 10);
         }
       }
     }
@@ -353,8 +361,10 @@ export class NovaBlast implements Weapon {
     return this.cachedStats;
   }
 
-  update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void {
+  update(dt: number, playerX: number, playerY: number, enemies: Enemy[], modifiers: WeaponModifiers): void {
     const stats = this.getStats();
+    const damage = stats.damage * modifiers.damageMultiplier;
+    const cooldown = stats.cooldown * modifiers.cooldownMultiplier;
 
     if (this.isBlasting) {
       this.blastRadius += stats.expandSpeed * dt;
@@ -362,7 +372,7 @@ export class NovaBlast implements Weapon {
         for (const enemy of enemies) {
           if (enemy.dead) continue;
           if (wrappedDistance(playerX, playerY, enemy.x, enemy.y) < stats.maxRadius) {
-            enemy.takeDamage(stats.damage);
+            enemy.takeDamage(damage);
           }
         }
         this.hasDealtDamage = true;
@@ -376,7 +386,7 @@ export class NovaBlast implements Weapon {
     this.cooldownTimer -= dt;
     if (this.cooldownTimer <= 0 && !this.isBlasting) {
       this.isBlasting = true;
-      this.cooldownTimer = stats.cooldown;
+      this.cooldownTimer = cooldown;
       this.blastRadius = 0;
       this.hasDealtDamage = false;
     }
@@ -434,6 +444,10 @@ export class NovaBlast implements Weapon {
 export class WeaponManager {
   weapons: Weapon[] = [];
   private laser: LaserBeam;
+  readonly modifiers: WeaponModifiers = {
+    damageMultiplier: 1,
+    cooldownMultiplier: 1,
+  };
 
   constructor() {
     this.laser = new LaserBeam();
@@ -460,12 +474,20 @@ export class WeaponManager {
     return this.weapons.find(w => w.name === name);
   }
 
+  multiplyDamage(multiplier: number): void {
+    this.modifiers.damageMultiplier *= multiplier;
+  }
+
+  multiplyCooldown(multiplier: number): void {
+    this.modifiers.cooldownMultiplier *= multiplier;
+  }
+
   allMaxed(): boolean {
     return this.weapons.length === 3 && this.weapons.every(w => w.level >= w.maxLevel);
   }
 
   update(dt: number, playerX: number, playerY: number, enemies: Enemy[]): void {
-    for (const weapon of this.weapons) weapon.update(dt, playerX, playerY, enemies);
+    for (const weapon of this.weapons) weapon.update(dt, playerX, playerY, enemies, this.modifiers);
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, playerRadius: number): void {

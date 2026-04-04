@@ -15,13 +15,19 @@ export class Player {
   speed = 200;
   maxHp = 100;
   hp = 100;
+  regenRate = 0.01;
+  damageTakenMultiplier = 1;
   xp = 0;
   level = 1;
   kills = 0;
   ripples: Ripple[] = [];
+  private hurtTimer = 0;
+  private contactCooldown = 0;
+  private readonly hurtDuration = 0.22;
+  contactGraceDuration = 0.35;
 
   getXpForNextLevel(): number {
-    return Math.floor(10 * Math.pow(1.4, this.level - 1));
+    return Math.floor(8 * Math.pow(1.35, this.level - 1));
   }
 
   addXp(amount: number): boolean {
@@ -34,12 +40,29 @@ export class Player {
     return false;
   }
 
-  takeDamage(amount: number): void {
-    this.hp = Math.max(0, this.hp - amount);
+  takeDamage(amount: number): boolean {
+    const adjustedAmount = amount * this.damageTakenMultiplier;
+    if (adjustedAmount <= 0) return false;
+    this.hp = Math.max(0, this.hp - adjustedAmount);
+    this.hurtTimer = Math.max(this.hurtTimer, this.hurtDuration);
+    return true;
+  }
+
+  takeContactHit(amount: number): boolean {
+    if (this.contactCooldown > 0) return false;
+    const tookDamage = this.takeDamage(amount);
+    if (tookDamage) {
+      this.contactCooldown = this.contactGraceDuration;
+    }
+    return tookDamage;
   }
 
   isDead(): boolean {
     return this.hp <= 0;
+  }
+
+  get hurtRatio(): number {
+    return Math.min(1, this.hurtTimer / this.hurtDuration);
   }
 
   addRipple(angle: number): void {
@@ -53,11 +76,54 @@ export class Player {
 
   regenerate(dt: number): void {
     if (this.hp < this.maxHp) {
-      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.01 * dt);
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * this.regenRate * dt);
     }
   }
 
+  addMaxHull(amount: number, repairAmount = amount): void {
+    this.maxHp += amount;
+    this.hp = Math.min(this.maxHp, this.hp + repairAmount);
+  }
+
+  addSpeed(amount: number): void {
+    this.speed += amount;
+  }
+
+  multiplyRegen(multiplier: number, repairAmount = 0): void {
+    this.regenRate *= multiplier;
+    if (repairAmount > 0) {
+      this.hp = Math.min(this.maxHp, this.hp + repairAmount);
+    }
+  }
+
+  multiplyDamageTaken(multiplier: number): void {
+    this.damageTakenMultiplier *= multiplier;
+  }
+
+  increaseContactGrace(amount: number): void {
+    this.contactGraceDuration += amount;
+  }
+
+  upgradeHull(): void {
+    this.addMaxHull(25, 25);
+  }
+
+  upgradeThrusters(): void {
+    this.addSpeed(18);
+  }
+
+  upgradeNanoforge(): void {
+    this.multiplyRegen(1.4, 12);
+  }
+
+  upgradePlating(): void {
+    this.multiplyDamageTaken(0.88);
+  }
+
   update(dt: number): void {
+    this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+    this.contactCooldown = Math.max(0, this.contactCooldown - dt);
+
     let dx = 0;
     let dy = 0;
 
@@ -103,6 +169,21 @@ export class Player {
     ctx.strokeStyle = '#4488ff';
     ctx.lineWidth = 2;
     ctx.stroke();
+
+    if (this.hurtTimer > 0) {
+      const hurtAlpha = this.hurtRatio;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, this.radius + 10, 0, TWO_PI);
+      ctx.strokeStyle = `rgba(255, 90, 90, ${0.18 + hurtAlpha * 0.2})`;
+      ctx.lineWidth = 8;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, this.radius + 3, 0, TWO_PI);
+      ctx.strokeStyle = `rgba(255, 240, 240, ${0.25 + hurtAlpha * 0.35})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
 
     // HP arc — glowing ring that sweeps proportionally to health
     if (hpRatio > 0) {

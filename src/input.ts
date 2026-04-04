@@ -29,6 +29,16 @@ export const touch = {
 
 const JOYSTICK_RADIUS = 60;
 const DEAD_ZONE = 10;
+const TOUCH_UI_MARGIN = 16;
+const PAUSE_BUTTON_RADIUS = 25;
+const PAUSE_BUTTON_HIT_RADIUS = 30;
+
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 
 function isMobile(): boolean {
   return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -38,9 +48,45 @@ export function isTouchDevice(): boolean {
   return isMobile();
 }
 
+function readInset(variableName: string): number {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function getSafeAreaInsets(): SafeAreaInsets {
+  return {
+    top: readInset('--safe-area-top'),
+    right: readInset('--safe-area-right'),
+    bottom: readInset('--safe-area-bottom'),
+    left: readInset('--safe-area-left'),
+  };
+}
+
+export function getTouchUiMargin(): number {
+  return TOUCH_UI_MARGIN;
+}
+
+export function getPauseButtonLayout(viewportWidth = window.innerWidth): {
+  x: number;
+  y: number;
+  radius: number;
+  hitRadius: number;
+} {
+  const insets = getSafeAreaInsets();
+  return {
+    x: viewportWidth - insets.right - TOUCH_UI_MARGIN - PAUSE_BUTTON_RADIUS,
+    y: insets.top + TOUCH_UI_MARGIN + PAUSE_BUTTON_RADIUS,
+    radius: PAUSE_BUTTON_RADIUS,
+    hitRadius: PAUSE_BUTTON_HIT_RADIUS,
+  };
+}
+
 function isPauseButton(x: number, y: number): boolean {
-  // Top-right corner, 50x50 area with some padding
-  return x > window.innerWidth - 70 && y < 70;
+  const layout = getPauseButtonLayout();
+  const dx = x - layout.x;
+  const dy = y - layout.y;
+  return Math.sqrt(dx * dx + dy * dy) <= layout.hitRadius;
 }
 
 function handleTouchStart(e: TouchEvent): void {
