@@ -1,5 +1,5 @@
 import { isKeyDown, touch } from './input';
-import { MAP_WIDTH, MAP_HEIGHT, wrapPosition, drawSphereShading } from './utils';
+import { MAP_WIDTH, MAP_HEIGHT, wrapPosition, drawSphereShading, TWO_PI } from './utils';
 import { Camera } from './camera';
 
 interface Ripple {
@@ -91,7 +91,7 @@ export class Player {
 
     // Inner body fill — subtle tinted core
     ctx.beginPath();
-    ctx.arc(screen.x, screen.y, this.radius - 1, 0, Math.PI * 2);
+    ctx.arc(screen.x, screen.y, this.radius - 1, 0, TWO_PI);
     ctx.fillStyle = `rgba(20, 50, 100, ${0.3 + hpRatio * 0.4})`;
     ctx.fill();
 
@@ -99,7 +99,7 @@ export class Player {
 
     // Outer ring
     ctx.beginPath();
-    ctx.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
+    ctx.arc(screen.x, screen.y, this.radius, 0, TWO_PI);
     ctx.strokeStyle = '#4488ff';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -108,7 +108,7 @@ export class Player {
     if (hpRatio > 0) {
       const arcRadius = this.radius + 5;
       const startAngle = -Math.PI / 2;
-      const endAngle = startAngle + Math.PI * 2 * hpRatio;
+      const endAngle = startAngle + TWO_PI * hpRatio;
 
       // Glow layer
       ctx.beginPath();
@@ -132,7 +132,7 @@ export class Player {
 
     // Ambient glow — dims with HP
     ctx.beginPath();
-    ctx.arc(screen.x, screen.y, this.radius + 4, 0, Math.PI * 2);
+    ctx.arc(screen.x, screen.y, this.radius + 4, 0, TWO_PI);
     ctx.strokeStyle = `rgba(68, 136, 255, ${0.1 + hpRatio * 0.2})`;
     ctx.lineWidth = 3;
     ctx.stroke();

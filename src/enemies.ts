@@ -1,7 +1,9 @@
-import { wrappedAngle, wrappedDistance, randomRange, wrapPosition, drawSphereShading } from './utils';
+import { wrappedAngle, wrappedDistance, randomRange, wrapPosition, drawSphereShading, TWO_PI, tracePoly, easeOutBack } from './utils';
 import { Camera } from './camera';
 
 const CHARGE_SPEED = 500;
+const SPAWN_DURATION = 0.3;
+const HIT_FLASH_DURATION = 0.08;
 
 interface EnemyTypeConfig {
   baseRadius: number;
@@ -57,16 +59,23 @@ export class Enemy {
   damageMultiplier: number;
   dead = false;
   type: EnemyType;
-  rotation = 0;
-  summonTimer = 0;
+  private rotation = 0;
+  private summonTimer = 0;
   canSummon = false;
-  shootTimer = 0;
+  private shootTimer = 0;
   projectiles: BossProjectile[] = [];
-  chargeTimer = 0;
-  isCharging = false;
-  chargeVx = 0;
-  chargeVy = 0;
-  chargeDuration = 0;
+  private chargeTimer = 0;
+  private isCharging = false;
+  private chargeVx = 0;
+  private chargeVy = 0;
+  private chargeDuration = 0;
+
+  // Visual state
+  private spawnAge = 0;
+  private hitFlash = 0;
+  private innerRotation = 0;
+  private spikeCount: number;
+  private wobblePhase: number;
 
   constructor(type: EnemyType, x: number, y: number) {
     const config = ENEMY_TYPES[type];
@@ -82,6 +91,9 @@ export class Enemy {
     this.outlineColor = config.outlineColor;
     this.xpDrop = config.xpDrop;
     this.damageMultiplier = config.damageMultiplier;
+    this.spikeCount = type === 'swarmer' ? Math.floor(randomRange(5, 8)) : 6;
+    this.wobblePhase = Math.random() * TWO_PI;
+
     if (type === 'overlord') {
       this.summonTimer = 3;
       this.shootTimer = 2;
@@ -92,9 +104,12 @@ export class Enemy {
   }
 
   update(dt: number, playerX: number, playerY: number): void {
+    this.spawnAge += dt;
+    if (this.hitFlash > 0) this.hitFlash -= dt;
+    this.innerRotation += dt * (this.type === 'titan' ? 0.4 : 1.2);
+
     const angle = wrappedAngle(this.x, this.y, playerX, playerY);
 
-    // Drifter charge attack
     if (this.type === 'drifter') {
       if (this.isCharging) {
         this.chargeDuration -= dt;
@@ -132,8 +147,6 @@ export class Enemy {
         this.summonTimer = 3;
         this.canSummon = true;
       }
-
-      // Shoot projectiles at player
       this.shootTimer -= dt;
       if (this.shootTimer <= 0) {
         this.shootTimer = 1.5;
@@ -164,31 +177,272 @@ export class Enemy {
 
   takeDamage(amount: number): void {
     this.hp -= amount;
+    this.hitFlash = HIT_FLASH_DURATION;
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;
     }
   }
 
+  consumeSummon(): boolean {
+    if (this.canSummon) {
+      this.canSummon = false;
+      return true;
+    }
+    return false;
+  }
+
   draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
     const screen = camera.worldToScreen(this.x, this.y);
 
-    // Draw drifter charge trail
+    // Spawn-in scale
+    const spawnT = Math.min(1, this.spawnAge / SPAWN_DURATION);
+    const scale = easeOutBack(spawnT);
+    const drawRadius = this.radius * scale;
+    if (drawRadius < 0.5) return;
+
+    // Draw boss projectiles (unscaled)
+    this.drawProjectiles(ctx, camera);
+
+    ctx.save();
+    ctx.translate(screen.x, screen.y);
+    ctx.scale(scale, scale);
+
+    // Drifter charge trail
     if (this.type === 'drifter' && this.isCharging) {
-      const trailLen = 20;
-      const nx = -this.chargeVx / CHARGE_SPEED;
-      const ny = -this.chargeVy / CHARGE_SPEED;
-      for (let i = 1; i <= 4; i++) {
-        const tx = screen.x + nx * trailLen * i;
-        const ty = screen.y + ny * trailLen * i;
-        ctx.beginPath();
-        ctx.arc(tx, ty, this.radius * (1 - i * 0.15), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 160, 40, ${0.15 - i * 0.03})`;
-        ctx.fill();
-      }
+      this.drawChargeTrail(ctx);
     }
 
-    // Draw boss projectiles
+    // Type-specific body
+    switch (this.type) {
+      case 'swarmer': this.drawSwarmer(ctx, time); break;
+      case 'drifter': this.drawDrifter(ctx, time); break;
+      case 'titan': this.drawTitan(ctx, time); break;
+      case 'overlord': this.drawOverlord(ctx, time); break;
+    }
+
+    // Hit flash — simple white circle over the enemy shape
+    if (this.hitFlash > 0) {
+      const flashAlpha = 0.35 * (this.hitFlash / HIT_FLASH_DURATION);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 0.9, 0, TWO_PI);
+      ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+      ctx.fill();
+    }
+
+    // Spawn flash ring
+    if (spawnT < 1) {
+      const ringAlpha = 0.25 * (1 - spawnT);
+      const ringR = this.radius * (1 + spawnT * 0.5);
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR, 0, TWO_PI);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // ── Swarmer: jagged spiky star with pulsing core ──────────────
+
+  private drawSwarmer(ctx: CanvasRenderingContext2D, time: number): void {
+    const r = this.radius;
+    const [cr, cg, cb] = this.color;
+    const wobble = Math.sin(time * 2.5 + this.wobblePhase) * 0.08;
+    const rot = time * 1.5 + this.wobblePhase;
+
+    // Subtle core glow
+    const pulse = 0.5 + 0.5 * Math.sin(time * 1.8 + this.wobblePhase);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.5 * (0.9 + pulse * 0.2), 0, TWO_PI);
+    ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${0.1 + pulse * 0.06})`;
+    ctx.fill();
+
+    // Spiky star outline
+    ctx.beginPath();
+    for (let i = 0; i < this.spikeCount * 2; i++) {
+      const angle = rot + (i / (this.spikeCount * 2)) * TWO_PI;
+      const isOuter = i % 2 === 0;
+      const spikeR = isOuter ? r * (1 + wobble) : r * 0.55;
+      const px = Math.cos(angle) * spikeR;
+      const py = Math.sin(angle) * spikeR;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = this.outlineColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // HP fill clipped to star
+    this.drawHpFill(ctx, r, cr, cg, cb);
+  }
+
+  // ── Drifter: hexagon with inner rotating ring ─────────────────
+
+  private drawDrifter(ctx: CanvasRenderingContext2D, time: number): void {
+    const r = this.radius;
+    const [cr, cg, cb] = this.color;
+
+    // Charge buildup glow
+    if (!this.isCharging && this.chargeTimer < 1) {
+      const urgency = 1 - this.chargeTimer;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.3, 0, TWO_PI);
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${urgency * 0.15})`;
+      ctx.fill();
+    }
+
+    // Outer hexagon
+    tracePoly(ctx, 0, 0, r, 6, 0);
+    ctx.strokeStyle = this.outlineColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // HP fill clipped to hexagon
+    this.drawHpFill(ctx, r, cr, cg, cb);
+
+    // Inner rotating hexagon
+    const innerR = r * 0.5;
+    const innerPulse = 0.8 + 0.2 * Math.sin(time * 2);
+    tracePoly(ctx, 0, 0, innerR * innerPulse, 6, this.innerRotation);
+    ctx.strokeStyle = `rgba(255, 255, 255, 0.3)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    drawSphereShading(ctx, 0, 0, r, cr, cg, cb);
+  }
+
+  // ── Titan: concentric rotating rings ──────────────────────────
+
+  private drawTitan(ctx: CanvasRenderingContext2D, time: number): void {
+    const r = this.radius;
+    const [cr, cg, cb] = this.color;
+
+    // Gravitational distortion lines
+    ctx.globalAlpha = 0.06;
+    for (let i = 0; i < 8; i++) {
+      const angle = this.innerRotation * 0.3 + (i / 8) * TWO_PI;
+      const lineR = r * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * r * 1.1, Math.sin(angle) * r * 1.1);
+      ctx.lineTo(Math.cos(angle) * lineR, Math.sin(angle) * lineR);
+      ctx.strokeStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Outer ring 3
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.25, 0, TWO_PI);
+    ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.12)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Outer ring 2
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.1, 0, TWO_PI);
+    ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.2)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Main body circle
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TWO_PI);
+    ctx.strokeStyle = this.outlineColor;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // HP fill (trace a clip circle for the titan's round body)
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 1, 0, TWO_PI);
+    this.drawHpFill(ctx, r, cr, cg, cb);
+
+    // Inner rotating ring with segments
+    const innerR = r * 0.55;
+    const segments = 5;
+    const segGap = 0.2;
+    const segArc = (TWO_PI / segments) - segGap;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(255, 255, 255, 0.25)`;
+    for (let i = 0; i < segments; i++) {
+      const startAngle = this.innerRotation + (i / segments) * TWO_PI;
+      ctx.beginPath();
+      ctx.arc(0, 0, innerR, startAngle, startAngle + segArc);
+      ctx.stroke();
+    }
+
+    // Central pulsing eye
+    const eyePulse = 0.6 + 0.4 * Math.sin(time * 1.5);
+    const eyeR = r * 0.15 * eyePulse;
+    const eyeGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, eyeR * 3);
+    eyeGrad.addColorStop(0, `rgba(255, 255, 255, ${0.4 * eyePulse})`);
+    eyeGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = eyeGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, eyeR * 3, 0, TWO_PI);
+    ctx.fill();
+
+    drawSphereShading(ctx, 0, 0, r, cr, cg, cb);
+  }
+
+  // ── Overlord: rotating square with glow (mostly preserved) ────
+
+  private drawOverlord(ctx: CanvasRenderingContext2D, time: number): void {
+    const side = this.radius * 2;
+    const [cr, cg, cb] = this.color;
+
+    // Pulsing glow
+    const pulse = 0.5 + 0.5 * Math.sin(time * 2.5);
+    const glowSize = this.radius + 10 + pulse * 8;
+    ctx.save();
+    ctx.rotate(this.rotation);
+    const gradient = ctx.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, glowSize * 1.4);
+    gradient.addColorStop(0, `rgba(${cr}, ${cg}, ${cb}, ${0.25 + pulse * 0.15})`);
+    gradient.addColorStop(1, `rgba(${cr}, ${cg}, ${cb}, 0)`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(-glowSize * 1.4, -glowSize * 1.4, glowSize * 2.8, glowSize * 2.8);
+
+    // Outline
+    ctx.strokeStyle = this.outlineColor;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-side / 2, -side / 2, side, side);
+
+    // HP fill
+    const hpRatio = this.hp / this.maxHp;
+    if (hpRatio > 0) {
+      const innerSide = side - 2;
+      ctx.beginPath();
+      ctx.rect(-innerSide / 2, -innerSide / 2, innerSide, innerSide);
+      ctx.save();
+      ctx.clip();
+      const fillTop = -this.radius + 1 + (innerSide * (1 - hpRatio));
+      ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      ctx.fillRect(-innerSide / 2, fillTop, innerSide, innerSide);
+      ctx.restore();
+    }
+
+    // Inner diamond
+    const innerSize = this.radius * 0.5;
+    const innerPulse = 0.8 + 0.2 * Math.sin(time * 3);
+    ctx.beginPath();
+    ctx.moveTo(0, -innerSize * innerPulse);
+    ctx.lineTo(innerSize * innerPulse, 0);
+    ctx.lineTo(0, innerSize * innerPulse);
+    ctx.lineTo(-innerSize * innerPulse, 0);
+    ctx.closePath();
+    ctx.strokeStyle = `rgba(255, 200, 200, 0.25)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // ── Shared helpers ────────────────────────────────────────────
+
+  private drawProjectiles(ctx: CanvasRenderingContext2D, camera: Camera): void {
     for (const p of this.projectiles) {
       const ps = camera.worldToScreen(p.x, p.y);
       const glow = ctx.createRadialGradient(ps.x, ps.y, 0, ps.x, ps.y, p.radius * 3);
@@ -196,77 +450,39 @@ export class Enemy {
       glow.addColorStop(0.4, 'rgba(255, 200, 200, 0.3)');
       glow.addColorStop(1, 'rgba(255, 100, 100, 0)');
       ctx.beginPath();
-      ctx.arc(ps.x, ps.y, p.radius * 3, 0, Math.PI * 2);
+      ctx.arc(ps.x, ps.y, p.radius * 3, 0, TWO_PI);
       ctx.fillStyle = glow;
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(ps.x, ps.y, p.radius, 0, Math.PI * 2);
+      ctx.arc(ps.x, ps.y, p.radius, 0, TWO_PI);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.fill();
     }
+  }
 
-    if (this.type === 'overlord') {
-      const side = this.radius * 2;
-
-      // Subtle pulsing glow
-      const pulse = 0.5 + 0.5 * Math.sin(time * 2.5);
-      const glowSize = this.radius + 10 + pulse * 8;
-      ctx.save();
-      ctx.translate(screen.x, screen.y);
-      ctx.rotate(this.rotation);
-      const gradient = ctx.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, glowSize * 1.4);
-      gradient.addColorStop(0, `rgba(200, 20, 40, ${0.25 + pulse * 0.15})`);
-      gradient.addColorStop(1, 'rgba(200, 20, 40, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(-glowSize * 1.4, -glowSize * 1.4, glowSize * 2.8, glowSize * 2.8);
-      ctx.restore();
-
-      // Outline
-      ctx.save();
-      ctx.translate(screen.x, screen.y);
-      ctx.rotate(this.rotation);
-      ctx.strokeStyle = this.outlineColor;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(-side / 2, -side / 2, side, side);
-      ctx.restore();
-
-      // HP fill clipped to square shape
-      const hpRatio = this.hp / this.maxHp;
-      if (hpRatio > 0) {
-        ctx.save();
-        ctx.translate(screen.x, screen.y);
-        ctx.rotate(this.rotation);
-        ctx.beginPath();
-        const innerSide = side - 2;
-        ctx.rect(-innerSide / 2, -innerSide / 2, innerSide, innerSide);
-        ctx.clip();
-        const fillTop = -this.radius + 1 + (innerSide * (1 - hpRatio));
-        const [r, g, b] = this.color;
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(-innerSide / 2, fillTop, innerSide, innerSide);
-        ctx.restore();
-      }
-    } else {
+  private drawChargeTrail(ctx: CanvasRenderingContext2D): void {
+    const trailLen = 20;
+    const nx = -this.chargeVx / CHARGE_SPEED;
+    const ny = -this.chargeVy / CHARGE_SPEED;
+    for (let i = 1; i <= 4; i++) {
+      const tx = nx * trailLen * i;
+      const ty = ny * trailLen * i;
       ctx.beginPath();
-      ctx.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
-      ctx.strokeStyle = this.outlineColor;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.arc(tx, ty, this.radius * (1 - i * 0.15), 0, TWO_PI);
+      ctx.fillStyle = `rgba(255, 160, 40, ${0.15 - i * 0.03})`;
+      ctx.fill();
+    }
+  }
 
-      const hpRatio = this.hp / this.maxHp;
-      if (hpRatio > 0) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(screen.x, screen.y, this.radius - 1, 0, Math.PI * 2);
-        ctx.clip();
-        const fillTop = screen.y + this.radius - (this.radius * 2 * hpRatio);
-        const [r, g, b] = this.color;
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(screen.x - this.radius, fillTop, this.radius * 2, this.radius * 2);
-        ctx.restore();
-      }
-
-      drawSphereShading(ctx, screen.x, screen.y, this.radius, ...this.color);
+  private drawHpFill(ctx: CanvasRenderingContext2D, r: number, cr: number, cg: number, cb: number): void {
+    const hpRatio = this.hp / this.maxHp;
+    if (hpRatio > 0) {
+      ctx.save();
+      ctx.clip();
+      const fillTop = r - (r * 2 * hpRatio);
+      ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      ctx.fillRect(-r * 1.2, fillTop, r * 2.4, r * 2.4);
+      ctx.restore();
     }
   }
 }
@@ -350,10 +566,8 @@ export class EnemySpawner {
       enemy.update(dt, playerX, playerY);
     }
 
-    // Handle overlord summoning
     for (const overlord of this.enemies) {
-      if (!overlord.canSummon) continue;
-      overlord.canSummon = false;
+      if (!overlord.consumeSummon()) continue;
       const count = Math.floor(randomRange(2, 4));
       for (let i = 0; i < count; i++) {
         const sp = wrapPosition(

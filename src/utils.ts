@@ -1,6 +1,7 @@
 export const MAP_WIDTH = 50000;
 export const MAP_HEIGHT = 50000;
 export const WRAP_PADDING = 500;
+export const TWO_PI = Math.PI * 2;
 
 export interface Point {
   x: number;
@@ -81,7 +82,32 @@ export function drawSphereShading(
   grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, 0.08)`);
   grad.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
   ctx.beginPath();
-  ctx.arc(cx, cy, radius - 1, 0, Math.PI * 2);
+  ctx.arc(cx, cy, radius - 1, 0, TWO_PI);
   ctx.fillStyle = grad;
   ctx.fill();
+}
+
+/** Trace a regular polygon path (caller must stroke/fill). */
+export function tracePoly(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number, sides: number, rot: number,
+): void {
+  ctx.beginPath();
+  for (let i = 0; i <= sides; i++) {
+    const angle = rot + (i / sides) * TWO_PI;
+    const px = cx + Math.cos(angle) * r;
+    const py = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+export function easeOutBack(t: number): number {
+  const c = 1.4;
+  return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
+}
+
+export function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
 }

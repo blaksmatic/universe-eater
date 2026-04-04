@@ -53,8 +53,8 @@ function handleTouchStart(e: TouchEvent): void {
       continue;
     }
 
-    // Use left half of screen for joystick
-    if (touch.touchId === -1 && t.clientX < window.innerWidth * 0.6) {
+    // Start joystick anywhere (except pause button)
+    if (touch.touchId === -1) {
       touch.touchId = t.identifier;
       touch.centerX = t.clientX;
       touch.centerY = t.clientY;

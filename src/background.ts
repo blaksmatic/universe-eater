@@ -1,4 +1,4 @@
-import { MAP_WIDTH, MAP_HEIGHT, randomRange } from './utils';
+import { MAP_WIDTH, MAP_HEIGHT, randomRange, TWO_PI } from './utils';
 import { Camera } from './camera';
 
 const PARALLAX_FACTORS = [0.2, 0.5, 0.8] as const;
@@ -38,7 +38,7 @@ function createStar(layer: number): Star {
     size: layer === 0 ? randomRange(0.5, 1) : layer === 1 ? randomRange(1, 2) : randomRange(1.5, 3),
     brightness: randomRange(0.3, 1.0),
     twinkleSpeed: randomRange(0.5, 2.0),
-    twinkleOffset: Math.random() * Math.PI * 2,
+    twinkleOffset: Math.random() * TWO_PI,
   };
 }
 
@@ -158,7 +158,7 @@ export class Background {
         glow.addColorStop(1, 'rgba(200, 220, 255, 0)');
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, glowR, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, glowR, 0, TWO_PI);
         ctx.fill();
       }
 
@@ -177,7 +177,7 @@ export class Background {
       } else {
         ctx.fillStyle = `rgba(255, 255, 255, ${dofAlpha})`;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, drawSize, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, drawSize, 0, TWO_PI);
         ctx.fill();
       }
     }
@@ -189,7 +189,7 @@ export class Background {
           screen.y < -10 || screen.y > camera.height + 10) continue;
       ctx.fillStyle = `rgba(180, 200, 255, ${d.alpha})`;
       ctx.beginPath();
-      ctx.arc(screen.x, screen.y, d.size, 0, Math.PI * 2);
+      ctx.arc(screen.x, screen.y, d.size, 0, TWO_PI);
       ctx.fill();
     }
   }

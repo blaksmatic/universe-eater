@@ -5,6 +5,12 @@
     constructor(canvasWidth, canvasHeight) {
       this.x = 0;
       this.y = 0;
+      // Shake state
+      this.shakeIntensity = 0;
+      this.shakeDuration = 0;
+      this.shakeTimer = 0;
+      this.shakeOffsetX = 0;
+      this.shakeOffsetY = 0;
       this.width = canvasWidth;
       this.height = canvasHeight;
     }
@@ -16,8 +22,32 @@
       this.width = canvasWidth;
       this.height = canvasHeight;
     }
+    shake(intensity, duration) {
+      if (intensity > this.shakeIntensity) {
+        this.shakeIntensity = intensity;
+        this.shakeDuration = duration;
+        this.shakeTimer = duration;
+      }
+    }
+    updateShake(dt) {
+      if (this.shakeTimer > 0) {
+        this.shakeTimer -= dt;
+        const t = Math.max(0, this.shakeTimer / this.shakeDuration);
+        const mag = this.shakeIntensity * t;
+        this.shakeOffsetX = (Math.random() * 2 - 1) * mag;
+        this.shakeOffsetY = (Math.random() * 2 - 1) * mag;
+        if (this.shakeTimer <= 0) {
+          this.shakeIntensity = 0;
+          this.shakeOffsetX = 0;
+          this.shakeOffsetY = 0;
+        }
+      }
+    }
     worldToScreen(wx, wy) {
-      return { x: wx - this.x, y: wy - this.y };
+      return {
+        x: wx - this.x + this.shakeOffsetX,
+        y: wy - this.y + this.shakeOffsetY
+      };
     }
     isVisible(wx, wy, margin = 100) {
       const sx = wx - this.x;
@@ -69,7 +99,7 @@
         touch.pauseTapped = true;
         continue;
       }
-      if (touch.touchId === -1 && t.clientX < window.innerWidth * 0.6) {
+      if (touch.touchId === -1) {
         touch.touchId = t.identifier;
         touch.centerX = t.clientX;
         touch.centerY = t.clientY;
@@ -136,6 +166,7 @@
   // src/utils.ts
   var MAP_WIDTH = 5e4;
   var MAP_HEIGHT = 5e4;
+  var TWO_PI = Math.PI * 2;
   function randomRange(min, max) {
     return min + Math.random() * (max - min);
   }
@@ -186,9 +217,27 @@
     grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, 0.08)`);
     grad.addColorStop(1, "rgba(0, 0, 0, 0.2)");
     ctx2.beginPath();
-    ctx2.arc(cx, cy, radius - 1, 0, Math.PI * 2);
+    ctx2.arc(cx, cy, radius - 1, 0, TWO_PI);
     ctx2.fillStyle = grad;
     ctx2.fill();
+  }
+  function tracePoly(ctx2, cx, cy, r, sides, rot) {
+    ctx2.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const angle = rot + i / sides * TWO_PI;
+      const px = cx + Math.cos(angle) * r;
+      const py = cy + Math.sin(angle) * r;
+      if (i === 0) ctx2.moveTo(px, py);
+      else ctx2.lineTo(px, py);
+    }
+    ctx2.closePath();
+  }
+  function easeOutBack(t) {
+    const c = 1.4;
+    return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
+  }
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
   }
 
   // src/player.ts
@@ -262,19 +311,19 @@
       const screen = camera2.worldToScreen(this.x, this.y);
       const hpRatio = this.hp / this.maxHp;
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.radius - 1, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.radius - 1, 0, TWO_PI);
       ctx2.fillStyle = `rgba(20, 50, 100, ${0.3 + hpRatio * 0.4})`;
       ctx2.fill();
       drawSphereShading(ctx2, screen.x, screen.y, this.radius, 60, 120, 255);
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.radius, 0, TWO_PI);
       ctx2.strokeStyle = "#4488ff";
       ctx2.lineWidth = 2;
       ctx2.stroke();
       if (hpRatio > 0) {
         const arcRadius = this.radius + 5;
         const startAngle = -Math.PI / 2;
-        const endAngle = startAngle + Math.PI * 2 * hpRatio;
+        const endAngle = startAngle + TWO_PI * hpRatio;
         ctx2.beginPath();
         ctx2.arc(screen.x, screen.y, arcRadius, startAngle, endAngle);
         const r = Math.round(60 + (1 - hpRatio) * 195);
@@ -292,7 +341,7 @@
         ctx2.stroke();
       }
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.radius + 4, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.radius + 4, 0, TWO_PI);
       ctx2.strokeStyle = `rgba(68, 136, 255, ${0.1 + hpRatio * 0.2})`;
       ctx2.lineWidth = 3;
       ctx2.stroke();
@@ -326,7 +375,7 @@
       size: layer === 0 ? randomRange(0.5, 1) : layer === 1 ? randomRange(1, 2) : randomRange(1.5, 3),
       brightness: randomRange(0.3, 1),
       twinkleSpeed: randomRange(0.5, 2),
-      twinkleOffset: Math.random() * Math.PI * 2
+      twinkleOffset: Math.random() * TWO_PI
     };
   }
   function createNebula() {
@@ -426,7 +475,7 @@
           glow.addColorStop(1, "rgba(200, 220, 255, 0)");
           ctx2.fillStyle = glow;
           ctx2.beginPath();
-          ctx2.arc(screenX, screenY, glowR, 0, Math.PI * 2);
+          ctx2.arc(screenX, screenY, glowR, 0, TWO_PI);
           ctx2.fill();
         }
         const streakLen = speed * streakFactors[star.layer];
@@ -443,7 +492,7 @@
         } else {
           ctx2.fillStyle = `rgba(255, 255, 255, ${dofAlpha})`;
           ctx2.beginPath();
-          ctx2.arc(screenX, screenY, drawSize, 0, Math.PI * 2);
+          ctx2.arc(screenX, screenY, drawSize, 0, TWO_PI);
           ctx2.fill();
         }
       }
@@ -452,7 +501,7 @@
         if (screen.x < -10 || screen.x > camera2.width + 10 || screen.y < -10 || screen.y > camera2.height + 10) continue;
         ctx2.fillStyle = `rgba(180, 200, 255, ${d.alpha})`;
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, d.size, 0, Math.PI * 2);
+        ctx2.arc(screen.x, screen.y, d.size, 0, TWO_PI);
         ctx2.fill();
       }
     }
@@ -493,8 +542,188 @@
     }
   };
 
+  // src/geometry.ts
+  var NEON = [
+    [0, 255, 255],
+    // cyan
+    [255, 0, 128],
+    // hot pink
+    [128, 0, 255],
+    // purple
+    [0, 128, 255],
+    // electric blue
+    [0, 255, 160]
+    // neon green
+  ];
+  var RING_DEFS = [
+    { sides: 6, radius: 180, speed: 0.15, color: 0, alpha: 0.045 },
+    { sides: 4, radius: 300, speed: -0.1, color: 1, alpha: 0.035 },
+    { sides: 8, radius: 420, speed: 0.07, color: 3, alpha: 0.028 },
+    { sides: 3, radius: 550, speed: -0.18, color: 2, alpha: 0.022 },
+    { sides: 5, radius: 700, speed: 0.12, color: 4, alpha: 0.02 },
+    { sides: 10, radius: 900, speed: -0.04, color: 0, alpha: 0.016 }
+  ];
+  var NUM_RADIALS = 24;
+  var RADIAL_MAX_LEN = 1200;
+  var GRID_SPACING = 250;
+  var GRID_PARALLAX = 0.12;
+  var GRID_WAVE_SEGMENTS = 10;
+  var GRID_WAVE_AMP = 6;
+  var BackgroundGeometry = class {
+    constructor() {
+      this.shapes = [];
+      for (let i = 0; i < 30; i++) {
+        this.shapes.push({
+          x: randomRange(-3e3, 3e3),
+          y: randomRange(-3e3, 3e3),
+          sides: [3, 4, 5, 6, 8][Math.floor(Math.random() * 5)],
+          radius: randomRange(40, 180),
+          rotation: Math.random() * TWO_PI,
+          rotSpeed: randomRange(-0.2, 0.2),
+          color: Math.floor(Math.random() * NEON.length),
+          alpha: randomRange(0.015, 0.04),
+          pulsePhase: Math.random() * TWO_PI,
+          parallax: randomRange(0.05, 0.25)
+        });
+      }
+    }
+    update(dt) {
+      for (const s of this.shapes) {
+        s.rotation += s.rotSpeed * dt;
+      }
+    }
+    draw(ctx2, camera2, time, playerX, playerY) {
+      this.drawGrid(ctx2, camera2, time);
+      this.drawRadials(ctx2, camera2, time, playerX, playerY);
+      this.drawFloatingShapes(ctx2, camera2, time);
+      this.drawRings(ctx2, camera2, time, playerX, playerY);
+    }
+    // ── Grid: wavy neon lines with glow ───────────────────────────
+    drawGrid(ctx2, camera2, time) {
+      const sp = GRID_SPACING;
+      const offX = camera2.x * GRID_PARALLAX % sp;
+      const offY = camera2.y * GRID_PARALLAX % sp;
+      const pulse = 0.6 + 0.4 * Math.sin(time * 0.3);
+      const baseAlpha = 0.024 * pulse;
+      const [r, g, b] = NEON[3];
+      ctx2.lineWidth = 5;
+      ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseAlpha * 0.3})`;
+      this.traceGridPaths(ctx2, camera2, sp, offX, offY, time);
+      ctx2.stroke();
+      ctx2.lineWidth = 1;
+      ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseAlpha})`;
+      this.traceGridPaths(ctx2, camera2, sp, offX, offY, time);
+      ctx2.stroke();
+      ctx2.fillStyle = `rgba(${r + 50}, ${g + 70}, ${b}, ${baseAlpha * 1.8})`;
+      for (let gx = -offX - sp; gx <= camera2.width + sp; gx += sp) {
+        for (let gy = -offY - sp; gy <= camera2.height + sp; gy += sp) {
+          const wx = gx + Math.sin(gy * 8e-3 + time * 0.4) * GRID_WAVE_AMP;
+          const wy = gy + Math.sin(gx * 8e-3 + time * 0.35) * GRID_WAVE_AMP;
+          ctx2.beginPath();
+          ctx2.arc(wx, wy, 1.8, 0, TWO_PI);
+          ctx2.fill();
+        }
+      }
+    }
+    traceGridPaths(ctx2, camera2, sp, offX, offY, time) {
+      const segs = GRID_WAVE_SEGMENTS;
+      const amp = GRID_WAVE_AMP;
+      ctx2.beginPath();
+      for (let gx = -offX - sp; gx <= camera2.width + sp; gx += sp) {
+        for (let s = 0; s <= segs; s++) {
+          const t = s / segs;
+          const y = t * camera2.height;
+          const wx = gx + Math.sin(y * 8e-3 + time * 0.4) * amp;
+          if (s === 0) ctx2.moveTo(wx, y);
+          else ctx2.lineTo(wx, y);
+        }
+      }
+      for (let gy = -offY - sp; gy <= camera2.height + sp; gy += sp) {
+        for (let s = 0; s <= segs; s++) {
+          const t = s / segs;
+          const x = t * camera2.width;
+          const wy = gy + Math.sin(x * 8e-3 + time * 0.35) * amp;
+          if (s === 0) ctx2.moveTo(x, wy);
+          else ctx2.lineTo(x, wy);
+        }
+      }
+    }
+    // ── Radial light rays from player ─────────────────────────────
+    drawRadials(ctx2, camera2, time, px, py) {
+      const screen = camera2.worldToScreen(px, py);
+      const cx = screen.x;
+      const cy = screen.y;
+      const baseRot = time * 0.05;
+      ctx2.lineWidth = 1.5;
+      ctx2.lineCap = "round";
+      for (let i = 0; i < NUM_RADIALS; i++) {
+        const angle = baseRot + i / NUM_RADIALS * TWO_PI;
+        const pulse = 0.5 + 0.5 * Math.sin(time * 0.8 + i * 0.5);
+        const len = RADIAL_MAX_LEN * (0.5 + 0.5 * pulse);
+        const alpha = 0.015 * pulse;
+        const ex = cx + Math.cos(angle) * len;
+        const ey = cy + Math.sin(angle) * len;
+        ctx2.beginPath();
+        ctx2.moveTo(cx, cy);
+        ctx2.lineTo(ex, ey);
+        ctx2.strokeStyle = `rgba(0, 180, 255, ${alpha})`;
+        ctx2.stroke();
+      }
+    }
+    // ── Floating wireframe shapes with parallax ───────────────────
+    drawFloatingShapes(ctx2, camera2, time) {
+      for (const s of this.shapes) {
+        const sx = s.x - camera2.x * s.parallax;
+        const sy = s.y - camera2.y * s.parallax;
+        const padW = camera2.width + 400;
+        const padH = camera2.height + 400;
+        const screenX = (sx % padW + padW) % padW - 200;
+        const screenY = (sy % padH + padH) % padH - 200;
+        const pulse = 1 + 0.15 * Math.sin(time * 0.8 + s.pulsePhase);
+        const r = s.radius * pulse;
+        const [cr, cg, cb] = NEON[s.color];
+        const alpha = s.alpha * (0.7 + 0.3 * Math.sin(time * 0.5 + s.pulsePhase));
+        this.drawNeonPoly(ctx2, screenX, screenY, r, s.sides, s.rotation, cr, cg, cb, alpha, 4);
+      }
+    }
+    // ── Concentric rotating polygon rings around player ───────────
+    drawRings(ctx2, camera2, time, px, py) {
+      const screen = camera2.worldToScreen(px, py);
+      const cx = screen.x;
+      const cy = screen.y;
+      for (const ring of RING_DEFS) {
+        const breathe = 1 + 0.08 * Math.sin(time * 0.6 + ring.radius * 0.01);
+        const r = ring.radius * breathe;
+        const rot = time * ring.speed;
+        const [cr, cg, cb] = NEON[ring.color];
+        const a = ring.alpha * (0.7 + 0.3 * Math.sin(time * 0.4 + ring.radius * 5e-3));
+        this.drawNeonPoly(ctx2, cx, cy, r, ring.sides, rot, cr, cg, cb, a, 3);
+      }
+    }
+    // ── Helpers ───────────────────────────────────────────────────
+    drawNeonPoly(ctx2, cx, cy, r, sides, rot, cr, cg, cb, alpha, glowWidth) {
+      ctx2.lineWidth = glowWidth;
+      ctx2.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 0.35})`;
+      tracePoly(ctx2, cx, cy, r, sides, rot);
+      ctx2.stroke();
+      ctx2.lineWidth = 1;
+      ctx2.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+      tracePoly(ctx2, cx, cy, r, sides, rot);
+      ctx2.stroke();
+      ctx2.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 1.8})`;
+      for (let i = 0; i < sides; i++) {
+        const a = rot + i / sides * TWO_PI;
+        ctx2.beginPath();
+        ctx2.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 2, 0, TWO_PI);
+        ctx2.fill();
+      }
+    }
+  };
+
   // src/enemies.ts
   var CHARGE_SPEED = 500;
+  var SPAWN_DURATION = 0.3;
+  var HIT_FLASH_DURATION = 0.08;
   var ENEMY_TYPES = {
     swarmer: {
       baseRadius: 10,
@@ -550,6 +779,10 @@
       this.chargeVx = 0;
       this.chargeVy = 0;
       this.chargeDuration = 0;
+      // Visual state
+      this.spawnAge = 0;
+      this.hitFlash = 0;
+      this.innerRotation = 0;
       const config = ENEMY_TYPES[type];
       this.type = type;
       this.x = x;
@@ -563,6 +796,8 @@
       this.outlineColor = config.outlineColor;
       this.xpDrop = config.xpDrop;
       this.damageMultiplier = config.damageMultiplier;
+      this.spikeCount = type === "swarmer" ? Math.floor(randomRange(5, 8)) : 6;
+      this.wobblePhase = Math.random() * TWO_PI;
       if (type === "overlord") {
         this.summonTimer = 3;
         this.shootTimer = 2;
@@ -572,6 +807,9 @@
       }
     }
     update(dt, playerX, playerY) {
+      this.spawnAge += dt;
+      if (this.hitFlash > 0) this.hitFlash -= dt;
+      this.innerRotation += dt * (this.type === "titan" ? 0.4 : 1.2);
       const angle = wrappedAngle(this.x, this.y, playerX, playerY);
       if (this.type === "drifter") {
         if (this.isCharging) {
@@ -637,26 +875,215 @@
     }
     takeDamage(amount) {
       this.hp -= amount;
+      this.hitFlash = HIT_FLASH_DURATION;
       if (this.hp <= 0) {
         this.hp = 0;
         this.dead = true;
       }
     }
+    consumeSummon() {
+      if (this.canSummon) {
+        this.canSummon = false;
+        return true;
+      }
+      return false;
+    }
     draw(ctx2, camera2, time) {
       const screen = camera2.worldToScreen(this.x, this.y);
+      const spawnT = Math.min(1, this.spawnAge / SPAWN_DURATION);
+      const scale = easeOutBack(spawnT);
+      const drawRadius = this.radius * scale;
+      if (drawRadius < 0.5) return;
+      this.drawProjectiles(ctx2, camera2);
+      ctx2.save();
+      ctx2.translate(screen.x, screen.y);
+      ctx2.scale(scale, scale);
       if (this.type === "drifter" && this.isCharging) {
-        const trailLen = 20;
-        const nx = -this.chargeVx / CHARGE_SPEED;
-        const ny = -this.chargeVy / CHARGE_SPEED;
-        for (let i = 1; i <= 4; i++) {
-          const tx = screen.x + nx * trailLen * i;
-          const ty = screen.y + ny * trailLen * i;
-          ctx2.beginPath();
-          ctx2.arc(tx, ty, this.radius * (1 - i * 0.15), 0, Math.PI * 2);
-          ctx2.fillStyle = `rgba(255, 160, 40, ${0.15 - i * 0.03})`;
-          ctx2.fill();
-        }
+        this.drawChargeTrail(ctx2);
       }
+      switch (this.type) {
+        case "swarmer":
+          this.drawSwarmer(ctx2, time);
+          break;
+        case "drifter":
+          this.drawDrifter(ctx2, time);
+          break;
+        case "titan":
+          this.drawTitan(ctx2, time);
+          break;
+        case "overlord":
+          this.drawOverlord(ctx2, time);
+          break;
+      }
+      if (this.hitFlash > 0) {
+        const flashAlpha = 0.35 * (this.hitFlash / HIT_FLASH_DURATION);
+        ctx2.beginPath();
+        ctx2.arc(0, 0, this.radius * 0.9, 0, TWO_PI);
+        ctx2.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+        ctx2.fill();
+      }
+      if (spawnT < 1) {
+        const ringAlpha = 0.25 * (1 - spawnT);
+        const ringR = this.radius * (1 + spawnT * 0.5);
+        ctx2.beginPath();
+        ctx2.arc(0, 0, ringR, 0, TWO_PI);
+        ctx2.strokeStyle = `rgba(255, 255, 255, ${ringAlpha})`;
+        ctx2.lineWidth = 1.5;
+        ctx2.stroke();
+      }
+      ctx2.restore();
+    }
+    // ── Swarmer: jagged spiky star with pulsing core ──────────────
+    drawSwarmer(ctx2, time) {
+      const r = this.radius;
+      const [cr, cg, cb] = this.color;
+      const wobble = Math.sin(time * 2.5 + this.wobblePhase) * 0.08;
+      const rot = time * 1.5 + this.wobblePhase;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 1.8 + this.wobblePhase);
+      ctx2.beginPath();
+      ctx2.arc(0, 0, r * 0.5 * (0.9 + pulse * 0.2), 0, TWO_PI);
+      ctx2.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${0.1 + pulse * 0.06})`;
+      ctx2.fill();
+      ctx2.beginPath();
+      for (let i = 0; i < this.spikeCount * 2; i++) {
+        const angle = rot + i / (this.spikeCount * 2) * TWO_PI;
+        const isOuter = i % 2 === 0;
+        const spikeR = isOuter ? r * (1 + wobble) : r * 0.55;
+        const px = Math.cos(angle) * spikeR;
+        const py = Math.sin(angle) * spikeR;
+        if (i === 0) ctx2.moveTo(px, py);
+        else ctx2.lineTo(px, py);
+      }
+      ctx2.closePath();
+      ctx2.strokeStyle = this.outlineColor;
+      ctx2.lineWidth = 2;
+      ctx2.stroke();
+      this.drawHpFill(ctx2, r, cr, cg, cb);
+    }
+    // ── Drifter: hexagon with inner rotating ring ─────────────────
+    drawDrifter(ctx2, time) {
+      const r = this.radius;
+      const [cr, cg, cb] = this.color;
+      if (!this.isCharging && this.chargeTimer < 1) {
+        const urgency = 1 - this.chargeTimer;
+        ctx2.beginPath();
+        ctx2.arc(0, 0, r * 1.3, 0, TWO_PI);
+        ctx2.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${urgency * 0.15})`;
+        ctx2.fill();
+      }
+      tracePoly(ctx2, 0, 0, r, 6, 0);
+      ctx2.strokeStyle = this.outlineColor;
+      ctx2.lineWidth = 2;
+      ctx2.stroke();
+      this.drawHpFill(ctx2, r, cr, cg, cb);
+      const innerR = r * 0.5;
+      const innerPulse = 0.8 + 0.2 * Math.sin(time * 2);
+      tracePoly(ctx2, 0, 0, innerR * innerPulse, 6, this.innerRotation);
+      ctx2.strokeStyle = `rgba(255, 255, 255, 0.3)`;
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      drawSphereShading(ctx2, 0, 0, r, cr, cg, cb);
+    }
+    // ── Titan: concentric rotating rings ──────────────────────────
+    drawTitan(ctx2, time) {
+      const r = this.radius;
+      const [cr, cg, cb] = this.color;
+      ctx2.globalAlpha = 0.06;
+      for (let i = 0; i < 8; i++) {
+        const angle = this.innerRotation * 0.3 + i / 8 * TWO_PI;
+        const lineR = r * 2.2;
+        ctx2.beginPath();
+        ctx2.moveTo(Math.cos(angle) * r * 1.1, Math.sin(angle) * r * 1.1);
+        ctx2.lineTo(Math.cos(angle) * lineR, Math.sin(angle) * lineR);
+        ctx2.strokeStyle = `rgb(${cr}, ${cg}, ${cb})`;
+        ctx2.lineWidth = 1.5;
+        ctx2.stroke();
+      }
+      ctx2.globalAlpha = 1;
+      ctx2.beginPath();
+      ctx2.arc(0, 0, r * 1.25, 0, TWO_PI);
+      ctx2.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.12)`;
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(0, 0, r * 1.1, 0, TWO_PI);
+      ctx2.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.2)`;
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(0, 0, r, 0, TWO_PI);
+      ctx2.strokeStyle = this.outlineColor;
+      ctx2.lineWidth = 2.5;
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(0, 0, r - 1, 0, TWO_PI);
+      this.drawHpFill(ctx2, r, cr, cg, cb);
+      const innerR = r * 0.55;
+      const segments = 5;
+      const segGap = 0.2;
+      const segArc = TWO_PI / segments - segGap;
+      ctx2.lineWidth = 2;
+      ctx2.strokeStyle = `rgba(255, 255, 255, 0.25)`;
+      for (let i = 0; i < segments; i++) {
+        const startAngle = this.innerRotation + i / segments * TWO_PI;
+        ctx2.beginPath();
+        ctx2.arc(0, 0, innerR, startAngle, startAngle + segArc);
+        ctx2.stroke();
+      }
+      const eyePulse = 0.6 + 0.4 * Math.sin(time * 1.5);
+      const eyeR = r * 0.15 * eyePulse;
+      const eyeGrad = ctx2.createRadialGradient(0, 0, 0, 0, 0, eyeR * 3);
+      eyeGrad.addColorStop(0, `rgba(255, 255, 255, ${0.4 * eyePulse})`);
+      eyeGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx2.fillStyle = eyeGrad;
+      ctx2.beginPath();
+      ctx2.arc(0, 0, eyeR * 3, 0, TWO_PI);
+      ctx2.fill();
+      drawSphereShading(ctx2, 0, 0, r, cr, cg, cb);
+    }
+    // ── Overlord: rotating square with glow (mostly preserved) ────
+    drawOverlord(ctx2, time) {
+      const side = this.radius * 2;
+      const [cr, cg, cb] = this.color;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 2.5);
+      const glowSize = this.radius + 10 + pulse * 8;
+      ctx2.save();
+      ctx2.rotate(this.rotation);
+      const gradient = ctx2.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, glowSize * 1.4);
+      gradient.addColorStop(0, `rgba(${cr}, ${cg}, ${cb}, ${0.25 + pulse * 0.15})`);
+      gradient.addColorStop(1, `rgba(${cr}, ${cg}, ${cb}, 0)`);
+      ctx2.fillStyle = gradient;
+      ctx2.fillRect(-glowSize * 1.4, -glowSize * 1.4, glowSize * 2.8, glowSize * 2.8);
+      ctx2.strokeStyle = this.outlineColor;
+      ctx2.lineWidth = 3;
+      ctx2.strokeRect(-side / 2, -side / 2, side, side);
+      const hpRatio = this.hp / this.maxHp;
+      if (hpRatio > 0) {
+        const innerSide = side - 2;
+        ctx2.beginPath();
+        ctx2.rect(-innerSide / 2, -innerSide / 2, innerSide, innerSide);
+        ctx2.save();
+        ctx2.clip();
+        const fillTop = -this.radius + 1 + innerSide * (1 - hpRatio);
+        ctx2.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+        ctx2.fillRect(-innerSide / 2, fillTop, innerSide, innerSide);
+        ctx2.restore();
+      }
+      const innerSize = this.radius * 0.5;
+      const innerPulse = 0.8 + 0.2 * Math.sin(time * 3);
+      ctx2.beginPath();
+      ctx2.moveTo(0, -innerSize * innerPulse);
+      ctx2.lineTo(innerSize * innerPulse, 0);
+      ctx2.lineTo(0, innerSize * innerPulse);
+      ctx2.lineTo(-innerSize * innerPulse, 0);
+      ctx2.closePath();
+      ctx2.strokeStyle = `rgba(255, 200, 200, 0.25)`;
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      ctx2.restore();
+    }
+    // ── Shared helpers ────────────────────────────────────────────
+    drawProjectiles(ctx2, camera2) {
       for (const p of this.projectiles) {
         const ps = camera2.worldToScreen(p.x, p.y);
         const glow = ctx2.createRadialGradient(ps.x, ps.y, 0, ps.x, ps.y, p.radius * 3);
@@ -664,68 +1091,37 @@
         glow.addColorStop(0.4, "rgba(255, 200, 200, 0.3)");
         glow.addColorStop(1, "rgba(255, 100, 100, 0)");
         ctx2.beginPath();
-        ctx2.arc(ps.x, ps.y, p.radius * 3, 0, Math.PI * 2);
+        ctx2.arc(ps.x, ps.y, p.radius * 3, 0, TWO_PI);
         ctx2.fillStyle = glow;
         ctx2.fill();
         ctx2.beginPath();
-        ctx2.arc(ps.x, ps.y, p.radius, 0, Math.PI * 2);
+        ctx2.arc(ps.x, ps.y, p.radius, 0, TWO_PI);
         ctx2.fillStyle = "rgba(255, 255, 255, 0.95)";
         ctx2.fill();
       }
-      if (this.type === "overlord") {
-        const side = this.radius * 2;
-        const pulse = 0.5 + 0.5 * Math.sin(time * 2.5);
-        const glowSize = this.radius + 10 + pulse * 8;
-        ctx2.save();
-        ctx2.translate(screen.x, screen.y);
-        ctx2.rotate(this.rotation);
-        const gradient = ctx2.createRadialGradient(0, 0, this.radius * 0.5, 0, 0, glowSize * 1.4);
-        gradient.addColorStop(0, `rgba(200, 20, 40, ${0.25 + pulse * 0.15})`);
-        gradient.addColorStop(1, "rgba(200, 20, 40, 0)");
-        ctx2.fillStyle = gradient;
-        ctx2.fillRect(-glowSize * 1.4, -glowSize * 1.4, glowSize * 2.8, glowSize * 2.8);
-        ctx2.restore();
-        ctx2.save();
-        ctx2.translate(screen.x, screen.y);
-        ctx2.rotate(this.rotation);
-        ctx2.strokeStyle = this.outlineColor;
-        ctx2.lineWidth = 3;
-        ctx2.strokeRect(-side / 2, -side / 2, side, side);
-        ctx2.restore();
-        const hpRatio = this.hp / this.maxHp;
-        if (hpRatio > 0) {
-          ctx2.save();
-          ctx2.translate(screen.x, screen.y);
-          ctx2.rotate(this.rotation);
-          ctx2.beginPath();
-          const innerSide = side - 2;
-          ctx2.rect(-innerSide / 2, -innerSide / 2, innerSide, innerSide);
-          ctx2.clip();
-          const fillTop = -this.radius + 1 + innerSide * (1 - hpRatio);
-          const [r, g, b] = this.color;
-          ctx2.fillStyle = `rgb(${r}, ${g}, ${b})`;
-          ctx2.fillRect(-innerSide / 2, fillTop, innerSide, innerSide);
-          ctx2.restore();
-        }
-      } else {
+    }
+    drawChargeTrail(ctx2) {
+      const trailLen = 20;
+      const nx = -this.chargeVx / CHARGE_SPEED;
+      const ny = -this.chargeVy / CHARGE_SPEED;
+      for (let i = 1; i <= 4; i++) {
+        const tx = nx * trailLen * i;
+        const ty = ny * trailLen * i;
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
-        ctx2.strokeStyle = this.outlineColor;
-        ctx2.lineWidth = 2;
-        ctx2.stroke();
-        const hpRatio = this.hp / this.maxHp;
-        if (hpRatio > 0) {
-          ctx2.save();
-          ctx2.beginPath();
-          ctx2.arc(screen.x, screen.y, this.radius - 1, 0, Math.PI * 2);
-          ctx2.clip();
-          const fillTop = screen.y + this.radius - this.radius * 2 * hpRatio;
-          const [r, g, b] = this.color;
-          ctx2.fillStyle = `rgb(${r}, ${g}, ${b})`;
-          ctx2.fillRect(screen.x - this.radius, fillTop, this.radius * 2, this.radius * 2);
-          ctx2.restore();
-        }
-        drawSphereShading(ctx2, screen.x, screen.y, this.radius, ...this.color);
+        ctx2.arc(tx, ty, this.radius * (1 - i * 0.15), 0, TWO_PI);
+        ctx2.fillStyle = `rgba(255, 160, 40, ${0.15 - i * 0.03})`;
+        ctx2.fill();
+      }
+    }
+    drawHpFill(ctx2, r, cr, cg, cb) {
+      const hpRatio = this.hp / this.maxHp;
+      if (hpRatio > 0) {
+        ctx2.save();
+        ctx2.clip();
+        const fillTop = r - r * 2 * hpRatio;
+        ctx2.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+        ctx2.fillRect(-r * 1.2, fillTop, r * 2.4, r * 2.4);
+        ctx2.restore();
       }
     }
   };
@@ -810,8 +1206,7 @@
         enemy.update(dt, playerX, playerY);
       }
       for (const overlord of this.enemies) {
-        if (!overlord.canSummon) continue;
-        overlord.canSummon = false;
+        if (!overlord.consumeSummon()) continue;
         const count = Math.floor(randomRange(2, 4));
         for (let i = 0; i < count; i++) {
           const sp = wrapPosition(
@@ -835,6 +1230,7 @@
   };
 
   // src/particles.ts
+  var MAX_PARTICLES = 500;
   var DeathParticle = class {
     constructor(x, y, radius, outlineColor, lifetime = 1) {
       this.x = x;
@@ -846,7 +1242,7 @@
       this.vy = -40 - Math.random() * 30;
       this.wobbleSpeed = 2 + Math.random() * 3;
       this.wobbleAmp = 5 + Math.random() * 10;
-      this.wobbleOffset = Math.random() * Math.PI * 2;
+      this.wobbleOffset = Math.random() * TWO_PI;
       [this.r, this.g, this.b] = parseHexColor(outlineColor);
     }
     update(dt) {
@@ -862,10 +1258,185 @@
       const alpha = 1 - this.elapsed / this.lifetime;
       const screen = camera2.worldToScreen(this.x, this.y);
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.radius, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.radius, 0, TWO_PI);
       ctx2.strokeStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${alpha})`;
       ctx2.lineWidth = 2;
       ctx2.stroke();
+    }
+  };
+  var SparkParticle = class {
+    constructor(x, y, outlineColor, speed) {
+      this.x = x;
+      this.y = y;
+      this.elapsed = 0;
+      this.done = false;
+      const angle = Math.random() * TWO_PI;
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed;
+      this.size = 1 + Math.random() * 2;
+      this.lifetime = 0.4 + Math.random() * 0.5;
+      this.prevX = x;
+      this.prevY = y;
+      [this.r, this.g, this.b] = parseHexColor(outlineColor);
+    }
+    update(dt) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.lifetime) {
+        this.done = true;
+        return;
+      }
+      this.prevX = this.x;
+      this.prevY = this.y;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.vx *= 0.96;
+      this.vy *= 0.96;
+    }
+    draw(ctx2, camera2) {
+      const t = this.elapsed / this.lifetime;
+      const alpha = 1 - t;
+      const s1 = camera2.worldToScreen(this.prevX, this.prevY);
+      const s2 = camera2.worldToScreen(this.x, this.y);
+      ctx2.beginPath();
+      ctx2.moveTo(s1.x, s1.y);
+      ctx2.lineTo(s2.x, s2.y);
+      ctx2.strokeStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${alpha * 0.6})`;
+      ctx2.lineWidth = this.size;
+      ctx2.lineCap = "round";
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(s2.x, s2.y, this.size * 0.8, 0, TWO_PI);
+      ctx2.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+      ctx2.fill();
+    }
+  };
+  var DebrisParticle = class {
+    constructor(x, y, outlineColor, enemyRadius) {
+      this.x = x;
+      this.y = y;
+      this.elapsed = 0;
+      this.done = false;
+      const angle = Math.random() * TWO_PI;
+      const speed = 60 + Math.random() * 120;
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed;
+      this.size = 2 + Math.random() * (enemyRadius * 0.15);
+      this.lifetime = 0.6 + Math.random() * 0.6;
+      this.rotation = Math.random() * TWO_PI;
+      this.rotSpeed = (Math.random() - 0.5) * 12;
+      this.sides = Math.random() < 0.5 ? 3 : 4;
+      [this.r, this.g, this.b] = parseHexColor(outlineColor);
+    }
+    update(dt) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.lifetime) {
+        this.done = true;
+        return;
+      }
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.rotation += this.rotSpeed * dt;
+      this.vx *= 0.97;
+      this.vy *= 0.97;
+    }
+    draw(ctx2, camera2) {
+      const t = this.elapsed / this.lifetime;
+      const alpha = 1 - t * t;
+      const screen = camera2.worldToScreen(this.x, this.y);
+      ctx2.save();
+      ctx2.translate(screen.x, screen.y);
+      ctx2.rotate(this.rotation);
+      ctx2.beginPath();
+      for (let i = 0; i <= this.sides; i++) {
+        const a = i / this.sides * TWO_PI;
+        const px = Math.cos(a) * this.size;
+        const py = Math.sin(a) * this.size;
+        if (i === 0) ctx2.moveTo(px, py);
+        else ctx2.lineTo(px, py);
+      }
+      ctx2.closePath();
+      ctx2.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${alpha * 0.7})`;
+      ctx2.fill();
+      ctx2.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.4})`;
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      ctx2.restore();
+    }
+  };
+  var GlowPool = class {
+    constructor(x, y, outlineColor, enemyRadius) {
+      this.x = x;
+      this.y = y;
+      this.elapsed = 0;
+      this.done = false;
+      this.maxRadius = enemyRadius * 1.5;
+      this.lifetime = 0.8 + Math.random() * 0.4;
+      [this.r, this.g, this.b] = parseHexColor(outlineColor);
+    }
+    update(dt) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.lifetime) {
+        this.done = true;
+      }
+    }
+    draw(ctx2, camera2) {
+      const t = this.elapsed / this.lifetime;
+      const r = this.maxRadius * Math.min(1, t * 3);
+      const alpha = 0.15 * (1 - t);
+      const screen = camera2.worldToScreen(this.x, this.y);
+      const grad = ctx2.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, r);
+      grad.addColorStop(0, `rgba(${this.r}, ${this.g}, ${this.b}, ${alpha})`);
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx2.fillStyle = grad;
+      ctx2.beginPath();
+      ctx2.arc(screen.x, screen.y, r, 0, TWO_PI);
+      ctx2.fill();
+    }
+  };
+  var XpOrb = class {
+    constructor(x, y, targetX, targetY) {
+      this.x = x;
+      this.y = y;
+      this.targetX = targetX;
+      this.targetY = targetY;
+      this.elapsed = 0;
+      this.lifetime = 0.6;
+      this.done = false;
+      const angle = Math.random() * TWO_PI;
+      this.vx = Math.cos(angle) * 80;
+      this.vy = Math.sin(angle) * 80;
+      this.size = 2 + Math.random() * 2;
+    }
+    update(dt) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.lifetime) {
+        this.done = true;
+        return;
+      }
+      const t = this.elapsed / this.lifetime;
+      const homingStrength = t * t * 800;
+      const toTargetAngle = wrappedAngle(this.x, this.y, this.targetX, this.targetY);
+      this.vx += Math.cos(toTargetAngle) * homingStrength * dt;
+      this.vy += Math.sin(toTargetAngle) * homingStrength * dt;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+    }
+    draw(ctx2, camera2) {
+      const t = this.elapsed / this.lifetime;
+      const alpha = t < 0.8 ? 1 : (1 - t) * 5;
+      const screen = camera2.worldToScreen(this.x, this.y);
+      ctx2.beginPath();
+      ctx2.arc(screen.x, screen.y, this.size * 3, 0, TWO_PI);
+      ctx2.fillStyle = `rgba(255, 220, 80, ${alpha * 0.2})`;
+      ctx2.fill();
+      ctx2.beginPath();
+      ctx2.arc(screen.x, screen.y, this.size, 0, TWO_PI);
+      ctx2.fillStyle = `rgba(255, 240, 150, ${alpha * 0.9})`;
+      ctx2.fill();
+      ctx2.beginPath();
+      ctx2.arc(screen.x, screen.y, this.size * 0.4, 0, TWO_PI);
+      ctx2.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx2.fill();
     }
   };
   var ExplosionParticle = class {
@@ -875,7 +1446,7 @@
       this.elapsed = 0;
       this.gravity = 60;
       this.done = false;
-      const angle = Math.random() * Math.PI * 2;
+      const angle = Math.random() * TWO_PI;
       const speed = 100 + Math.random() * 150;
       this.vx = Math.cos(angle) * speed;
       this.vy = Math.sin(angle) * speed;
@@ -897,7 +1468,7 @@
       const alpha = 1 - this.elapsed / this.lifetime;
       const screen = camera2.worldToScreen(this.x, this.y);
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.particleRadius, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.particleRadius, 0, TWO_PI);
       ctx2.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${alpha})`;
       ctx2.fill();
     }
@@ -923,37 +1494,112 @@
       const alpha = 0.4 * (1 - t);
       const screen = camera2.worldToScreen(this.x, this.y);
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, currentRadius, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, currentRadius, 0, TWO_PI);
       ctx2.fillStyle = `rgba(255, 255, 255, ${alpha})`;
       ctx2.fill();
+    }
+  };
+  var ScreenFlash = class {
+    constructor(r, g, b, maxAlpha, duration) {
+      this.r = r;
+      this.g = g;
+      this.b = b;
+      this.maxAlpha = maxAlpha;
+      this.duration = duration;
+      this.elapsed = 0;
+      this.done = false;
+    }
+    update(dt) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.duration) {
+        this.done = true;
+      }
+    }
+    draw(ctx2, width, height) {
+      const t = this.elapsed / this.duration;
+      const alpha = this.maxAlpha * (1 - t);
+      ctx2.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${alpha})`;
+      ctx2.fillRect(0, 0, width, height);
+    }
+  };
+  var DamageVignette = class {
+    constructor(duration, intensity) {
+      this.duration = duration;
+      this.intensity = intensity;
+      this.elapsed = 0;
+      this.done = false;
+    }
+    update(dt) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.duration) {
+        this.done = true;
+      }
+    }
+    draw(ctx2, width, height) {
+      const t = this.elapsed / this.duration;
+      const alpha = this.intensity * (1 - t);
+      const cx = width / 2;
+      const cy = height / 2;
+      const r = Math.max(width, height) * 0.7;
+      const grad = ctx2.createRadialGradient(cx, cy, r * 0.5, cx, cy, r);
+      grad.addColorStop(0, "rgba(0, 0, 0, 0)");
+      grad.addColorStop(1, `rgba(200, 0, 0, ${alpha})`);
+      ctx2.fillStyle = grad;
+      ctx2.fillRect(0, 0, width, height);
     }
   };
   var ParticleSystem = class {
     constructor() {
       this.particles = [];
+      this.screenEffects = [];
     }
     spawnDeath(x, y, radius, outlineColor) {
+      if (this.particles.length >= MAX_PARTICLES) return;
       this.particles.push(new DeathParticle(x, y, radius, outlineColor));
-      this.spawnExplosion(x, y, outlineColor);
+      const burstCount = 8 + Math.floor(Math.random() * 8);
+      for (let i = 0; i < burstCount; i++) {
+        this.particles.push(new ExplosionParticle(x, y, outlineColor));
+      }
+      const sparkCount = 6 + Math.floor(radius * 0.3);
+      for (let i = 0; i < sparkCount; i++) {
+        this.particles.push(new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
+      }
+      const debrisCount = 4 + Math.floor(radius * 0.15);
+      for (let i = 0; i < debrisCount; i++) {
+        this.particles.push(new DebrisParticle(x, y, outlineColor, radius));
+      }
+      this.particles.push(new GlowPool(x, y, outlineColor, radius));
       if (radius > 25) {
-        this.spawnFlash(x, y, radius);
+        this.particles.push(new FlashParticle(x, y, radius));
       }
     }
-    spawnExplosion(x, y, outlineColor) {
-      const count = 8 + Math.floor(Math.random() * 8);
+    spawnXpOrbs(x, y, playerX, playerY, count) {
+      if (this.particles.length >= MAX_PARTICLES) return;
       for (let i = 0; i < count; i++) {
-        this.particles.push(new ExplosionParticle(x, y, outlineColor));
+        this.particles.push(new XpOrb(x, y, playerX, playerY));
       }
     }
     spawnFlash(x, y, radius) {
+      if (this.particles.length >= MAX_PARTICLES) return;
       this.particles.push(new FlashParticle(x, y, radius));
+    }
+    addScreenFlash(r, g, b, alpha, duration) {
+      this.screenEffects.push(new ScreenFlash(r, g, b, alpha, duration));
+    }
+    addDamageVignette(duration, intensity) {
+      this.screenEffects.push(new DamageVignette(duration, intensity));
     }
     update(dt) {
       for (const p of this.particles) p.update(dt);
       this.particles = this.particles.filter((p) => !p.done);
+      for (const e of this.screenEffects) e.update(dt);
+      this.screenEffects = this.screenEffects.filter((e) => !e.done);
     }
     draw(ctx2, camera2) {
       for (const p of this.particles) p.draw(ctx2, camera2);
+    }
+    drawScreenEffects(ctx2, width, height) {
+      for (const e of this.screenEffects) e.draw(ctx2, width, height);
     }
   };
 
@@ -969,8 +1615,10 @@
       this.targetX = 0;
       this.targetY = 0;
       this.time = 0;
+      this.cachedStats = this.computeStats();
+      this.cachedLevel = 1;
     }
-    getStats() {
+    computeStats() {
       const lvl = this.level;
       return {
         damage: 8 + lvl * 4,
@@ -981,6 +1629,13 @@
         glowAlpha: 0.1 + lvl * 0.06,
         particleCount: Math.floor(lvl / 3)
       };
+    }
+    getStats() {
+      if (this.level !== this.cachedLevel) {
+        this.cachedStats = this.computeStats();
+        this.cachedLevel = this.level;
+      }
+      return this.cachedStats;
     }
     update(dt, playerX, playerY, enemies) {
       const stats = this.getStats();
@@ -1015,7 +1670,7 @@
             if (dist > stats.range) continue;
             const eAngle = wrappedAngle(playerX, playerY, enemy.x, enemy.y);
             const diff = Math.abs(eAngle - angle);
-            const normDiff = Math.min(diff, Math.PI * 2 - diff);
+            const normDiff = Math.min(diff, TWO_PI - diff);
             if (dist * Math.sin(normDiff) < enemy.radius + stats.width) {
               enemy.takeDamage(stats.damage);
             }
@@ -1044,7 +1699,7 @@
       for (let i = 0; i <= segments; i++) {
         const t = i / segments;
         const along = t * beamLength;
-        const wave = Math.sin(t * frequency * Math.PI * 2 + this.time * waveSpeed) * amplitude;
+        const wave = Math.sin(t * frequency * TWO_PI + this.time * waveSpeed) * amplitude;
         points.push({
           x: originX + Math.cos(beamAngle) * along + perpX * wave,
           y: originY + Math.sin(beamAngle) * along + perpY * wave
@@ -1055,12 +1710,12 @@
         ctx2.moveTo(points[0].x, points[0].y);
         for (let i = 1; i <= segments; i++) ctx2.lineTo(points[i].x, points[i].y);
       };
+      ctx2.lineJoin = "round";
+      ctx2.lineCap = "round";
       if (this.level >= 3) {
         drawWavyPath();
         ctx2.strokeStyle = `rgba(80, 160, 255, ${stats.glowAlpha})`;
         ctx2.lineWidth = stats.width * 5;
-        ctx2.lineJoin = "round";
-        ctx2.lineCap = "round";
         ctx2.stroke();
       }
       for (let i = 0; i < segments; i++) {
@@ -1074,8 +1729,6 @@
         ctx2.lineTo(points[i + 1].x, points[i + 1].y);
         ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.35 + stats.glowAlpha})`;
         ctx2.lineWidth = stats.width * 2.5 * taper;
-        ctx2.lineJoin = "round";
-        ctx2.lineCap = "round";
         ctx2.stroke();
       }
       for (let i = 0; i < segments; i++) {
@@ -1088,8 +1741,6 @@
         ctx2.lineTo(points[i + 1].x, points[i + 1].y);
         ctx2.strokeStyle = `rgba(255, ${g}, ${b}, 0.95)`;
         ctx2.lineWidth = stats.width * taper;
-        ctx2.lineJoin = "round";
-        ctx2.lineCap = "round";
         ctx2.stroke();
       }
       const flashRadius = stats.width * 3 + 4;
@@ -1098,11 +1749,11 @@
       flashGrad.addColorStop(0.4, "rgba(100, 200, 255, 0.5)");
       flashGrad.addColorStop(1, "rgba(80, 160, 255, 0)");
       ctx2.beginPath();
-      ctx2.arc(endX, endY, flashRadius * 2.5, 0, Math.PI * 2);
+      ctx2.arc(endX, endY, flashRadius * 2.5, 0, TWO_PI);
       ctx2.fillStyle = flashGrad;
       ctx2.fill();
       ctx2.beginPath();
-      ctx2.arc(endX, endY, flashRadius * 0.5, 0, Math.PI * 2);
+      ctx2.arc(endX, endY, flashRadius * 0.5, 0, TWO_PI);
       ctx2.fillStyle = "rgba(220, 250, 255, 0.95)";
       ctx2.fill();
       if (this.level >= 5) {
@@ -1113,11 +1764,11 @@
         orbGrad.addColorStop(0.5, `rgba(80, 150, 255, ${0.4 * orbPulse})`);
         orbGrad.addColorStop(1, "rgba(60, 120, 255, 0)");
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, orbRadius * 3, 0, Math.PI * 2);
+        ctx2.arc(screen.x, screen.y, orbRadius * 3, 0, TWO_PI);
         ctx2.fillStyle = orbGrad;
         ctx2.fill();
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, orbRadius, 0, Math.PI * 2);
+        ctx2.arc(screen.x, screen.y, orbRadius, 0, TWO_PI);
         ctx2.fillStyle = `rgba(210, 235, 255, ${0.9 * orbPulse})`;
         ctx2.fill();
       }
@@ -1128,7 +1779,7 @@
         const py = points[segIdx].y + (Math.random() - 0.5) * stats.width * 3;
         ctx2.fillStyle = `rgba(200, 230, 255, ${0.5 + Math.random() * 0.5})`;
         ctx2.beginPath();
-        ctx2.arc(px, py, Math.random() * 2, 0, Math.PI * 2);
+        ctx2.arc(px, py, Math.random() * 2, 0, TWO_PI);
         ctx2.fill();
       }
     }
@@ -1139,29 +1790,39 @@
       this.level = 1;
       this.maxLevel = 10;
       this.angle = 0;
+      this.cachedStats = this.computeStats();
+      this.cachedLevel = 1;
     }
-    getStats() {
+    computeStats() {
       const lvl = this.level;
       return {
-        damage: 5 + lvl * 3,
-        orbitRadius: 50 + lvl * 12,
+        damage: 8 + lvl * 5,
+        orbitRadius: 70 + lvl * 18,
         projectileCount: 2 + Math.floor(lvl / 2),
-        projectileRadius: 3 + lvl * 0.5,
+        hitRadius: 12 + lvl * 3,
+        drawRadius: 5 + lvl * 1,
         rotationSpeed: 2 + lvl * 0.3,
         trailLength: Math.floor(lvl / 2),
         glowAlpha: 0.1 + lvl * 0.05
       };
     }
+    getStats() {
+      if (this.level !== this.cachedLevel) {
+        this.cachedStats = this.computeStats();
+        this.cachedLevel = this.level;
+      }
+      return this.cachedStats;
+    }
     update(dt, playerX, playerY, enemies) {
       const stats = this.getStats();
       this.angle += stats.rotationSpeed * dt;
       for (let i = 0; i < stats.projectileCount; i++) {
-        const a = this.angle + Math.PI * 2 / stats.projectileCount * i;
+        const a = this.angle + TWO_PI / stats.projectileCount * i;
         const px = playerX + Math.cos(a) * stats.orbitRadius;
         const py = playerY + Math.sin(a) * stats.orbitRadius;
         for (const enemy of enemies) {
           if (enemy.dead) continue;
-          if (wrappedDistance(px, py, enemy.x, enemy.y) < stats.projectileRadius + enemy.radius) {
+          if (wrappedDistance(px, py, enemy.x, enemy.y) < stats.hitRadius + enemy.radius) {
             enemy.takeDamage(stats.damage * dt * 10);
           }
         }
@@ -1171,7 +1832,7 @@
       const stats = this.getStats();
       const screen = camera2.worldToScreen(playerX, playerY);
       for (let i = 0; i < stats.projectileCount; i++) {
-        const a = this.angle + Math.PI * 2 / stats.projectileCount * i;
+        const a = this.angle + TWO_PI / stats.projectileCount * i;
         const px = screen.x + Math.cos(a) * stats.orbitRadius;
         const py = screen.y + Math.sin(a) * stats.orbitRadius;
         for (let t = 1; t <= stats.trailLength; t++) {
@@ -1179,26 +1840,26 @@
           const tx = screen.x + Math.cos(ta) * stats.orbitRadius;
           const ty = screen.y + Math.sin(ta) * stats.orbitRadius;
           ctx2.beginPath();
-          ctx2.arc(tx, ty, stats.projectileRadius * 0.7, 0, Math.PI * 2);
+          ctx2.arc(tx, ty, stats.drawRadius * 0.7, 0, TWO_PI);
           ctx2.fillStyle = `rgba(100, 200, 255, ${(1 - t / (stats.trailLength + 1)) * 0.4})`;
           ctx2.fill();
         }
         ctx2.beginPath();
-        ctx2.arc(px, py, stats.projectileRadius * 2.5, 0, Math.PI * 2);
+        ctx2.arc(px, py, stats.drawRadius * 2.5, 0, TWO_PI);
         ctx2.fillStyle = `rgba(80, 160, 255, ${stats.glowAlpha})`;
         ctx2.fill();
         ctx2.beginPath();
-        ctx2.arc(px, py, stats.projectileRadius, 0, Math.PI * 2);
+        ctx2.arc(px, py, stats.drawRadius, 0, TWO_PI);
         ctx2.fillStyle = "rgba(180, 220, 255, 0.9)";
         ctx2.fill();
         ctx2.beginPath();
-        ctx2.arc(px, py, stats.projectileRadius * 0.4, 0, Math.PI * 2);
+        ctx2.arc(px, py, stats.drawRadius * 0.4, 0, TWO_PI);
         ctx2.fillStyle = "#ffffff";
         ctx2.fill();
       }
       if (this.level >= 5) {
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, stats.orbitRadius, 0, Math.PI * 2);
+        ctx2.arc(screen.x, screen.y, stats.orbitRadius, 0, TWO_PI);
         ctx2.strokeStyle = "rgba(80, 160, 255, 0.08)";
         ctx2.lineWidth = 1;
         ctx2.stroke();
@@ -1214,8 +1875,10 @@
       this.blastRadius = 0;
       this.isBlasting = false;
       this.hasDealtDamage = false;
+      this.cachedStats = this.computeStats();
+      this.cachedLevel = 1;
     }
-    getStats() {
+    computeStats() {
       const lvl = this.level;
       return {
         damage: 15 + lvl * 8,
@@ -1227,6 +1890,13 @@
         innerGlow: lvl >= 4,
         shockwave: lvl >= 7
       };
+    }
+    getStats() {
+      if (this.level !== this.cachedLevel) {
+        this.cachedStats = this.computeStats();
+        this.cachedLevel = this.level;
+      }
+      return this.cachedStats;
     }
     update(dt, playerX, playerY, enemies) {
       const stats = this.getStats();
@@ -1266,33 +1936,33 @@
         gradient.addColorStop(1, "rgba(255, 200, 100, 0)");
         ctx2.fillStyle = gradient;
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, this.blastRadius, 0, Math.PI * 2);
+        ctx2.arc(screen.x, screen.y, this.blastRadius, 0, TWO_PI);
         ctx2.fill();
       }
       if (stats.shockwave) {
         ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, this.blastRadius * 1.05, 0, Math.PI * 2);
+        ctx2.arc(screen.x, screen.y, this.blastRadius * 1.05, 0, TWO_PI);
         ctx2.strokeStyle = `rgba(255, 220, 150, ${alpha * 0.3})`;
         ctx2.lineWidth = stats.ringWidth * 0.5;
         ctx2.stroke();
       }
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.blastRadius, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.blastRadius, 0, TWO_PI);
       ctx2.strokeStyle = `rgba(255, 180, 80, ${alpha})`;
       ctx2.lineWidth = stats.ringWidth;
       ctx2.stroke();
       ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, this.blastRadius, 0, Math.PI * 2);
+      ctx2.arc(screen.x, screen.y, this.blastRadius, 0, TWO_PI);
       ctx2.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.3})`;
       ctx2.lineWidth = stats.ringWidth * 3;
       ctx2.stroke();
       for (let i = 0; i < stats.debrisCount; i++) {
-        const angle = Math.PI * 2 / stats.debrisCount * i + progress * 2;
+        const angle = TWO_PI / stats.debrisCount * i + progress * 2;
         const dx = screen.x + Math.cos(angle) * this.blastRadius;
         const dy = screen.y + Math.sin(angle) * this.blastRadius;
         ctx2.fillStyle = `rgba(255, 200, 100, ${alpha})`;
         ctx2.beginPath();
-        ctx2.arc(dx, dy, 2 + this.level * 0.3, 0, Math.PI * 2);
+        ctx2.arc(dx, dy, 2 + this.level * 0.3, 0, TWO_PI);
         ctx2.fill();
       }
     }
@@ -1379,34 +2049,122 @@
   };
 
   // src/ui.ts
+  var WEAPON_SHAPES = {
+    "Laser Beam": (ctx2, x, y, s) => {
+      ctx2.beginPath();
+      ctx2.moveTo(x - s, y);
+      ctx2.lineTo(x + s, y);
+      ctx2.strokeStyle = "rgba(100, 200, 255, 0.9)";
+      ctx2.lineWidth = 2;
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(x + s, y, 2, 0, TWO_PI);
+      ctx2.fillStyle = "rgba(100, 200, 255, 0.9)";
+      ctx2.fill();
+    },
+    "Orbit Shield": (ctx2, x, y, s) => {
+      ctx2.beginPath();
+      ctx2.arc(x, y, s * 0.7, 0, TWO_PI);
+      ctx2.strokeStyle = "rgba(100, 200, 255, 0.9)";
+      ctx2.lineWidth = 1.5;
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(x + s * 0.5, y - s * 0.3, 2, 0, TWO_PI);
+      ctx2.fillStyle = "rgba(180, 220, 255, 0.9)";
+      ctx2.fill();
+    },
+    "Nova Blast": (ctx2, x, y, s) => {
+      ctx2.beginPath();
+      ctx2.arc(x, y, s * 0.6, 0, TWO_PI);
+      ctx2.strokeStyle = "rgba(255, 160, 60, 0.9)";
+      ctx2.lineWidth = 1.5;
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.arc(x, y, s * 0.2, 0, TWO_PI);
+      ctx2.fillStyle = "rgba(255, 200, 100, 0.9)";
+      ctx2.fill();
+    }
+  };
   var UI = class {
+    constructor() {
+      // State for animated transitions
+      this.stateAge = 0;
+      this.lastState = "";
+    }
+    trackState(stateName, dt) {
+      if (stateName !== this.lastState) {
+        this.lastState = stateName;
+        this.stateAge = 0;
+      }
+      this.stateAge += dt;
+    }
     drawHUD(ctx2, canvas2, game2, player2, wm) {
-      ctx2.fillStyle = "#ffffff";
+      const w = canvas2.width;
+      const h = canvas2.height;
+      ctx2.save();
+      ctx2.textAlign = "center";
       ctx2.font = "bold 28px monospace";
-      ctx2.textAlign = "center";
-      ctx2.fillText(game2.timeRemainingFormatted, canvas2.width / 2, 40);
-      ctx2.font = "18px monospace";
+      const timerText = game2.timeRemainingFormatted;
+      ctx2.fillStyle = "rgba(100, 200, 255, 0.15)";
+      ctx2.fillText(timerText, w / 2, 40);
+      ctx2.fillText(timerText, w / 2, 40);
+      ctx2.fillStyle = "#ffffff";
+      ctx2.fillText(timerText, w / 2, 40);
+      ctx2.restore();
+      ctx2.font = "16px monospace";
       ctx2.textAlign = "right";
-      ctx2.fillText(`Kills: ${player2.kills}`, canvas2.width - 20, 35);
-      const barW = canvas2.width * 0.6;
-      const barH = 8;
-      const barX = (canvas2.width - barW) / 2;
-      const barY = canvas2.height - 30;
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx2.fillText(`${player2.kills}`, w - 20, 35);
+      ctx2.beginPath();
+      ctx2.arc(w - 55 - ctx2.measureText(`${player2.kills}`).width * 0.5, 30, 5, 0, TWO_PI);
+      ctx2.strokeStyle = "rgba(255, 255, 255, 0.4)";
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      const barW = w * 0.5;
+      const barH = 6;
+      const barX = (w - barW) / 2;
+      const barY = h - 28;
       const xpRatio = player2.xp / player2.getXpForNextLevel();
-      ctx2.fillStyle = "rgba(255, 255, 255, 0.1)";
-      ctx2.fillRect(barX, barY, barW, barH);
-      ctx2.fillStyle = "rgba(100, 200, 255, 0.7)";
-      ctx2.fillRect(barX, barY, barW * xpRatio, barH);
-      ctx2.fillStyle = "#aaa";
-      ctx2.font = "12px monospace";
+      const barRadius = barH / 2;
+      ctx2.beginPath();
+      ctx2.roundRect(barX, barY, barW, barH, barRadius);
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.08)";
+      ctx2.fill();
+      if (xpRatio > 0.01) {
+        ctx2.save();
+        ctx2.beginPath();
+        ctx2.roundRect(barX, barY, barW, barH, barRadius);
+        ctx2.clip();
+        const fillW = barW * xpRatio;
+        const grad = ctx2.createLinearGradient(barX, 0, barX + fillW, 0);
+        grad.addColorStop(0, "rgba(80, 180, 255, 0.6)");
+        grad.addColorStop(1, "rgba(120, 220, 255, 0.9)");
+        ctx2.fillStyle = grad;
+        ctx2.fillRect(barX, barY, fillW, barH);
+        const edgeX = barX + fillW;
+        const glowGrad = ctx2.createRadialGradient(edgeX, barY + barH / 2, 0, edgeX, barY + barH / 2, 15);
+        glowGrad.addColorStop(0, "rgba(150, 230, 255, 0.4)");
+        glowGrad.addColorStop(1, "rgba(150, 230, 255, 0)");
+        ctx2.fillStyle = glowGrad;
+        ctx2.fillRect(edgeX - 15, barY - 10, 30, barH + 20);
+        ctx2.restore();
+      }
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx2.font = "11px monospace";
       ctx2.textAlign = "center";
-      ctx2.fillText(`Level ${player2.level}`, canvas2.width / 2, barY - 5);
+      ctx2.fillText(`LV ${player2.level}`, w / 2, barY - 6);
       ctx2.textAlign = "left";
-      ctx2.font = "14px monospace";
-      let wy = canvas2.height - 80;
-      for (const w of wm.weapons) {
-        ctx2.fillStyle = "#ccc";
-        ctx2.fillText(`${w.name} Lv.${w.level}`, 20, wy);
+      let wy = h - 65;
+      for (const wp of wm.weapons) {
+        const drawIcon = WEAPON_SHAPES[wp.name];
+        if (drawIcon) {
+          drawIcon(ctx2, 28, wy - 4, 8);
+        }
+        ctx2.font = "13px monospace";
+        ctx2.fillStyle = "rgba(255, 255, 255, 0.6)";
+        ctx2.fillText(`${wp.name}`, 44, wy);
+        ctx2.fillStyle = "rgba(100, 200, 255, 0.8)";
+        ctx2.fillText(`${wp.level}`, 44 + ctx2.measureText(`${wp.name} `).width, wy);
         wy -= 22;
       }
       if (isTouchDevice()) {
@@ -1418,13 +2176,18 @@
       const x = canvas2.width - 45;
       const y = 45;
       const size = 20;
-      ctx2.fillStyle = "rgba(255, 255, 255, 0.15)";
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.1)";
       ctx2.beginPath();
-      ctx2.arc(x, y, size + 5, 0, Math.PI * 2);
+      ctx2.arc(x, y, size + 5, 0, TWO_PI);
       ctx2.fill();
+      ctx2.strokeStyle = "rgba(255, 255, 255, 0.2)";
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
       ctx2.fillStyle = "rgba(255, 255, 255, 0.6)";
-      ctx2.fillRect(x - 7, y - 8, 5, 16);
-      ctx2.fillRect(x + 2, y - 8, 5, 16);
+      ctx2.beginPath();
+      ctx2.roundRect(x - 7, y - 8, 5, 16, 1);
+      ctx2.roundRect(x + 2, y - 8, 5, 16, 1);
+      ctx2.fill();
     }
     drawJoystick(ctx2) {
       if (!touch.active) return;
@@ -1432,32 +2195,54 @@
       const cy = touch.centerY;
       const r = JOYSTICK_DISPLAY_RADIUS;
       ctx2.beginPath();
-      ctx2.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx2.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      ctx2.arc(cx, cy, r, 0, TWO_PI);
+      ctx2.strokeStyle = "rgba(255, 255, 255, 0.12)";
       ctx2.lineWidth = 2;
       ctx2.stroke();
-      ctx2.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.03)";
       ctx2.fill();
       const thumbX = cx + touch.dx * r;
       const thumbY = cy + touch.dy * r;
       const thumbR = 20;
       ctx2.beginPath();
-      ctx2.arc(thumbX, thumbY, thumbR, 0, Math.PI * 2);
-      ctx2.fillStyle = "rgba(255, 255, 255, 0.25)";
+      ctx2.arc(thumbX, thumbY, thumbR, 0, TWO_PI);
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.2)";
       ctx2.fill();
-      ctx2.strokeStyle = "rgba(255, 255, 255, 0.4)";
+      ctx2.strokeStyle = "rgba(255, 255, 255, 0.35)";
       ctx2.lineWidth = 2;
       ctx2.stroke();
     }
     drawTitleScreen(ctx2, canvas2) {
-      ctx2.fillStyle = "#ffffff";
-      ctx2.font = "bold 48px monospace";
+      const w = canvas2.width;
+      const h = canvas2.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const t = this.stateAge;
+      const titleAlpha = Math.min(1, t * 2);
+      const glowPulse = 0.6 + 0.4 * Math.sin(t * 1.5);
+      const titleGrad = ctx2.createRadialGradient(cx, cy - 40, 0, cx, cy - 40, 300);
+      titleGrad.addColorStop(0, `rgba(80, 160, 255, ${0.06 * glowPulse * titleAlpha})`);
+      titleGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx2.fillStyle = titleGrad;
+      ctx2.fillRect(0, 0, w, h);
       ctx2.textAlign = "center";
-      ctx2.fillText("UNIVERSE EATER", canvas2.width / 2, canvas2.height / 2 - 30);
-      ctx2.font = "18px monospace";
-      ctx2.fillStyle = "#888";
+      ctx2.font = "bold 52px monospace";
+      ctx2.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
+      ctx2.fillText("UNIVERSE EATER", cx, cy - 30);
+      ctx2.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
+      ctx2.fillText("UNIVERSE EATER", cx + 1, cy - 29);
+      ctx2.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
+      ctx2.fillText("UNIVERSE EATER", cx, cy - 30);
+      const subAlpha = Math.max(0, Math.min(1, (t - 0.5) * 2));
+      ctx2.font = "14px monospace";
+      ctx2.fillStyle = `rgba(100, 180, 255, ${subAlpha * 0.6})`;
+      ctx2.fillText("SURVIVE 5 MINUTES", cx, cy + 10);
+      const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
+      const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
+      ctx2.font = "16px monospace";
+      ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe})`;
       const startMsg = isTouchDevice() ? "Tap to start" : "Press any key to start";
-      ctx2.fillText(startMsg, canvas2.width / 2, canvas2.height / 2 + 30);
+      ctx2.fillText(startMsg, cx, cy + 60);
     }
     drawNotifications(ctx2, canvas2, game2) {
       const notifications = game2.notifications;
@@ -1471,8 +2256,8 @@
         const pillW = textWidth + 30;
         const pillH = 30;
         const pillX = (canvas2.width - pillW) / 2;
-        ctx2.fillStyle = `rgba(100, 200, 255, ${0.2 * n.alpha})`;
-        ctx2.strokeStyle = `rgba(100, 200, 255, ${0.5 * n.alpha})`;
+        ctx2.fillStyle = `rgba(100, 200, 255, ${0.15 * n.alpha})`;
+        ctx2.strokeStyle = `rgba(100, 200, 255, ${0.4 * n.alpha})`;
         ctx2.lineWidth = 1;
         ctx2.beginPath();
         ctx2.roundRect(pillX, y - pillH / 2 - 4, pillW, pillH, 6);
@@ -1483,45 +2268,94 @@
       }
     }
     drawGameOver(ctx2, canvas2, player2, game2) {
-      ctx2.fillStyle = "rgba(0, 0, 0, 0.8)";
-      ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
-      ctx2.fillStyle = "#ff4444";
-      ctx2.font = "bold 48px monospace";
-      ctx2.textAlign = "center";
-      ctx2.fillText("GAME OVER", canvas2.width / 2, canvas2.height / 2 - 50);
-      ctx2.fillStyle = "#fff";
-      ctx2.font = "20px monospace";
-      ctx2.fillText(`Survived: ${formatTime(game2.elapsedTime)}`, canvas2.width / 2, canvas2.height / 2 + 10);
-      ctx2.fillText(`Kills: ${player2.kills}`, canvas2.width / 2, canvas2.height / 2 + 40);
-      ctx2.fillStyle = "#888";
-      ctx2.font = "16px monospace";
-      const restartMsg = isTouchDevice() ? "Tap to restart" : "Press any key to restart";
-      ctx2.fillText(restartMsg, canvas2.width / 2, canvas2.height / 2 + 90);
+      this.drawEndScreen(ctx2, canvas2, "GAME OVER", [255, 68, 68], [80, 0, 0], [
+        `Survived  ${formatTime(game2.elapsedTime)}`,
+        `Kills  ${player2.kills}`
+      ]);
     }
     drawVictory(ctx2, canvas2, player2) {
-      ctx2.fillStyle = "rgba(0, 0, 0, 0.8)";
-      ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
-      ctx2.fillStyle = "#44ff88";
-      ctx2.font = "bold 48px monospace";
+      this.drawEndScreen(ctx2, canvas2, "VICTORY!", [68, 255, 136], [80, 60, 0], [
+        `Total Kills  ${player2.kills}`,
+        `Level Reached  ${player2.level}`
+      ]);
+    }
+    drawEndScreen(ctx2, canvas2, title, titleColor, vignetteColor, stats) {
+      const w = canvas2.width;
+      const h = canvas2.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const t = this.stateAge;
+      const [tr, tg, tb] = titleColor;
+      const [vr, vg, vb] = vignetteColor;
+      const dimAlpha = Math.min(0.85, t * 2);
+      ctx2.fillStyle = `rgba(0, 0, 0, ${dimAlpha})`;
+      ctx2.fillRect(0, 0, w, h);
+      const vigGrad = ctx2.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.7);
+      vigGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+      vigGrad.addColorStop(1, `rgba(${vr}, ${vg}, ${vb}, ${Math.min(0.3, t)})`);
+      ctx2.fillStyle = vigGrad;
+      ctx2.fillRect(0, 0, w, h);
+      const titleScale = easeOutCubic(Math.min(1, t * 3));
+      const titleAlpha = Math.min(1, t * 3);
+      ctx2.save();
+      ctx2.translate(cx, cy - 50);
+      ctx2.scale(titleScale, titleScale);
+      ctx2.font = "bold 52px monospace";
       ctx2.textAlign = "center";
-      ctx2.fillText("VICTORY!", canvas2.width / 2, canvas2.height / 2 - 50);
-      ctx2.fillStyle = "#fff";
-      ctx2.font = "20px monospace";
-      ctx2.fillText(`Total Kills: ${player2.kills}`, canvas2.width / 2, canvas2.height / 2 + 10);
-      ctx2.fillText(`Level Reached: ${player2.level}`, canvas2.width / 2, canvas2.height / 2 + 40);
-      ctx2.fillStyle = "#888";
-      ctx2.font = "16px monospace";
-      const restartMsg2 = isTouchDevice() ? "Tap to restart" : "Press any key to restart";
-      ctx2.fillText(restartMsg2, canvas2.width / 2, canvas2.height / 2 + 90);
+      ctx2.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${titleAlpha * 0.15})`;
+      ctx2.fillText(title, 0, 0);
+      ctx2.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${titleAlpha})`;
+      ctx2.fillText(title, 0, 0);
+      ctx2.restore();
+      ctx2.textAlign = "center";
+      ctx2.font = "18px monospace";
+      for (let i = 0; i < stats.length; i++) {
+        const statAlpha = Math.max(0, Math.min(1, (t - 0.4 - i * 0.2) * 3));
+        ctx2.fillStyle = `rgba(255, 255, 255, ${statAlpha * 0.7})`;
+        ctx2.fillText(stats[i], cx, cy + 15 + i * 30);
+      }
+      const promptAlpha = Math.max(0, Math.min(1, (t - 1.2) * 2));
+      const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
+      ctx2.font = "14px monospace";
+      ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe * 0.5})`;
+      const restartMsg = isTouchDevice() ? "Tap to restart" : "Press any key to restart";
+      ctx2.fillText(restartMsg, cx, cy + 95);
+    }
+    // Permanent vignette overlay
+    drawVignette(ctx2, w, h, hpRatio) {
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = Math.max(w, h) * 0.75;
+      const baseAlpha = 0.3 + (1 - hpRatio) * 0.35;
+      const grad = ctx2.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
+      grad.addColorStop(0, "rgba(0, 0, 0, 0)");
+      grad.addColorStop(1, `rgba(0, 0, 0, ${baseAlpha})`);
+      ctx2.fillStyle = grad;
+      ctx2.fillRect(0, 0, w, h);
+      if (hpRatio < 0.35) {
+        const redAlpha = (0.35 - hpRatio) * 0.4;
+        const redGrad = ctx2.createRadialGradient(cx, cy, r * 0.3, cx, cy, r);
+        redGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+        redGrad.addColorStop(1, `rgba(150, 0, 0, ${redAlpha})`);
+        ctx2.fillStyle = redGrad;
+        ctx2.fillRect(0, 0, w, h);
+      }
     }
   };
 
   // src/main.ts
+  var CONTACT_DPS = 10;
+  var PROJECTILE_DAMAGE = 8;
+  var SHARP_HIT_THRESHOLD = 3;
+  var MAX_SHAKE = 5;
+  var BIG_KILL_RADIUS = 35;
+  var MAX_XP_ORBS = 6;
   var canvas = document.getElementById("game");
   var ctx = canvas.getContext("2d");
   var camera;
   var player;
   var background;
+  var geometry;
   var spawner;
   var particles;
   var weaponManager;
@@ -1531,6 +2365,7 @@
     camera = new Camera(canvas.width, canvas.height);
     player = new Player();
     background = new Background();
+    geometry = new BackgroundGeometry();
     spawner = new EnemySpawner();
     particles = new ParticleSystem();
     weaponManager = new WeaponManager();
@@ -1592,9 +2427,13 @@
     }
     ctx.fillStyle = "#0a0a1a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    camera.updateShake(dt);
+    ui.trackState(game.state, dt);
     if (game.state === "title" /* TITLE */) {
       background.update(dt, playerSpeed, playerVx, playerVy);
+      geometry.update(dt);
       background.draw(ctx, camera, timestamp / 1e3);
+      geometry.draw(ctx, camera, timestamp / 1e3, camera.x + camera.width / 2, camera.y + camera.height / 2);
       ui.drawTitleScreen(ctx, canvas);
     } else if (game.state === "playing" /* PLAYING */) {
       game.elapsedTime += dt;
@@ -1608,44 +2447,64 @@
       player.regenerate(dt);
       camera.follow(player.x, player.y);
       background.update(dt, playerSpeed, playerVx, playerVy);
+      geometry.update(dt);
       spawner.update(dt, game.elapsedTime, player.x, player.y, camera);
-      const baseDmg = 10;
+      const hpBefore = player.hp;
       for (const enemy of spawner.enemies) {
+        if (enemy.dead) continue;
         if (wrappedDistance(player.x, player.y, enemy.x, enemy.y) < player.radius + enemy.radius) {
-          player.takeDamage(baseDmg * enemy.damageMultiplier * dt);
+          player.takeDamage(CONTACT_DPS * enemy.damageMultiplier * dt);
         }
         for (const p of enemy.projectiles) {
           if (wrappedDistance(player.x, player.y, p.x, p.y) < player.radius + p.radius) {
-            player.takeDamage(8);
+            player.takeDamage(PROJECTILE_DAMAGE);
             p.lifetime = 0;
           }
         }
       }
+      const dmgTaken = hpBefore - player.hp;
+      if (dmgTaken > SHARP_HIT_THRESHOLD) {
+        camera.shake(Math.min(MAX_SHAKE, dmgTaken * 0.2), 0.12);
+        particles.addDamageVignette(0.2, Math.min(0.25, dmgTaken * 0.015));
+      }
       weaponManager.update(dt, player.x, player.y, spawner.enemies);
       player.updateRipples(dt);
       for (const enemy of spawner.enemies) {
-        if (enemy.dead) {
-          particles.spawnDeath(enemy.x, enemy.y, enemy.radius, enemy.outlineColor);
-          player.kills++;
-          const leveledUp = player.addXp(enemy.xpDrop);
-          if (leveledUp && !weaponManager.allMaxed()) {
-            game.applyRandomUpgrade(weaponManager);
-          }
+        if (!enemy.dead) continue;
+        particles.spawnDeath(enemy.x, enemy.y, enemy.radius, enemy.outlineColor);
+        particles.spawnXpOrbs(
+          enemy.x,
+          enemy.y,
+          player.x,
+          player.y,
+          Math.min(MAX_XP_ORBS, Math.ceil(enemy.xpDrop * 0.7))
+        );
+        player.kills++;
+        if (enemy.radius > BIG_KILL_RADIUS) {
+          camera.shake(enemy.radius * 0.08, 0.15);
+        }
+        const leveledUp = player.addXp(enemy.xpDrop);
+        if (leveledUp && !weaponManager.allMaxed()) {
+          game.applyRandomUpgrade(weaponManager);
         }
       }
       spawner.removeDead();
       particles.update(dt);
       game.updateNotifications(dt);
       background.draw(ctx, camera, timestamp / 1e3);
+      geometry.draw(ctx, camera, timestamp / 1e3, player.x, player.y);
       spawner.draw(ctx, camera, timestamp / 1e3);
       particles.draw(ctx, camera);
       weaponManager.draw(ctx, camera, player.x, player.y, player.radius);
       player.draw(ctx, camera);
       background.drawWrapZone(ctx, camera);
+      ui.drawVignette(ctx, canvas.width, canvas.height, player.hp / player.maxHp);
+      particles.drawScreenEffects(ctx, canvas.width, canvas.height);
       ui.drawHUD(ctx, canvas, game, player, weaponManager);
       ui.drawNotifications(ctx, canvas, game);
     } else if (game.state === "paused" /* PAUSED */) {
       background.draw(ctx, camera, timestamp / 1e3);
+      geometry.draw(ctx, camera, timestamp / 1e3, player.x, player.y);
       spawner.draw(ctx, camera, timestamp / 1e3);
       weaponManager.draw(ctx, camera, player.x, player.y, player.radius);
       player.draw(ctx, camera);
@@ -1662,9 +2521,11 @@
       ctx.fillText("Press ESC or tap II to resume", canvas.width / 2, canvas.height / 2 + 30);
     } else if (game.state === "gameOver" /* GAME_OVER */) {
       background.draw(ctx, camera, timestamp / 1e3);
+      geometry.draw(ctx, camera, timestamp / 1e3, player.x, player.y);
       ui.drawGameOver(ctx, canvas, player, game);
     } else if (game.state === "victory" /* VICTORY */) {
       background.draw(ctx, camera, timestamp / 1e3);
+      geometry.draw(ctx, camera, timestamp / 1e3, player.x, player.y);
       ui.drawVictory(ctx, canvas, player);
     }
     requestAnimationFrame(gameLoop);
