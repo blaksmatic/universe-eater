@@ -30,8 +30,10 @@ export interface Notification {
 
 export class Game {
   state = GameState.TITLE;
+  stage = 1;
   elapsedTime = 0;
-  gameDuration = 300;
+  totalElapsedTime = 0;
+  gameDuration = 480;
   notifications: Notification[] = [{
     text: 'Keep moving. First level-ups unlock new weapons.',
     timer: 4,
@@ -52,6 +54,21 @@ export class Game {
 
   get timeRemainingFormatted(): string {
     return formatTime(this.timeRemaining);
+  }
+
+  advanceStage(): void {
+    this.stage++;
+    this.elapsedTime = 0;
+    this.state = GameState.PLAYING;
+    this.pendingLevelUps = 0;
+    this.draftChoices = [];
+    this.selectedDraftIndex = 0;
+    this.notifications.push({
+      text: `Stage ${this.stage} engaged`,
+      timer: 2.8,
+      alpha: 1,
+      kind: 'unlock',
+    });
   }
 
   queueLevelUps(count: number, wm: WeaponManager): void {

@@ -2,6 +2,7 @@ import { Game, GameState } from './game';
 import { UI } from './ui';
 import { consumeAnyTap, consumePauseTap } from './input';
 import { GameWorld } from './world';
+import { ThreeEntityRenderer } from './three-view';
 
 const CLEAR_COLOR = '#0a0a1a';
 const GAME_OVER_RESTART_DELAY_MS = 2500;
@@ -15,6 +16,7 @@ export class GameRuntime {
   private viewportHeight = window.innerHeight;
   private renderScale = 1;
   private restartAllowedAt = 0;
+  private readonly entityRenderer?: ThreeEntityRenderer;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -23,6 +25,12 @@ export class GameRuntime {
     this.resize();
     this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
     this.game = new Game();
+    try {
+      this.entityRenderer = new ThreeEntityRenderer(this.canvas);
+      this.entityRenderer.resize(this.viewportWidth, this.viewportHeight, this.renderScale);
+    } catch (error) {
+      console.warn('Three.js entity renderer disabled; falling back to 2D bodies.', error);
+    }
     this.bindEvents();
   }
 
@@ -43,6 +51,7 @@ export class GameRuntime {
   private handleResize = (): void => {
     this.resize();
     this.world.resize(this.viewportWidth, this.viewportHeight);
+    this.entityRenderer?.resize(this.viewportWidth, this.viewportHeight, this.renderScale);
   };
 
   private handleVisibilityChange = (): void => {
@@ -85,7 +94,7 @@ export class GameRuntime {
       this.game.state = GameState.PLAYING;
       this.restartAllowedAt = 0;
     } else if (this.game.state === GameState.VICTORY && !event.repeat) {
-      this.resetRun(GameState.PLAYING);
+      this.advanceStage();
     } else if (this.game.state === GameState.GAME_OVER && !event.repeat && this.canRestartGameOver()) {
       this.resetRun(GameState.PLAYING);
     }
@@ -112,7 +121,7 @@ export class GameRuntime {
       this.game.state = GameState.PLAYING;
       this.restartAllowedAt = 0;
     } else if (this.game.state === GameState.VICTORY) {
-      this.resetRun(GameState.PLAYING);
+      this.advanceStage();
     } else if (this.game.state === GameState.GAME_OVER && this.canRestartGameOver()) {
       this.resetRun(GameState.PLAYING);
     }
@@ -123,8 +132,12 @@ export class GameRuntime {
     this.lastFrameTime = timestamp;
 
     this.ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
-    this.ctx.fillStyle = CLEAR_COLOR;
-    this.ctx.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
+    if (this.entityRenderer) {
+      this.ctx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
+    } else {
+      this.ctx.fillStyle = CLEAR_COLOR;
+      this.ctx.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
+    }
 
     this.handleTapTransitions();
     this.world.camera.updateShake(dt);
@@ -132,6 +145,7 @@ export class GameRuntime {
 
     switch (this.game.state) {
       case GameState.TITLE:
+        this.entityRenderer?.render(null, timestamp / 1000);
         this.world.updateTitle(dt);
         this.world.drawTitle(this.ctx, timestamp / 1000);
         this.ui.drawTitleScreen(this.ctx, this.canvas);
@@ -141,6 +155,7 @@ export class GameRuntime {
         if (this.game.state === GameState.PLAYING) {
           this.renderActiveRun(timestamp / 1000);
         } else if (this.game.state === GameState.GAME_OVER) {
+          this.entityRenderer?.render(null, timestamp / 1000);
           this.world.drawEndBackdrop(this.ctx, timestamp / 1000);
           this.ui.drawGameOver(
             this.ctx,
@@ -151,12 +166,14 @@ export class GameRuntime {
             this.getGameOverRestartCountdown(),
           );
         } else if (this.game.state === GameState.VICTORY) {
+          this.entityRenderer?.render(null, timestamp / 1000);
           this.world.drawEndBackdrop(this.ctx, timestamp / 1000);
-          this.ui.drawVictory(this.ctx, this.canvas, this.world.player);
+          this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game);
         }
         break;
       case GameState.PAUSED:
-        this.world.drawPausedScene(this.ctx, timestamp / 1000);
+        this.entityRenderer?.render(this.world, timestamp / 1000);
+        this.world.drawPausedScene(this.ctx, timestamp / 1000, !this.entityRenderer);
         this.ui.drawHUD(this.ctx, this.canvas, this.game, this.world.player, this.world.weaponManager);
         this.drawPauseOverlay();
         break;
@@ -165,6 +182,7 @@ export class GameRuntime {
         this.ui.drawLevelUpDraft(this.ctx, this.canvas, this.game);
         break;
       case GameState.GAME_OVER:
+        this.entityRenderer?.render(null, timestamp / 1000);
         this.world.drawEndBackdrop(this.ctx, timestamp / 1000);
         this.ui.drawGameOver(
           this.ctx,
@@ -176,8 +194,9 @@ export class GameRuntime {
         );
         break;
       case GameState.VICTORY:
+        this.entityRenderer?.render(null, timestamp / 1000);
         this.world.drawEndBackdrop(this.ctx, timestamp / 1000);
-        this.ui.drawVictory(this.ctx, this.canvas, this.world.player);
+        this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game);
         break;
     }
 
@@ -186,6 +205,7 @@ export class GameRuntime {
 
   private updatePlaying(dt: number): void {
     this.game.elapsedTime += dt;
+    this.game.totalElapsedTime += dt;
     if (this.game.timeRemaining <= 0) {
       this.game.state = GameState.VICTORY;
       return;
@@ -210,7 +230,8 @@ export class GameRuntime {
   }
 
   private renderActiveRun(time: number): void {
-    this.world.drawPlayfield(this.ctx, time);
+    this.entityRenderer?.render(this.world, time);
+    this.world.drawPlayfield(this.ctx, time, !this.entityRenderer);
     this.ui.drawVignette(this.ctx, this.viewportWidth, this.viewportHeight, this.world.player.hp / this.world.player.maxHp);
     this.world.particles.drawScreenEffects(this.ctx, this.viewportWidth, this.viewportHeight);
     this.ui.drawHUD(this.ctx, this.canvas, this.game, this.world.player, this.world.weaponManager);
@@ -241,7 +262,7 @@ export class GameRuntime {
         this.game.state = GameState.PLAYING;
         this.restartAllowedAt = 0;
       } else if (this.game.state === GameState.VICTORY) {
-        this.resetRun(GameState.PLAYING);
+        this.advanceStage();
       } else if (this.game.state === GameState.GAME_OVER && this.canRestartGameOver()) {
         this.resetRun(GameState.PLAYING);
       }
@@ -252,6 +273,12 @@ export class GameRuntime {
     this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
     this.game = new Game();
     this.game.state = state;
+    this.restartAllowedAt = 0;
+  }
+
+  private advanceStage(): void {
+    this.game.advanceStage();
+    this.world.prepareNextStage(this.game.stage);
     this.restartAllowedAt = 0;
   }
 

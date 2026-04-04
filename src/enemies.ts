@@ -77,29 +77,37 @@ export class Enemy {
   private spikeCount: number;
   private wobblePhase: number;
 
-  constructor(type: EnemyType, x: number, y: number) {
+  constructor(type: EnemyType, x: number, y: number, stage = 1) {
     const config = ENEMY_TYPES[type];
+    const difficulty = Math.max(0, stage - 1);
+    const hpScale = 1 + difficulty * 0.42;
+    const speedScale = 1 + difficulty * 0.07;
+    const damageScale = 1 + difficulty * 0.1;
+    const xpScale = 1 + difficulty * 0.18;
     this.type = type;
     this.x = x;
     this.y = y;
     this.radius = config.baseRadius + randomRange(-config.radiusVariation / 2, config.radiusVariation / 2);
     const sizeRatio = this.radius / config.baseRadius;
-    this.maxHp = config.baseHp * sizeRatio;
+    this.maxHp = config.baseHp * sizeRatio * hpScale;
     this.hp = this.maxHp;
-    this.speed = config.speed;
+    this.speed = config.speed * speedScale;
     this.color = config.color;
     this.outlineColor = config.outlineColor;
-    this.xpDrop = config.xpDrop;
-    this.damageMultiplier = config.damageMultiplier;
+    this.xpDrop = Math.max(1, Math.round(config.xpDrop * xpScale));
+    this.damageMultiplier = config.damageMultiplier * damageScale;
     this.spikeCount = type === 'swarmer' ? Math.floor(randomRange(5, 8)) : 6;
     this.wobblePhase = Math.random() * TWO_PI;
 
     if (type === 'overlord') {
-      this.summonTimer = 3;
-      this.shootTimer = 2;
+      this.summonTimer = Math.max(1.6, 3 - difficulty * 0.16);
+      this.shootTimer = Math.max(1.1, 2 - difficulty * 0.12);
     }
     if (type === 'drifter') {
-      this.chargeTimer = randomRange(3, 6);
+      this.chargeTimer = randomRange(
+        Math.max(1.8, 3 - difficulty * 0.2),
+        Math.max(3.8, 6 - difficulty * 0.25),
+      );
     }
   }
 
@@ -443,7 +451,7 @@ export class Enemy {
 
   // ── Shared helpers ────────────────────────────────────────────
 
-  private drawProjectiles(ctx: CanvasRenderingContext2D, camera: Camera): void {
+  drawProjectiles(ctx: CanvasRenderingContext2D, camera: Camera): void {
     for (const p of this.projectiles) {
       const ps = camera.worldToScreen(p.x, p.y);
       const glow = ctx.createRadialGradient(ps.x, ps.y, 0, ps.x, ps.y, p.radius * 3);
@@ -496,31 +504,72 @@ interface SpawnWeight {
 export class EnemySpawner {
   enemies: Enemy[] = [];
   private spawnTimer = -2.2;
+  private stage = 1;
+
+  setStage(stage: number): void {
+    this.stage = Math.max(1, stage);
+  }
+
+  clear(): void {
+    this.enemies = [];
+    this.spawnTimer = -Math.max(1.1, 2.2 - (this.stage - 1) * 0.18);
+  }
 
   private getSpawnConfig(elapsed: number): { spawnInterval: number; types: SpawnWeight[] } {
-    if (elapsed < 20) {
-      return { spawnInterval: 1.4, types: [{ type: 'swarmer', weight: 1 }] };
-    } else if (elapsed < 45) {
-      return { spawnInterval: 1.0, types: [{ type: 'swarmer', weight: 1 }] };
-    } else if (elapsed < 90) {
-      return { spawnInterval: 0.8, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1 }] };
+    const difficulty = this.stage - 1;
+    const effectiveElapsed = elapsed + difficulty * 75;
+    let spawnInterval: number;
+    let types: SpawnWeight[];
+
+    if (effectiveElapsed < 20) {
+      spawnInterval = 1.4;
+      types = [{ type: 'swarmer', weight: 1 }];
+    } else if (effectiveElapsed < 45) {
+      spawnInterval = 1.0;
+      types = [{ type: 'swarmer', weight: 1 }];
+    } else if (effectiveElapsed < 90) {
+      spawnInterval = 0.8;
+      types = [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1 }];
+    } else {
+      const minute = effectiveElapsed / 60;
+      if (minute < 2) {
+        spawnInterval = 0.7;
+        types = [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1.25 }];
+      } else if (minute < 2.5) {
+        spawnInterval = 0.65;
+        types = [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.35 }];
+      } else if (minute < 3) {
+        spawnInterval = 0.45;
+        types = [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.5 }, { type: 'overlord', weight: 0.3 }];
+      } else {
+        spawnInterval = 0.3;
+        types = [{ type: 'swarmer', weight: 2 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 1.5 }, { type: 'overlord', weight: 0.8 }];
+      }
     }
 
-    const minute = elapsed / 60;
-    if (minute < 2) {
-      return { spawnInterval: 0.7, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 1.25 }] };
-    } else if (minute < 2.5) {
-      return { spawnInterval: 0.65, types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.35 }] };
-    } else if (minute < 3) {
-      return {
-        spawnInterval: 0.45,
-        types: [{ type: 'swarmer', weight: 3 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 0.5 }, { type: 'overlord', weight: 0.3 }],
-      };
-    }
+    const paceScale = 1 + difficulty * 0.12;
+    const scaledTypes = types.map(({ type, weight }) => ({
+      type,
+      weight: this.scaleSpawnWeight(type, weight),
+    }));
     return {
-      spawnInterval: 0.3,
-      types: [{ type: 'swarmer', weight: 2 }, { type: 'drifter', weight: 2 }, { type: 'titan', weight: 1.5 }, { type: 'overlord', weight: 0.8 }],
+      spawnInterval: Math.max(0.18, spawnInterval / paceScale),
+      types: scaledTypes,
     };
+  }
+
+  private scaleSpawnWeight(type: EnemyType, baseWeight: number): number {
+    const difficulty = this.stage - 1;
+    switch (type) {
+      case 'swarmer':
+        return baseWeight * (1 + difficulty * 0.06);
+      case 'drifter':
+        return baseWeight * (1 + difficulty * 0.14);
+      case 'titan':
+        return baseWeight * (1 + difficulty * 0.22);
+      case 'overlord':
+        return baseWeight * (1 + difficulty * 0.28);
+    }
   }
 
   private pickType(types: SpawnWeight[]): EnemyType {
@@ -534,10 +583,12 @@ export class EnemySpawner {
   }
 
   private getSwarmerCount(elapsed: number): number {
-    if (elapsed < 20) return Math.floor(randomRange(1, 3));
-    if (elapsed < 45) return Math.floor(randomRange(2, 4));
-    if (elapsed < 120) return Math.floor(randomRange(2, 5));
-    return Math.floor(randomRange(3, 6));
+    const effectiveElapsed = elapsed + (this.stage - 1) * 50;
+    const extra = Math.floor((this.stage - 1) / 2);
+    if (effectiveElapsed < 20) return Math.floor(randomRange(1, 3)) + extra;
+    if (effectiveElapsed < 45) return Math.floor(randomRange(2, 4)) + extra;
+    if (effectiveElapsed < 120) return Math.floor(randomRange(2, 5)) + extra;
+    return Math.floor(randomRange(3, 6)) + extra;
   }
 
   private spawnEnemy(type: EnemyType, camera: Camera, elapsed: number): void {
@@ -558,14 +609,14 @@ export class EnemySpawner {
       const count = this.getSwarmerCount(elapsed);
       for (let i = 0; i < count; i++) {
         const gp = wrapPosition(pos.x + randomRange(-40, 40), pos.y + randomRange(-40, 40));
-        this.enemies.push(new Enemy('swarmer', gp.x, gp.y));
+        this.enemies.push(new Enemy('swarmer', gp.x, gp.y, this.stage));
       }
-    } else if (type === 'drifter' && elapsed > 75 && Math.random() < 0.35) {
-      this.enemies.push(new Enemy('drifter', pos.x, pos.y));
+    } else if (type === 'drifter' && elapsed > 75 && Math.random() < Math.min(0.7, 0.35 + (this.stage - 1) * 0.06)) {
+      this.enemies.push(new Enemy('drifter', pos.x, pos.y, this.stage));
       const dp = wrapPosition(pos.x + randomRange(-30, 30), pos.y + randomRange(-30, 30));
-      this.enemies.push(new Enemy('drifter', dp.x, dp.y));
+      this.enemies.push(new Enemy('drifter', dp.x, dp.y, this.stage));
     } else {
-      this.enemies.push(new Enemy(type, pos.x, pos.y));
+      this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage));
     }
   }
 
@@ -588,7 +639,7 @@ export class EnemySpawner {
           overlord.x + randomRange(-80, 80),
           overlord.y + randomRange(-80, 80),
         );
-        this.enemies.push(new Enemy('swarmer', sp.x, sp.y));
+        this.enemies.push(new Enemy('swarmer', sp.x, sp.y, this.stage));
       }
     }
   }
@@ -601,6 +652,14 @@ export class EnemySpawner {
     for (const enemy of this.enemies) {
       if (camera.isVisible(enemy.x, enemy.y, enemy.radius + 50)) {
         enemy.draw(ctx, camera, time);
+      }
+    }
+  }
+
+  drawProjectiles(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    for (const enemy of this.enemies) {
+      if (camera.isVisible(enemy.x, enemy.y, enemy.radius + 80)) {
+        enemy.drawProjectiles(ctx, camera);
       }
     }
   }

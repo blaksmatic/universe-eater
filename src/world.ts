@@ -5,16 +5,9 @@ import { BackgroundGeometry } from './geometry';
 import { EnemySpawner } from './enemies';
 import { ParticleSystem } from './particles';
 import { WeaponManager } from './weapons';
-import { wrappedDistance } from './utils';
-
-const CONTACT_HIT_DAMAGE = 9;
-const PROJECTILE_DAMAGE = 8;
-const SHARP_HIT_THRESHOLD = 0.5;
-const MAX_SHAKE = 5;
-const BIG_KILL_RADIUS = 35;
-const MAX_XP_ORBS = 6;
-const LEVEL_UP_BLAST_RADIUS = 260;
-const LEVEL_UP_BLAST_DAMAGE = 120;
+import { WorldCombatSystem } from './world-combat';
+import { WorldMotionTracker } from './world-motion';
+import { WorldRenderer } from './world-renderer';
 
 export interface WorldUpdateResult {
   levelUps: number;
@@ -28,12 +21,9 @@ export class GameWorld {
   readonly spawner: EnemySpawner;
   readonly particles: ParticleSystem;
   readonly weaponManager: WeaponManager;
-
-  private prevPlayerX: number;
-  private prevPlayerY: number;
-  private playerSpeed = 0;
-  private playerVx = 0;
-  private playerVy = 0;
+  private readonly combat: WorldCombatSystem;
+  private readonly motion: WorldMotionTracker;
+  private readonly renderer: WorldRenderer;
 
   constructor(width: number, height: number) {
     this.camera = new Camera(width, height);
@@ -41,12 +31,21 @@ export class GameWorld {
     this.background = new Background();
     this.geometry = new BackgroundGeometry();
     this.spawner = new EnemySpawner();
+    this.spawner.setStage(1);
     this.particles = new ParticleSystem();
     this.weaponManager = new WeaponManager();
     this.weaponManager.setOnLaserFire((angle) => this.player.addRipple(angle));
-
-    this.prevPlayerX = this.player.x;
-    this.prevPlayerY = this.player.y;
+    this.combat = new WorldCombatSystem(this.player, this.spawner, this.particles, this.camera);
+    this.motion = new WorldMotionTracker(this.player);
+    this.renderer = new WorldRenderer({
+      background: this.background,
+      camera: this.camera,
+      geometry: this.geometry,
+      particles: this.particles,
+      player: this.player,
+      spawner: this.spawner,
+      weaponManager: this.weaponManager,
+    });
   }
 
   resize(width: number, height: number): void {
@@ -54,26 +53,25 @@ export class GameWorld {
   }
 
   updateTitle(dt: number): void {
-    this.sampleMotion(dt);
-    this.background.update(dt, this.playerSpeed, this.playerVx, this.playerVy);
+    this.motion.sample(this.player, dt);
+    this.background.update(dt, this.motion.speed, this.motion.vx, this.motion.vy);
     this.geometry.update(dt);
   }
 
   updatePlaying(dt: number, elapsedTime: number): WorldUpdateResult {
-    this.sampleMotion(dt);
-
     this.player.update(dt);
     this.player.regenerate(dt);
+    this.motion.sample(this.player, dt);
     this.camera.follow(this.player.x, this.player.y);
-    this.background.update(dt, this.playerSpeed, this.playerVx, this.playerVy);
+    this.background.update(dt, this.motion.speed, this.motion.vx, this.motion.vy);
     this.geometry.update(dt);
     this.spawner.update(dt, elapsedTime, this.player.x, this.player.y, this.camera);
 
-    this.applyCollisions();
+    this.combat.applyCollisions();
     this.weaponManager.update(dt, this.player.x, this.player.y, this.spawner.enemies);
     this.player.updateRipples(dt);
 
-    const levelUps = this.consumeDefeatedEnemies();
+    const levelUps = this.combat.consumeDefeatedEnemies();
     this.spawner.removeDead();
     this.particles.update(dt);
 
@@ -81,132 +79,30 @@ export class GameWorld {
   }
 
   drawTitle(ctx: CanvasRenderingContext2D, time: number): void {
-    this.background.draw(ctx, this.camera, time);
-    this.geometry.draw(
-      ctx,
-      this.camera,
-      time,
-      this.camera.x + this.camera.width / 2,
-      this.camera.y + this.camera.height / 2,
-    );
+    this.renderer.drawTitle(ctx, time);
   }
 
-  drawPlayfield(ctx: CanvasRenderingContext2D, time: number): void {
-    this.background.draw(ctx, this.camera, time);
-    this.geometry.draw(ctx, this.camera, time, this.player.x, this.player.y);
-    this.spawner.draw(ctx, this.camera, time);
-    this.particles.draw(ctx, this.camera);
-    this.weaponManager.draw(ctx, this.camera, this.player.x, this.player.y, this.player.radius);
-    this.player.draw(ctx, this.camera);
-    this.background.drawWrapZone(ctx, this.camera);
+  drawPlayfield(ctx: CanvasRenderingContext2D, time: number, renderEntityBodies = true): void {
+    this.renderer.drawPlayfield(ctx, time, renderEntityBodies);
   }
 
-  drawPausedScene(ctx: CanvasRenderingContext2D, time: number): void {
-    this.background.draw(ctx, this.camera, time);
-    this.geometry.draw(ctx, this.camera, time, this.player.x, this.player.y);
-    this.spawner.draw(ctx, this.camera, time);
-    this.weaponManager.draw(ctx, this.camera, this.player.x, this.player.y, this.player.radius);
-    this.player.draw(ctx, this.camera);
-    this.background.drawWrapZone(ctx, this.camera);
+  drawPausedScene(ctx: CanvasRenderingContext2D, time: number, renderEntityBodies = true): void {
+    this.renderer.drawPausedScene(ctx, time, renderEntityBodies);
   }
 
   drawEndBackdrop(ctx: CanvasRenderingContext2D, time: number): void {
-    this.background.draw(ctx, this.camera, time);
-    this.geometry.draw(ctx, this.camera, time, this.player.x, this.player.y);
+    this.renderer.drawEndBackdrop(ctx, time);
+  }
+
+  prepareNextStage(stage: number): void {
+    this.spawner.setStage(stage);
+    this.spawner.clear();
+    this.particles.clear();
+    this.camera.follow(this.player.x, this.player.y);
+    this.motion.reset(this.player);
   }
 
   triggerLevelUpBlast(levelUps: number): void {
-    if (levelUps <= 0) return;
-
-    const radius = LEVEL_UP_BLAST_RADIUS + (levelUps - 1) * 50;
-    const damage = LEVEL_UP_BLAST_DAMAGE + (levelUps - 1) * 35;
-
-    for (const enemy of this.spawner.enemies) {
-      if (enemy.dead) continue;
-
-      const distance = wrappedDistance(this.player.x, this.player.y, enemy.x, enemy.y);
-      if (distance > radius + enemy.radius) continue;
-
-      const falloff = 1 - Math.min(0.7, distance / radius * 0.7);
-      enemy.takeDamage(damage * falloff);
-
-      for (const projectile of enemy.projectiles) {
-        if (wrappedDistance(this.player.x, this.player.y, projectile.x, projectile.y) <= radius) {
-          projectile.lifetime = 0;
-        }
-      }
-    }
-
-    this.camera.shake(Math.min(8, 4 + levelUps * 1.4), 0.18);
-    this.particles.spawnFlash(this.player.x, this.player.y, radius * 0.22);
-    this.particles.addScreenFlash(120, 200, 255, 0.12, 0.18);
-  }
-
-  private sampleMotion(dt: number): void {
-    if (dt > 0) {
-      const dx = this.player.x - this.prevPlayerX;
-      const dy = this.player.y - this.prevPlayerY;
-      this.playerVx = dx / dt;
-      this.playerVy = dy / dt;
-      this.playerSpeed = Math.sqrt(this.playerVx * this.playerVx + this.playerVy * this.playerVy);
-    }
-    this.prevPlayerX = this.player.x;
-    this.prevPlayerY = this.player.y;
-  }
-
-  private applyCollisions(): void {
-    const hpBefore = this.player.hp;
-
-    for (const enemy of this.spawner.enemies) {
-      if (enemy.dead) continue;
-
-      if (wrappedDistance(this.player.x, this.player.y, enemy.x, enemy.y) < this.player.radius + enemy.radius) {
-        this.player.takeContactHit(CONTACT_HIT_DAMAGE * enemy.damageMultiplier);
-      }
-
-      for (const projectile of enemy.projectiles) {
-        if (wrappedDistance(this.player.x, this.player.y, projectile.x, projectile.y) < this.player.radius + projectile.radius) {
-          this.player.takeDamage(PROJECTILE_DAMAGE);
-          projectile.lifetime = 0;
-        }
-      }
-    }
-
-    const damageTaken = hpBefore - this.player.hp;
-    if (damageTaken > 0) {
-      const shakeStrength = damageTaken > SHARP_HIT_THRESHOLD
-        ? Math.min(MAX_SHAKE, damageTaken * 0.2)
-        : Math.min(2, damageTaken * 0.35);
-      this.camera.shake(shakeStrength, 0.12);
-      this.particles.addDamageVignette(0.2, Math.min(0.28, 0.07 + damageTaken * 0.012));
-    }
-  }
-
-  private consumeDefeatedEnemies(): number {
-    let levelUps = 0;
-
-    for (const enemy of this.spawner.enemies) {
-      if (!enemy.dead) continue;
-
-      this.particles.spawnDeath(enemy.x, enemy.y, enemy.radius, enemy.outlineColor);
-      this.particles.spawnXpOrbs(
-        enemy.x,
-        enemy.y,
-        this.player.x,
-        this.player.y,
-        Math.min(MAX_XP_ORBS, Math.ceil(enemy.xpDrop * 0.7)),
-      );
-      this.player.kills++;
-
-      if (enemy.radius > BIG_KILL_RADIUS) {
-        this.camera.shake(enemy.radius * 0.08, 0.15);
-      }
-
-      if (this.player.addXp(enemy.xpDrop)) {
-        levelUps++;
-      }
-    }
-
-    return levelUps;
+    this.combat.triggerLevelUpBlast(levelUps);
   }
 }

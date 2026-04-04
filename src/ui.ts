@@ -46,6 +46,21 @@ const WEAPON_SHAPES: Record<string, (ctx: CanvasRenderingContext2D, x: number, y
     ctx.fillStyle = 'rgba(255, 200, 100, 0.9)';
     ctx.fill();
   },
+  'Escort Wing': (ctx, x, y, s) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s * 0.8, y + s * 0.8);
+    ctx.lineTo(x, y + s * 0.35);
+    ctx.lineTo(x - s * 0.8, y + s * 0.8);
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(120, 255, 220, 0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.55, y);
+    ctx.lineTo(x + s * 1.2, y - s * 0.45);
+    ctx.stroke();
+  },
   'Reinforced Hull': (ctx, x, y, s) => {
     ctx.beginPath();
     ctx.roundRect(x - s * 0.7, y - s * 0.85, s * 1.4, s * 1.7, 2);
@@ -151,6 +166,10 @@ export class UI {
       ctx.fillText('CRITICAL', leftInset, topInset + 36);
     }
 
+    ctx.font = '11px monospace';
+    ctx.fillStyle = 'rgba(160, 210, 255, 0.58)';
+    ctx.fillText(`STAGE ${game.stage}`, leftInset, topInset + 52);
+
     ctx.font = '16px monospace';
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
@@ -214,9 +233,16 @@ export class UI {
     ctx.textAlign = 'center';
     ctx.fillText(`LV ${player.level}  ${Math.floor(player.xp)}/${player.getXpForNextLevel()} XP`, w / 2, barY - 6);
 
+    const weaponSlots = [
+      { name: 'Laser Beam', weapon: wm.getWeapon('Laser Beam') },
+      { name: 'Orbit Shield', weapon: wm.getWeapon('Orbit Shield') },
+      { name: 'Nova Blast', weapon: wm.getWeapon('Nova Blast') },
+      { name: 'Escort Wing', weapon: wm.getWeapon('Escort Wing') },
+    ];
+
     const weaponPanelX = leftInset - 2;
     const weaponPanelW = compactHud ? 230 : 212;
-    const weaponPanelH = 88;
+    const weaponPanelH = 24 + weaponSlots.length * 22 + 14;
     const weaponPanelY = Math.max(topInset + 54, barY - weaponPanelH - (compactHud ? 32 : 22));
     ctx.beginPath();
     ctx.roundRect(weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH, 10);
@@ -230,12 +256,6 @@ export class UI {
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = 'rgba(160, 210, 255, 0.58)';
     ctx.fillText('ARMAMENT', weaponPanelX + 12, weaponPanelY + 18);
-
-    const weaponSlots = [
-      { name: 'Laser Beam', weapon: wm.getWeapon('Laser Beam') },
-      { name: 'Orbit Shield', weapon: wm.getWeapon('Orbit Shield') },
-      { name: 'Nova Blast', weapon: wm.getWeapon('Nova Blast') },
-    ];
 
     let wy = weaponPanelY + 38;
     for (const slot of weaponSlots) {
@@ -356,7 +376,7 @@ export class UI {
     const subAlpha = Math.max(0, Math.min(1, (t - 0.5) * 2));
     ctx.font = `${w < 500 ? 12 : 14}px monospace`;
     ctx.fillStyle = `rgba(100, 180, 255, ${subAlpha * 0.6})`;
-    ctx.fillText('SURVIVE 5 MINUTES', cx, cy + Math.max(0, titleSize * 0.55 - 18));
+    ctx.fillText('SURVIVE 8 MINUTES', cx, cy + Math.max(0, titleSize * 0.55 - 18));
 
     const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
     const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
@@ -369,7 +389,11 @@ export class UI {
     ctx.font = `${w < 500 ? 11 : 13}px monospace`;
     ctx.fillStyle = `rgba(160, 200, 255, ${helpAlpha * 0.5})`;
     ctx.fillText('MOVE TO SURVIVE  •  WEAPONS AUTO-FIRE', cx, cy + (w < 500 ? 88 : 95));
-    ctx.fillText('FIRST LEVEL-UPS UNLOCK NEW WEAPONS', cx, cy + (w < 500 ? 106 : 116));
+    if (w < 500) {
+      ctx.fillText('STAGES GET HARDER  •  BUILD CARRIES FORWARD', cx, cy + 106);
+    } else {
+      ctx.fillText('STAGES STACK DIFFICULTY  •  YOUR BUILD CARRIES FORWARD', cx, cy + 116);
+    }
   }
 
   drawNotifications(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game): void {
@@ -565,16 +589,18 @@ export class UI {
       ? (isTouchDevice() ? 'Tap to restart' : 'Press any key to restart')
       : `Restart in ${restartCountdown.toFixed(1)}s`;
     this.drawEndScreen(ctx, canvas, 'GAME OVER', [255, 68, 68], [80, 0, 0], [
-      `Survived  ${formatTime(game.elapsedTime)}`,
+      `Survived  ${formatTime(game.totalElapsedTime)}`,
+      `Reached Stage  ${game.stage}`,
       `Kills  ${player.kills}`,
     ], prompt);
   }
 
-  drawVictory(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, player: Player): void {
-    this.drawEndScreen(ctx, canvas, 'VICTORY!', [68, 255, 136], [80, 60, 0], [
+  drawVictory(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, player: Player, game: Game): void {
+    this.drawEndScreen(ctx, canvas, `STAGE ${game.stage} CLEAR`, [68, 255, 136], [80, 60, 0], [
+      `Next Stage  ${game.stage + 1}`,
       `Total Kills  ${player.kills}`,
       `Level Reached  ${player.level}`,
-    ], isTouchDevice() ? 'Tap to restart' : 'Press any key to restart');
+    ], isTouchDevice() ? 'Tap to enter the next stage' : 'Press any key to enter the next stage');
   }
 
   private drawEndScreen(

@@ -19,22 +19,22 @@ export type UpgradeChoice =
   | {
       id: string;
       kind: 'unlock';
-      weaponType: 'orbit' | 'nova';
-      weaponName: 'Orbit Shield' | 'Nova Blast';
+      weaponType: 'orbit' | 'nova' | 'escort';
+      weaponName: 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
       title: string;
       description: string;
       label: string;
-      iconName: 'Orbit Shield' | 'Nova Blast';
+      iconName: 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
       tags: UpgradeTag[];
     }
   | {
       id: string;
       kind: 'upgrade';
-      weaponName: 'Laser Beam' | 'Orbit Shield' | 'Nova Blast';
+      weaponName: 'Laser Beam' | 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
       title: string;
       description: string;
       label: string;
-      iconName: 'Laser Beam' | 'Orbit Shield' | 'Nova Blast';
+      iconName: 'Laser Beam' | 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
       tags: UpgradeTag[];
     }
   | {
@@ -183,6 +183,20 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
     });
   }
 
+  if (!wm.hasWeapon('Escort Wing')) {
+    unlocks.push({
+      id: 'unlock-escort',
+      kind: 'unlock',
+      weaponType: 'escort',
+      weaponName: 'Escort Wing',
+      title: 'Unlock Escort Wing',
+      description: 'Deploy a wingmate that tracks beside you and fires a support laser at the same cadence.',
+      label: 'New weapon: Escort Wing',
+      iconName: 'Escort Wing',
+      tags: ['force', 'surge'],
+    });
+  }
+
   for (const weapon of wm.weapons) {
     if (weapon.level >= weapon.maxLevel) continue;
 
@@ -217,6 +231,17 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
         description: 'Bigger detonation radius with a stronger burst to reset dangerous screens.',
         label: `Nova Blast → Lv.${weapon.level + 1}`,
         iconName: 'Nova Blast',
+        tags: ['force', 'surge'],
+      });
+    } else if (weapon.name === 'Escort Wing') {
+      upgrades.push({
+        id: `upgrade-escort-${weapon.level + 1}`,
+        kind: 'upgrade',
+        weaponName: 'Escort Wing',
+        title: `Escort Wing Lv ${weapon.level + 1}`,
+        description: 'Boost the wingmate beam so its support laser hits harder while keeping pace with your main emitter.',
+        label: `Escort Wing → Lv.${weapon.level + 1}`,
+        iconName: 'Escort Wing',
         tags: ['force', 'surge'],
       });
     }

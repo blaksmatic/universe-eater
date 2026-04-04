@@ -438,6 +438,11 @@ export class ParticleSystem {
   private particles: Particle[] = [];
   private screenEffects: ScreenEffect[] = [];
 
+  clear(): void {
+    this.particles = [];
+    this.screenEffects = [];
+  }
+
   spawnDeath(x: number, y: number, radius: number, outlineColor: string): void {
     if (this.particles.length >= MAX_PARTICLES) return;
 

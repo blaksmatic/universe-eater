@@ -18,10 +18,23 @@ body {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  position: relative;
 }
 
 canvas {
   display: block;
   width: 100vw;
   height: 100vh;
+  position: fixed;
+  inset: 0;
+}
+
+#playfield-3d {
+  z-index: 0;
+  pointer-events: none;
+}
+
+#game {
+  z-index: 1;
+  background: transparent;
 }

@@ -153,15 +153,13 @@ export class Player {
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const screen = camera.worldToScreen(this.x, this.y);
+    this.drawBody(ctx, screen.x, screen.y);
+    this.drawEffects(ctx, camera);
+  }
+
+  drawEffects(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const screen = camera.worldToScreen(this.x, this.y);
     const hpRatio = this.hp / this.maxHp;
-
-    // Inner body fill — subtle tinted core
-    ctx.beginPath();
-    ctx.arc(screen.x, screen.y, this.radius - 1, 0, TWO_PI);
-    ctx.fillStyle = `rgba(20, 50, 100, ${0.3 + hpRatio * 0.4})`;
-    ctx.fill();
-
-    drawSphereShading(ctx, screen.x, screen.y, this.radius, 60, 120, 255);
 
     // Outer ring
     ctx.beginPath();
@@ -239,5 +237,16 @@ export class Player {
       ctx.lineWidth = 1.5 * (1 - t);
       ctx.stroke();
     }
+  }
+
+  private drawBody(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const hpRatio = this.hp / this.maxHp;
+
+    ctx.beginPath();
+    ctx.arc(x, y, this.radius - 1, 0, TWO_PI);
+    ctx.fillStyle = `rgba(20, 50, 100, ${0.3 + hpRatio * 0.4})`;
+    ctx.fill();
+
+    drawSphereShading(ctx, x, y, this.radius, 60, 120, 255);
   }
 }

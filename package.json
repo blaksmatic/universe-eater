@@ -9,8 +9,12 @@
     "dev": "npm run build && concurrently \"npm run watch\" \"npm run serve\""
   },
   "devDependencies": {
+    "@types/three": "^0.180.0",
     "concurrently": "^9.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
   }
 }
