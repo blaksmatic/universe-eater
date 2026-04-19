@@ -1,4 +1,5 @@
 import { Game, GameState } from './game';
+import { getUiText, setLanguage, uiFont } from './i18n';
 import { UI } from './ui';
 import { consumeAnyTap, consumePauseTap } from './input';
 import { GameWorld } from './world';
@@ -104,6 +105,14 @@ export class GameRuntime {
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+
+    if (this.game.state !== GameState.PLAYING && this.game.state !== GameState.LEVEL_UP) {
+      const language = this.ui.getLanguageActionAt(this.canvas, x, y);
+      if (language) {
+        setLanguage(language);
+        return;
+      }
+    }
 
     if (this.game.state === GameState.LEVEL_UP) {
       const action = this.ui.getLevelUpActionAt(this.canvas, this.game, x, y);
@@ -243,12 +252,13 @@ export class GameRuntime {
     this.ctx.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
 
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.font = 'bold 48px monospace';
+    this.ctx.font = uiFont(48, 'bold');
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('PAUSED', this.viewportWidth / 2, this.viewportHeight / 2 - 10);
-    this.ctx.font = '18px monospace';
+    this.ctx.fillText(getUiText('paused'), this.viewportWidth / 2, this.viewportHeight / 2 - 10);
+    this.ctx.font = uiFont(18);
     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    this.ctx.fillText('Press ESC or tap II to resume', this.viewportWidth / 2, this.viewportHeight / 2 + 30);
+    this.ctx.fillText(getUiText('resumePrompt'), this.viewportWidth / 2, this.viewportHeight / 2 + 30);
+    this.ui.drawLanguageSelector(this.ctx, this.canvas);
   }
 
   private handleTapTransitions(): void {

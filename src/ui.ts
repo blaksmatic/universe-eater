@@ -1,6 +1,8 @@
 import { Game } from './game';
 import { Player } from './player';
 import { WeaponManager } from './weapons';
+import { Language, formatHudWeaponLevel, formatHullLabel, formatKillsStat, formatLevelReachedStat, formatNextStageStat, formatReachedStageStat, formatRestartCountdown, formatRerollLabel, formatStageClearTitle, formatStageLabel, formatSurvivedStat, formatTotalKillsStat, formatXpLabel, getGameTitleLines, getLanguage, getLanguageButtonLabel, getTagLabel, getUiText, getWeaponName, uiFont } from './i18n';
+import { PassiveName, WeaponName } from './ids';
 import { formatTime, TWO_PI, easeOutCubic } from './utils';
 import {
   touch,
@@ -11,7 +13,7 @@ import {
   getTouchUiMargin,
 } from './input';
 
-const WEAPON_SHAPES: Record<string, (ctx: CanvasRenderingContext2D, x: number, y: number, s: number) => void> = {
+const WEAPON_SHAPES: Record<WeaponName | PassiveName, (ctx: CanvasRenderingContext2D, x: number, y: number, s: number) => void> = {
   'Laser Beam': (ctx, x, y, s) => {
     ctx.beginPath();
     ctx.moveTo(x - s, y);
@@ -147,7 +149,7 @@ export class UI {
 
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = 'bold 28px monospace';
+    ctx.font = uiFont(28, 'bold');
     const timerText = game.timeRemainingFormatted;
     ctx.fillStyle = 'rgba(100, 200, 255, 0.15)';
     ctx.fillText(timerText, w / 2, topInset + 24);
@@ -157,20 +159,20 @@ export class UI {
     ctx.restore();
 
     ctx.textAlign = 'left';
-    ctx.font = 'bold 14px monospace';
+    ctx.font = uiFont(14, 'bold');
     ctx.fillStyle = hpRatio < 0.3 ? 'rgba(255, 120, 120, 0.95)' : 'rgba(190, 225, 255, 0.85)';
-    ctx.fillText(`HULL ${Math.ceil(hpRatio * 100)}%`, leftInset, topInset + 18);
+    ctx.fillText(formatHullLabel(Math.ceil(hpRatio * 100)), leftInset, topInset + 18);
     if (hpRatio < 0.35) {
       ctx.fillStyle = 'rgba(255, 120, 120, 0.65)';
-      ctx.font = '12px monospace';
-      ctx.fillText('CRITICAL', leftInset, topInset + 36);
+      ctx.font = uiFont(12);
+      ctx.fillText(getUiText('critical'), leftInset, topInset + 36);
     }
 
-    ctx.font = '11px monospace';
+    ctx.font = uiFont(11);
     ctx.fillStyle = 'rgba(160, 210, 255, 0.58)';
-    ctx.fillText(`STAGE ${game.stage}`, leftInset, topInset + 52);
+    ctx.fillText(formatStageLabel(game.stage), leftInset, topInset + 52);
 
-    ctx.font = '16px monospace';
+    ctx.font = uiFont(16);
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.fillText(`${player.kills}`, w - rightInset, topInset + 19);
@@ -182,14 +184,14 @@ export class UI {
 
     if (game.activeDoctrines.length > 0) {
       ctx.textAlign = 'right';
-      ctx.font = 'bold 10px monospace';
+      ctx.font = uiFont(10, 'bold');
       ctx.fillStyle = 'rgba(165, 205, 255, 0.55)';
-      ctx.fillText('DOCTRINES', w - rightInset, topInset + 38);
+      ctx.fillText(getUiText('doctrines'), w - rightInset, topInset + 38);
 
-      ctx.font = '11px monospace';
+      ctx.font = uiFont(11);
       for (let i = 0; i < game.activeDoctrines.length; i++) {
         ctx.fillStyle = 'rgba(230, 240, 255, 0.72)';
-        ctx.fillText(game.activeDoctrines[i].shortLabel, w - rightInset, topInset + 54 + i * 14);
+        ctx.fillText(game.activeDoctrines[i].shortLabel(), w - rightInset, topInset + 54 + i * 14);
       }
     }
 
@@ -229,11 +231,11 @@ export class UI {
     }
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.font = '11px monospace';
+    ctx.font = uiFont(11);
     ctx.textAlign = 'center';
-    ctx.fillText(`LV ${player.level}  ${Math.floor(player.xp)}/${player.getXpForNextLevel()} XP`, w / 2, barY - 6);
+    ctx.fillText(formatXpLabel(player.level, player.xp, player.getXpForNextLevel()), w / 2, barY - 6);
 
-    const weaponSlots = [
+    const weaponSlots: { name: WeaponName; weapon: ReturnType<WeaponManager['getWeapon']> }[] = [
       { name: 'Laser Beam', weapon: wm.getWeapon('Laser Beam') },
       { name: 'Orbit Shield', weapon: wm.getWeapon('Orbit Shield') },
       { name: 'Nova Blast', weapon: wm.getWeapon('Nova Blast') },
@@ -253,9 +255,9 @@ export class UI {
     ctx.stroke();
 
     ctx.textAlign = 'left';
-    ctx.font = 'bold 11px monospace';
+    ctx.font = uiFont(11, 'bold');
     ctx.fillStyle = 'rgba(160, 210, 255, 0.58)';
-    ctx.fillText('ARMAMENT', weaponPanelX + 12, weaponPanelY + 18);
+    ctx.fillText(getUiText('armament'), weaponPanelX + 12, weaponPanelY + 18);
 
     let wy = weaponPanelY + 38;
     for (const slot of weaponSlots) {
@@ -263,16 +265,16 @@ export class UI {
       if (drawIcon) {
         drawIcon(ctx, weaponPanelX + 14, wy - 4, 7);
       }
-      ctx.font = '13px monospace';
+      ctx.font = uiFont(13);
       if (slot.weapon) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.74)';
-        ctx.fillText(slot.name, weaponPanelX + 28, wy);
+        ctx.fillText(getWeaponName(slot.name), weaponPanelX + 28, wy);
         ctx.fillStyle = 'rgba(110, 205, 255, 0.95)';
-        ctx.fillText(`LV ${slot.weapon.level}`, weaponPanelX + 160, wy);
+        ctx.fillText(formatHudWeaponLevel(slot.weapon.level), weaponPanelX + 160, wy);
       } else {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.fillText(slot.name, weaponPanelX + 28, wy);
-        ctx.fillText('LOCKED', weaponPanelX + 160, wy);
+        ctx.fillText(getWeaponName(slot.name), weaponPanelX + 28, wy);
+        ctx.fillText(getUiText('locked'), weaponPanelX + 160, wy);
       }
       wy += 22;
     }
@@ -352,48 +354,51 @@ export class UI {
     const titleSize = compactTitle
       ? Math.max(24, Math.min(34, Math.floor(w * 0.09)))
       : Math.max(30, Math.min(52, Math.floor(w * 0.13)));
-    ctx.font = `bold ${titleSize}px monospace`;
+    ctx.font = uiFont(titleSize, 'bold');
 
-    if (compactTitle) {
+    const titleLines = getGameTitleLines(compactTitle);
+    if (titleLines.length === 2) {
       ctx.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
-      ctx.fillText('UNIVERSE', cx, cy - 44);
-      ctx.fillText('EATER', cx, cy - 6);
+      ctx.fillText(titleLines[0], cx, cy - 44);
+      ctx.fillText(titleLines[1], cx, cy - 6);
       ctx.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
-      ctx.fillText('UNIVERSE', cx + 1, cy - 43);
-      ctx.fillText('EATER', cx + 1, cy - 5);
+      ctx.fillText(titleLines[0], cx + 1, cy - 43);
+      ctx.fillText(titleLines[1], cx + 1, cy - 5);
       ctx.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
-      ctx.fillText('UNIVERSE', cx, cy - 44);
-      ctx.fillText('EATER', cx, cy - 6);
+      ctx.fillText(titleLines[0], cx, cy - 44);
+      ctx.fillText(titleLines[1], cx, cy - 6);
     } else {
       ctx.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
-      ctx.fillText('UNIVERSE EATER', cx, cy - 30);
+      ctx.fillText(titleLines[0], cx, cy - 30);
       ctx.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
-      ctx.fillText('UNIVERSE EATER', cx + 1, cy - 29);
+      ctx.fillText(titleLines[0], cx + 1, cy - 29);
       ctx.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
-      ctx.fillText('UNIVERSE EATER', cx, cy - 30);
+      ctx.fillText(titleLines[0], cx, cy - 30);
     }
 
     const subAlpha = Math.max(0, Math.min(1, (t - 0.5) * 2));
-    ctx.font = `${w < 500 ? 12 : 14}px monospace`;
+    ctx.font = uiFont(w < 500 ? 12 : 14);
     ctx.fillStyle = `rgba(100, 180, 255, ${subAlpha * 0.6})`;
-    ctx.fillText('SURVIVE 8 MINUTES', cx, cy + Math.max(0, titleSize * 0.55 - 18));
+    ctx.fillText(getUiText('titleSubtitle'), cx, cy + Math.max(0, titleSize * 0.55 - 18));
 
     const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
     const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
-    ctx.font = `${w < 500 ? 14 : 16}px monospace`;
+    ctx.font = uiFont(w < 500 ? 14 : 16);
     ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe})`;
-    const startMsg = isTouchDevice() ? 'Tap to start' : 'Press any key to start';
+    const startMsg = isTouchDevice() ? getUiText('tapToStart') : getUiText('pressAnyKeyToStart');
     ctx.fillText(startMsg, cx, cy + 60);
 
     const helpAlpha = Math.max(0, Math.min(1, (t - 1.3) * 2));
-    ctx.font = `${w < 500 ? 11 : 13}px monospace`;
+    ctx.font = uiFont(w < 500 ? 11 : 13);
     ctx.fillStyle = `rgba(160, 200, 255, ${helpAlpha * 0.5})`;
-    ctx.fillText('MOVE TO SURVIVE  •  WEAPONS AUTO-FIRE', cx, cy + (w < 500 ? 88 : 95));
+    ctx.fillText(getUiText('titleHintPrimary'), cx, cy + (w < 500 ? 88 : 95));
     if (w < 500) {
-      ctx.fillText('STAGES GET HARDER  •  BUILD CARRIES FORWARD', cx, cy + 106);
+      ctx.fillText(getUiText('titleHintSecondaryCompact'), cx, cy + 106);
     } else {
-      ctx.fillText('STAGES STACK DIFFICULTY  •  YOUR BUILD CARRIES FORWARD', cx, cy + 116);
+      ctx.fillText(getUiText('titleHintSecondaryWide'), cx, cy + 116);
     }
+
+    this.drawLanguageSelector(ctx, canvas);
   }
 
   drawNotifications(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, game: Game): void {
@@ -416,12 +421,13 @@ export class UI {
       let fontSize = isUnlock ? 22 : 18;
       const maxTextWidth = canvasWidth - 70;
       do {
-        ctx.font = `bold ${fontSize}px monospace`;
-        if (ctx.measureText(n.text).width <= maxTextWidth || fontSize <= 12) break;
+        ctx.font = uiFont(fontSize, 'bold');
+        const text = n.text();
+        if (ctx.measureText(text).width <= maxTextWidth || fontSize <= 12) break;
         fontSize--;
       } while (fontSize > 12);
 
-      const textWidth = ctx.measureText(n.text).width;
+      const textWidth = ctx.measureText(n.text()).width;
       const pillW = Math.min(canvasWidth - 26, textWidth + (isUnlock ? 42 : 30));
       const pillH = fontSize >= 18 ? (isUnlock ? 36 : 30) : 28;
       const pillX = (canvasWidth - pillW) / 2;
@@ -435,7 +441,7 @@ export class UI {
       ctx.stroke();
 
       ctx.fillStyle = `rgba(${accent.text[0]}, ${accent.text[1]}, ${accent.text[2]}, ${n.alpha})`;
-      ctx.fillText(n.text, canvasWidth / 2, y);
+      ctx.fillText(n.text(), canvasWidth / 2, y);
     }
   }
 
@@ -448,17 +454,17 @@ export class UI {
     ctx.fillRect(0, 0, w, h);
 
     ctx.textAlign = 'center';
-    ctx.font = 'bold 38px monospace';
+    ctx.font = uiFont(38, 'bold');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('LEVEL UP', w / 2, layout.headerY);
+    ctx.fillText(getUiText('levelUpTitle'), w / 2, layout.headerY);
 
-    ctx.font = '14px monospace';
+    ctx.font = uiFont(14);
     ctx.fillStyle = 'rgba(180, 215, 255, 0.72)';
-    ctx.fillText('Choose your next mutation', w / 2, layout.headerY + 28);
-    ctx.font = '12px monospace';
+    ctx.fillText(getUiText('levelUpSubtitle'), w / 2, layout.headerY + 28);
+    ctx.font = uiFont(12);
     ctx.fillStyle = 'rgba(180, 215, 255, 0.48)';
     ctx.fillText(
-      isTouchDevice() ? 'Tap a card to mutate' : 'Arrow keys select  •  Enter confirms  •  R rerolls',
+      isTouchDevice() ? getUiText('tapCardToMutate') : getUiText('keyboardDraftControls'),
       w / 2,
       layout.headerY + 48,
     );
@@ -497,23 +503,23 @@ export class UI {
       if (drawIcon) drawIcon(ctx, card.x + 30, card.y + 32, 9);
 
       ctx.textAlign = 'left';
-      ctx.font = 'bold 12px monospace';
+      ctx.font = uiFont(12, 'bold');
       ctx.fillStyle = choice.kind === 'unlock' ? 'rgba(255, 210, 135, 0.85)' : 'rgba(145, 210, 255, 0.72)';
       ctx.fillText(`${i + 1}`, card.x + 56, card.y + 20);
 
-      ctx.font = 'bold 18px monospace';
+      ctx.font = uiFont(18, 'bold');
       ctx.fillStyle = '#ffffff';
-      this.drawWrappedText(ctx, choice.title, card.x + 20, card.y + 58, card.width - 40, 22);
+      this.drawWrappedText(ctx, choice.title(), card.x + 20, card.y + 58, card.width - 40, 22);
 
-      ctx.font = '13px monospace';
+      ctx.font = uiFont(13);
       ctx.fillStyle = 'rgba(215, 228, 245, 0.72)';
-      this.drawWrappedText(ctx, choice.description, card.x + 20, card.y + 92, card.width - 40, 18);
+      this.drawWrappedText(ctx, choice.description(), card.x + 20, card.y + 92, card.width - 40, 18);
 
       let chipX = card.x + 20;
       const chipY = card.y + card.height - 26;
       for (const tag of choice.tags) {
-        const label = tag.toUpperCase();
-        ctx.font = 'bold 10px monospace';
+        const label = getTagLabel(tag);
+        ctx.font = uiFont(10, 'bold');
         const chipW = ctx.measureText(label).width + 16;
         ctx.beginPath();
         ctx.roundRect(chipX, chipY, chipW, 18, 9);
@@ -540,11 +546,11 @@ export class UI {
     ctx.stroke();
 
     ctx.textAlign = 'center';
-    ctx.font = 'bold 13px monospace';
+    ctx.font = uiFont(13, 'bold');
     ctx.fillStyle = rerollEnabled ? 'rgba(200, 230, 255, 0.82)' : 'rgba(170, 170, 180, 0.55)';
     const rerollLabel = rerollEnabled
-      ? `REROLL [R]  ${game.rerollsRemaining} LEFT`
-      : 'REROLL SPENT';
+      ? formatRerollLabel(game.rerollsRemaining)
+      : getUiText('rerollSpent');
     ctx.fillText(rerollLabel, reroll.x + reroll.width / 2, reroll.y + 22);
   }
 
@@ -586,21 +592,21 @@ export class UI {
     restartCountdown: number,
   ): void {
     const prompt = canRestart
-      ? (isTouchDevice() ? 'Tap to restart' : 'Press any key to restart')
-      : `Restart in ${restartCountdown.toFixed(1)}s`;
-    this.drawEndScreen(ctx, canvas, 'GAME OVER', [255, 68, 68], [80, 0, 0], [
-      `Survived  ${formatTime(game.totalElapsedTime)}`,
-      `Reached Stage  ${game.stage}`,
-      `Kills  ${player.kills}`,
-    ], prompt);
+      ? (isTouchDevice() ? getUiText('tapToRestart') : getUiText('pressAnyKeyToRestart'))
+      : formatRestartCountdown(restartCountdown);
+    this.drawEndScreen(ctx, canvas, getUiText('gameOver'), [255, 68, 68], [80, 0, 0], [
+      formatSurvivedStat(formatTime(game.totalElapsedTime)),
+      formatReachedStageStat(game.stage),
+      formatKillsStat(player.kills),
+    ], prompt, !canRestart);
   }
 
   drawVictory(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, player: Player, game: Game): void {
-    this.drawEndScreen(ctx, canvas, `STAGE ${game.stage} CLEAR`, [68, 255, 136], [80, 60, 0], [
-      `Next Stage  ${game.stage + 1}`,
-      `Total Kills  ${player.kills}`,
-      `Level Reached  ${player.level}`,
-    ], isTouchDevice() ? 'Tap to enter the next stage' : 'Press any key to enter the next stage');
+    this.drawEndScreen(ctx, canvas, formatStageClearTitle(game.stage), [68, 255, 136], [80, 60, 0], [
+      formatNextStageStat(game.stage + 1),
+      formatTotalKillsStat(player.kills),
+      formatLevelReachedStat(player.level),
+    ], isTouchDevice() ? getUiText('tapToNextStage') : getUiText('pressAnyKeyToNextStage'));
   }
 
   private drawEndScreen(
@@ -611,6 +617,7 @@ export class UI {
     vignetteColor: [number, number, number],
     stats: string[],
     promptText: string,
+    subduedPrompt = false,
   ): void {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
@@ -635,7 +642,7 @@ export class UI {
     ctx.save();
     ctx.translate(cx, cy - 50);
     ctx.scale(titleScale, titleScale);
-    ctx.font = 'bold 52px monospace';
+    ctx.font = uiFont(52, 'bold');
     ctx.textAlign = 'center';
     ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${titleAlpha * 0.15})`;
     ctx.fillText(title, 0, 0);
@@ -644,7 +651,7 @@ export class UI {
     ctx.restore();
 
     ctx.textAlign = 'center';
-    ctx.font = '18px monospace';
+    ctx.font = uiFont(18);
     for (let i = 0; i < stats.length; i++) {
       const statAlpha = Math.max(0, Math.min(1, (t - 0.4 - i * 0.2) * 3));
       ctx.fillStyle = `rgba(255, 255, 255, ${statAlpha * 0.7})`;
@@ -653,9 +660,10 @@ export class UI {
 
     const promptAlpha = Math.max(0, Math.min(1, (t - 1.2) * 2));
     const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
-    ctx.font = '14px monospace';
-    ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha * (promptText.startsWith('Restart in') ? 0.55 : breathe * 0.5)})`;
+    ctx.font = uiFont(14);
+    ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha * (subduedPrompt ? 0.55 : breathe * 0.5)})`;
     ctx.fillText(promptText, cx, cy + 95);
+    this.drawLanguageSelector(ctx, canvas);
   }
 
   drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number, hpRatio: number): void {
@@ -748,6 +756,65 @@ export class UI {
     };
   }
 
+  drawLanguageSelector(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const layout = this.getLanguageSelectorLayout(canvas);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = uiFont(11, 'bold');
+    ctx.fillStyle = 'rgba(180, 215, 255, 0.7)';
+    ctx.fillText(getUiText('languageLabel'), canvas.clientWidth / 2, layout.labelY);
+
+    for (const button of layout.buttons) {
+      const active = button.language === getLanguage();
+      ctx.beginPath();
+      ctx.roundRect(button.x, button.y, button.width, button.height, 10);
+      ctx.fillStyle = active ? 'rgba(70, 132, 230, 0.42)' : 'rgba(10, 16, 30, 0.72)';
+      ctx.fill();
+      ctx.strokeStyle = active ? 'rgba(170, 220, 255, 0.8)' : 'rgba(160, 190, 235, 0.22)';
+      ctx.lineWidth = active ? 1.5 : 1;
+      ctx.stroke();
+
+      ctx.font = uiFont(13, active ? 'bold' : 'normal');
+      ctx.fillStyle = active ? '#ffffff' : 'rgba(215, 228, 245, 0.78)';
+      ctx.fillText(getLanguageButtonLabel(button.language), button.x + button.width / 2, button.y + 21);
+    }
+    ctx.restore();
+  }
+
+  getLanguageActionAt(canvas: HTMLCanvasElement, x: number, y: number): Language | null {
+    const layout = this.getLanguageSelectorLayout(canvas);
+    for (const button of layout.buttons) {
+      if (x >= button.x && x <= button.x + button.width && y >= button.y && y <= button.y + button.height) {
+        return button.language;
+      }
+    }
+    return null;
+  }
+
+  private getLanguageSelectorLayout(canvas: HTMLCanvasElement): {
+    labelY: number;
+    buttons: { language: Language; x: number; y: number; width: number; height: number }[];
+  } {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const safe = getSafeAreaInsets();
+    const bottomInset = safe.bottom + getTouchUiMargin();
+    const buttonWidth = 112;
+    const buttonHeight = 32;
+    const gap = 12;
+    const totalWidth = buttonWidth * 2 + gap;
+    const startX = (w - totalWidth) / 2;
+    const y = h - bottomInset - buttonHeight - 12;
+
+    return {
+      labelY: y - 10,
+      buttons: [
+        { language: 'zh-CN', x: startX, y, width: buttonWidth, height: buttonHeight },
+        { language: 'en', x: startX + buttonWidth + gap, y, width: buttonWidth, height: buttonHeight },
+      ],
+    };
+  }
+
   private drawWrappedText(
     ctx: CanvasRenderingContext2D,
     text: string,
@@ -756,15 +823,15 @@ export class UI {
     maxWidth: number,
     lineHeight: number,
   ): void {
-    const words = text.split(' ');
+    const tokens = text.includes(' ') ? text.split(/(\s+)/).filter(Boolean) : Array.from(text);
     let line = '';
     let lineY = y;
 
-    for (const word of words) {
-      const testLine = line ? `${line} ${word}` : word;
+    for (const token of tokens) {
+      const testLine = `${line}${token}`;
       if (ctx.measureText(testLine).width > maxWidth && line) {
-        ctx.fillText(line, x, lineY);
-        line = word;
+        ctx.fillText(line.trimEnd(), x, lineY);
+        line = token.trimStart();
         lineY += lineHeight;
       } else {
         line = testLine;
@@ -772,7 +839,7 @@ export class UI {
     }
 
     if (line) {
-      ctx.fillText(line, x, lineY);
+      ctx.fillText(line.trimEnd(), x, lineY);
     }
   }
 }

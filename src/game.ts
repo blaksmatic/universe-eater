@@ -10,6 +10,7 @@ import {
   createEmptyTraitCounts,
   getNewDoctrines,
 } from './upgrades';
+import { TextResolver, formatDoctrineOnline, formatStageEngaged, getUiText } from './i18n';
 import { formatTime } from './utils';
 
 export enum GameState {
@@ -22,7 +23,7 @@ export enum GameState {
 }
 
 export interface Notification {
-  text: string;
+  text: TextResolver;
   timer: number;
   alpha: number;
   kind: 'info' | 'upgrade' | 'unlock';
@@ -35,7 +36,7 @@ export class Game {
   totalElapsedTime = 0;
   gameDuration = 480;
   notifications: Notification[] = [{
-    text: 'Keep moving. First level-ups unlock new weapons.',
+    text: () => getUiText('keepMovingTutorial'),
     timer: 4,
     alpha: 1,
     kind: 'info',
@@ -64,7 +65,7 @@ export class Game {
     this.draftChoices = [];
     this.selectedDraftIndex = 0;
     this.notifications.push({
-      text: `Stage ${this.stage} engaged`,
+      text: () => formatStageEngaged(this.stage),
       timer: 2.8,
       alpha: 1,
       kind: 'unlock',
@@ -141,7 +142,7 @@ export class Game {
     this.draftChoices = choices;
     this.selectedDraftIndex = 0;
     this.notifications.push({
-      text: 'Draft rerolled',
+      text: () => getUiText('draftRerolled'),
       timer: 1.6,
       alpha: 1,
       kind: 'info',
@@ -172,7 +173,7 @@ export class Game {
       applyDoctrine(doctrine, wm, player);
       this.activeDoctrines.push(doctrine);
       this.notifications.push({
-        text: `${doctrine.title} online`,
+        text: () => formatDoctrineOnline(doctrine.id),
         timer: 3.2,
         alpha: 1,
         kind: 'unlock',

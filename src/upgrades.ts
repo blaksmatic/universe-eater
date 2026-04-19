@@ -1,14 +1,27 @@
 import { Player } from './player';
 import { WeaponManager } from './weapons';
-
-type PassiveId = 'hull' | 'thrusters' | 'nanoforge' | 'plating';
-export type UpgradeTag = 'force' | 'ward' | 'surge' | 'forge';
+import { DoctrineId, PassiveId, PassiveName, UpgradeTag, WeaponName } from './ids';
+import {
+  TextResolver,
+  getDoctrineDescription,
+  getDoctrineShortLabel,
+  getDoctrineTitle,
+  getPassiveDescription,
+  getPassiveLabel,
+  getPassiveTitle,
+  getUnlockDescription,
+  getUnlockLabel,
+  getUnlockTitle,
+  getWeaponUpgradeDescription,
+  getWeaponUpgradeLabel,
+  getWeaponUpgradeTitle,
+} from './i18n';
 
 export interface Doctrine {
-  id: string;
-  title: string;
-  shortLabel: string;
-  description: string;
+  id: DoctrineId;
+  title: TextResolver;
+  shortLabel: TextResolver;
+  description: TextResolver;
   thresholdTag: UpgradeTag;
   thresholdCount: number;
 }
@@ -20,64 +33,64 @@ export type UpgradeChoice =
       id: string;
       kind: 'unlock';
       weaponType: 'orbit' | 'nova' | 'escort';
-      weaponName: 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
-      title: string;
-      description: string;
-      label: string;
-      iconName: 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
+      weaponName: Exclude<WeaponName, 'Laser Beam'>;
+      title: TextResolver;
+      description: TextResolver;
+      label: TextResolver;
+      iconName: Exclude<WeaponName, 'Laser Beam'>;
       tags: UpgradeTag[];
     }
   | {
       id: string;
       kind: 'upgrade';
-      weaponName: 'Laser Beam' | 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
-      title: string;
-      description: string;
-      label: string;
-      iconName: 'Laser Beam' | 'Orbit Shield' | 'Nova Blast' | 'Escort Wing';
+      weaponName: WeaponName;
+      title: TextResolver;
+      description: TextResolver;
+      label: TextResolver;
+      iconName: WeaponName;
       tags: UpgradeTag[];
     }
   | {
       id: string;
       kind: 'passive';
       passiveId: PassiveId;
-      title: string;
-      description: string;
-      label: string;
-      iconName: 'Reinforced Hull' | 'Overdrive Thrusters' | 'Nanoforge' | 'Phase Plating';
+      title: TextResolver;
+      description: TextResolver;
+      label: TextResolver;
+      iconName: PassiveName;
       tags: UpgradeTag[];
     };
 
 const DOCTRINES: Doctrine[] = [
   {
     id: 'bulwark',
-    title: 'Bulwark Protocol',
-    shortLabel: 'BULWARK',
-    description: 'Ward upgrades harden the core. Gain +20 max hull and longer contact grace.',
+    title: () => getDoctrineTitle('bulwark'),
+    shortLabel: () => getDoctrineShortLabel('bulwark'),
+    description: () => getDoctrineDescription('bulwark'),
     thresholdTag: 'ward',
     thresholdCount: 2,
   },
   {
     id: 'slipstream',
-    title: 'Slipstream Doctrine',
-    shortLabel: 'SLIPSTREAM',
-    description: 'Surge upgrades accelerate the whole rig. Gain speed and faster weapon cadence.',
+    title: () => getDoctrineTitle('slipstream'),
+    shortLabel: () => getDoctrineShortLabel('slipstream'),
+    description: () => getDoctrineDescription('slipstream'),
     thresholdTag: 'surge',
     thresholdCount: 2,
   },
   {
     id: 'nanite-lattice',
-    title: 'Nanite Lattice',
-    shortLabel: 'LATTICE',
-    description: 'Forge upgrades reinforce the swarm-eater shell. Gain regen and weapon damage.',
+    title: () => getDoctrineTitle('nanite-lattice'),
+    shortLabel: () => getDoctrineShortLabel('nanite-lattice'),
+    description: () => getDoctrineDescription('nanite-lattice'),
     thresholdTag: 'forge',
     thresholdCount: 2,
   },
   {
     id: 'annihilation',
-    title: 'Annihilation Pattern',
-    shortLabel: 'ANNIHILATION',
-    description: 'Force upgrades sharpen every emitter. Your weapons hit harder and cycle faster.',
+    title: () => getDoctrineTitle('annihilation'),
+    shortLabel: () => getDoctrineShortLabel('annihilation'),
+    description: () => getDoctrineDescription('annihilation'),
     thresholdTag: 'force',
     thresholdCount: 3,
   },
@@ -111,9 +124,9 @@ function buildPassiveChoices(): UpgradeChoice[] {
       id: 'passive-hull',
       kind: 'passive',
       passiveId: 'hull',
-      title: 'Reinforced Hull',
-      description: 'Increase maximum hull by 25 and instantly repair the new plating.',
-      label: 'Reinforced Hull +25',
+      title: () => getPassiveTitle('hull'),
+      description: () => getPassiveDescription('hull'),
+      label: () => getPassiveLabel('hull'),
       iconName: 'Reinforced Hull',
       tags: ['ward'],
     },
@@ -121,9 +134,9 @@ function buildPassiveChoices(): UpgradeChoice[] {
       id: 'passive-thrusters',
       kind: 'passive',
       passiveId: 'thrusters',
-      title: 'Overdrive Thrusters',
-      description: 'Boost movement speed so you can kite wider and break collapsing swarms.',
-      label: 'Thrusters +18',
+      title: () => getPassiveTitle('thrusters'),
+      description: () => getPassiveDescription('thrusters'),
+      label: () => getPassiveLabel('thrusters'),
       iconName: 'Overdrive Thrusters',
       tags: ['surge'],
     },
@@ -131,9 +144,9 @@ function buildPassiveChoices(): UpgradeChoice[] {
       id: 'passive-nanoforge',
       kind: 'passive',
       passiveId: 'nanoforge',
-      title: 'Nanoforge',
-      description: 'Accelerate hull regeneration and patch yourself up on install.',
-      label: 'Nanoforge installed',
+      title: () => getPassiveTitle('nanoforge'),
+      description: () => getPassiveDescription('nanoforge'),
+      label: () => getPassiveLabel('nanoforge'),
       iconName: 'Nanoforge',
       tags: ['forge'],
     },
@@ -141,9 +154,9 @@ function buildPassiveChoices(): UpgradeChoice[] {
       id: 'passive-plating',
       kind: 'passive',
       passiveId: 'plating',
-      title: 'Phase Plating',
-      description: 'Reduce incoming damage so mistakes cost less and boss pressure lands cleaner.',
-      label: 'Phase Plating hardened',
+      title: () => getPassiveTitle('plating'),
+      description: () => getPassiveDescription('plating'),
+      label: () => getPassiveLabel('plating'),
       iconName: 'Phase Plating',
       tags: ['ward', 'forge'],
     },
@@ -161,9 +174,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
       kind: 'unlock',
       weaponType: 'orbit',
       weaponName: 'Orbit Shield',
-      title: 'Unlock Orbit Shield',
-      description: 'Add rotating satellites that chew through anything close to your hull.',
-      label: 'New weapon: Orbit Shield',
+      title: () => getUnlockTitle('Orbit Shield'),
+      description: () => getUnlockDescription('Orbit Shield'),
+      label: () => getUnlockLabel('Orbit Shield'),
       iconName: 'Orbit Shield',
       tags: ['ward'],
     });
@@ -175,9 +188,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
       kind: 'unlock',
       weaponType: 'nova',
       weaponName: 'Nova Blast',
-      title: 'Unlock Nova Blast',
-      description: 'Gain a timed shockwave that clears breathing room when swarms collapse in.',
-      label: 'New weapon: Nova Blast',
+      title: () => getUnlockTitle('Nova Blast'),
+      description: () => getUnlockDescription('Nova Blast'),
+      label: () => getUnlockLabel('Nova Blast'),
       iconName: 'Nova Blast',
       tags: ['force', 'surge'],
     });
@@ -189,9 +202,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
       kind: 'unlock',
       weaponType: 'escort',
       weaponName: 'Escort Wing',
-      title: 'Unlock Escort Wing',
-      description: 'Deploy a wingmate that tracks beside you and fires a support laser at the same cadence.',
-      label: 'New weapon: Escort Wing',
+      title: () => getUnlockTitle('Escort Wing'),
+      description: () => getUnlockDescription('Escort Wing'),
+      label: () => getUnlockLabel('Escort Wing'),
       iconName: 'Escort Wing',
       tags: ['force', 'surge'],
     });
@@ -205,9 +218,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
         id: `upgrade-laser-${weapon.level + 1}`,
         kind: 'upgrade',
         weaponName: 'Laser Beam',
-        title: `Laser Beam Lv ${weapon.level + 1}`,
-        description: 'Higher damage, longer reach, and faster beam cadence.',
-        label: `Laser Beam → Lv.${weapon.level + 1}`,
+        title: () => getWeaponUpgradeTitle('Laser Beam', weapon.level + 1),
+        description: () => getWeaponUpgradeDescription('Laser Beam'),
+        label: () => getWeaponUpgradeLabel('Laser Beam', weapon.level + 1),
         iconName: 'Laser Beam',
         tags: ['force', 'forge'],
       });
@@ -216,9 +229,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
         id: `upgrade-orbit-${weapon.level + 1}`,
         kind: 'upgrade',
         weaponName: 'Orbit Shield',
-        title: `Orbit Shield Lv ${weapon.level + 1}`,
-        description: 'More damage and wider orbit pressure, with extra satellites at key levels.',
-        label: `Orbit Shield → Lv.${weapon.level + 1}`,
+        title: () => getWeaponUpgradeTitle('Orbit Shield', weapon.level + 1),
+        description: () => getWeaponUpgradeDescription('Orbit Shield'),
+        label: () => getWeaponUpgradeLabel('Orbit Shield', weapon.level + 1),
         iconName: 'Orbit Shield',
         tags: ['ward'],
       });
@@ -227,9 +240,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
         id: `upgrade-nova-${weapon.level + 1}`,
         kind: 'upgrade',
         weaponName: 'Nova Blast',
-        title: `Nova Blast Lv ${weapon.level + 1}`,
-        description: 'Bigger detonation radius with a stronger burst to reset dangerous screens.',
-        label: `Nova Blast → Lv.${weapon.level + 1}`,
+        title: () => getWeaponUpgradeTitle('Nova Blast', weapon.level + 1),
+        description: () => getWeaponUpgradeDescription('Nova Blast'),
+        label: () => getWeaponUpgradeLabel('Nova Blast', weapon.level + 1),
         iconName: 'Nova Blast',
         tags: ['force', 'surge'],
       });
@@ -238,9 +251,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
         id: `upgrade-escort-${weapon.level + 1}`,
         kind: 'upgrade',
         weaponName: 'Escort Wing',
-        title: `Escort Wing Lv ${weapon.level + 1}`,
-        description: 'Boost the wingmate beam so its support laser hits harder while keeping pace with your main emitter.',
-        label: `Escort Wing → Lv.${weapon.level + 1}`,
+        title: () => getWeaponUpgradeTitle('Escort Wing', weapon.level + 1),
+        description: () => getWeaponUpgradeDescription('Escort Wing'),
+        label: () => getWeaponUpgradeLabel('Escort Wing', weapon.level + 1),
         iconName: 'Escort Wing',
         tags: ['force', 'surge'],
       });

@@ -50,37 +50,405 @@ canvas {
 <canvas id="game"></canvas>
 <script>"use strict";
 (() => {
+  // src/i18n.ts
+  var STORAGE_KEY = "universe-eater.language";
+  var DEFAULT_LANGUAGE = "zh-CN";
+  var UI_TEXT = {
+    "zh-CN": {
+      gameTitle: "\u5B87\u5B99\u541E\u566C\u8005",
+      languageLabel: "\u8BED\u8A00 / Language",
+      armament: "\u6B66\u88C5",
+      critical: "\u5371\u9669",
+      doctrines: "\u5B66\u8BF4",
+      locked: "\u672A\u89E3\u9501",
+      titleSubtitle: "\u751F\u5B58 8 \u5206\u949F",
+      tapToStart: "\u70B9\u51FB\u5F00\u59CB",
+      pressAnyKeyToStart: "\u6309\u4EFB\u610F\u952E\u5F00\u59CB",
+      titleHintPrimary: "\u79FB\u52A8\u6C42\u751F  \u2022  \u6B66\u5668\u81EA\u52A8\u5F00\u706B",
+      titleHintSecondaryCompact: "\u9636\u6BB5\u8D8A\u6765\u8D8A\u96BE  \u2022  \u6784\u7B51\u4F1A\u5EF6\u7EED",
+      titleHintSecondaryWide: "\u9636\u6BB5\u96BE\u5EA6\u4F1A\u53E0\u52A0  \u2022  \u6784\u7B51\u4F1A\u5EF6\u7EED\u5230\u4E0B\u4E00\u9636\u6BB5",
+      levelUpTitle: "\u5347\u7EA7",
+      levelUpSubtitle: "\u9009\u62E9\u4E0B\u4E00\u9879\u53D8\u5F02",
+      tapCardToMutate: "\u70B9\u51FB\u5361\u724C\u8FDB\u884C\u53D8\u5F02",
+      keyboardDraftControls: "\u65B9\u5411\u952E\u9009\u62E9  \u2022  Enter \u786E\u8BA4  \u2022  R \u91CD\u62BD",
+      rerollSpent: "\u91CD\u62BD\u5DF2\u7528\u5B8C",
+      paused: "\u5DF2\u6682\u505C",
+      resumePrompt: "\u6309 ESC \u6216\u70B9\u51FB II \u7EE7\u7EED",
+      tapToRestart: "\u70B9\u51FB\u91CD\u65B0\u5F00\u59CB",
+      pressAnyKeyToRestart: "\u6309\u4EFB\u610F\u952E\u91CD\u65B0\u5F00\u59CB",
+      tapToNextStage: "\u70B9\u51FB\u8FDB\u5165\u4E0B\u4E00\u9636\u6BB5",
+      pressAnyKeyToNextStage: "\u6309\u4EFB\u610F\u952E\u8FDB\u5165\u4E0B\u4E00\u9636\u6BB5",
+      gameOver: "\u6E38\u620F\u7ED3\u675F",
+      keepMovingTutorial: "\u6301\u7EED\u79FB\u52A8\uFF0C\u9996\u6B21\u5347\u7EA7\u4F1A\u89E3\u9501\u65B0\u6B66\u5668\u3002",
+      draftRerolled: "\u5347\u7EA7\u9009\u9879\u5DF2\u91CD\u62BD"
+    },
+    en: {
+      gameTitle: "Universe Eater",
+      languageLabel: "Language / \u8BED\u8A00",
+      armament: "ARMAMENT",
+      critical: "CRITICAL",
+      doctrines: "DOCTRINES",
+      locked: "LOCKED",
+      titleSubtitle: "SURVIVE 8 MINUTES",
+      tapToStart: "Tap to start",
+      pressAnyKeyToStart: "Press any key to start",
+      titleHintPrimary: "MOVE TO SURVIVE  \u2022  WEAPONS AUTO-FIRE",
+      titleHintSecondaryCompact: "STAGES GET HARDER  \u2022  BUILD CARRIES FORWARD",
+      titleHintSecondaryWide: "STAGES STACK DIFFICULTY  \u2022  YOUR BUILD CARRIES FORWARD",
+      levelUpTitle: "LEVEL UP",
+      levelUpSubtitle: "Choose your next mutation",
+      tapCardToMutate: "Tap a card to mutate",
+      keyboardDraftControls: "Arrow keys select  \u2022  Enter confirms  \u2022  R rerolls",
+      rerollSpent: "REROLL SPENT",
+      paused: "PAUSED",
+      resumePrompt: "Press ESC or tap II to resume",
+      tapToRestart: "Tap to restart",
+      pressAnyKeyToRestart: "Press any key to restart",
+      tapToNextStage: "Tap to enter the next stage",
+      pressAnyKeyToNextStage: "Press any key to enter the next stage",
+      gameOver: "GAME OVER",
+      keepMovingTutorial: "Keep moving. First level-ups unlock new weapons.",
+      draftRerolled: "Draft rerolled"
+    }
+  };
+  var WEAPON_NAMES = {
+    "zh-CN": {
+      "Laser Beam": "\u6FC0\u5149\u675F",
+      "Orbit Shield": "\u73AF\u8F68\u62A4\u76FE",
+      "Nova Blast": "\u65B0\u661F\u7206\u53D1",
+      "Escort Wing": "\u62A4\u822A\u50DA\u673A"
+    },
+    en: {
+      "Laser Beam": "Laser Beam",
+      "Orbit Shield": "Orbit Shield",
+      "Nova Blast": "Nova Blast",
+      "Escort Wing": "Escort Wing"
+    }
+  };
+  var PASSIVE_TEXT = {
+    "zh-CN": {
+      hull: {
+        title: "\u5F3A\u5316\u8239\u4F53",
+        description: "\u6700\u5927\u8239\u4F53 +25\uFF0C\u5E76\u7ACB\u523B\u4FEE\u590D\u65B0\u589E\u88C5\u7532\u3002",
+        label: "\u5F3A\u5316\u8239\u4F53 +25"
+      },
+      thrusters: {
+        title: "\u8D85\u8F7D\u63A8\u8FDB\u5668",
+        description: "\u63D0\u9AD8\u79FB\u52A8\u901F\u5EA6\uFF0C\u8BA9\u4F60\u66F4\u5BB9\u6613\u62C9\u626F\u5E76\u51B2\u51FA\u5305\u56F4\u3002",
+        label: "\u63A8\u8FDB\u5668 +18"
+      },
+      nanoforge: {
+        title: "\u7EB3\u7C73\u5DE5\u574A",
+        description: "\u52A0\u5FEB\u8239\u4F53\u56DE\u590D\uFF0C\u5E76\u5728\u5B89\u88C5\u65F6\u7ACB\u5373\u4FEE\u590D\u4E00\u90E8\u5206\u635F\u4F24\u3002",
+        label: "\u5DF2\u5B89\u88C5\u7EB3\u7C73\u5DE5\u574A"
+      },
+      plating: {
+        title: "\u76F8\u4F4D\u88C5\u7532",
+        description: "\u964D\u4F4E\u53D7\u5230\u7684\u4F24\u5BB3\uFF0C\u8BA9\u5931\u8BEF\u4EE3\u4EF7\u66F4\u4F4E\uFF0C\u4E5F\u66F4\u5BB9\u6613\u625B\u4F4F\u9996\u9886\u538B\u529B\u3002",
+        label: "\u76F8\u4F4D\u88C5\u7532\u5F3A\u5316"
+      }
+    },
+    en: {
+      hull: {
+        title: "Reinforced Hull",
+        description: "Increase maximum hull by 25 and instantly repair the new plating.",
+        label: "Reinforced Hull +25"
+      },
+      thrusters: {
+        title: "Overdrive Thrusters",
+        description: "Boost movement speed so you can kite wider and break collapsing swarms.",
+        label: "Thrusters +18"
+      },
+      nanoforge: {
+        title: "Nanoforge",
+        description: "Accelerate hull regeneration and patch yourself up on install.",
+        label: "Nanoforge installed"
+      },
+      plating: {
+        title: "Phase Plating",
+        description: "Reduce incoming damage so mistakes cost less and boss pressure lands cleaner.",
+        label: "Phase Plating hardened"
+      }
+    }
+  };
+  var UNLOCK_TEXT = {
+    "zh-CN": {
+      "Orbit Shield": {
+        title: "\u89E3\u9501 \u73AF\u8F68\u62A4\u76FE",
+        description: "\u83B7\u5F97\u73AF\u7ED5\u536B\u661F\uFF0C\u6301\u7EED\u6495\u788E\u9760\u8FD1\u8239\u4F53\u7684\u654C\u4EBA\u3002",
+        label: "\u65B0\u6B66\u5668\uFF1A\u73AF\u8F68\u62A4\u76FE"
+      },
+      "Nova Blast": {
+        title: "\u89E3\u9501 \u65B0\u661F\u7206\u53D1",
+        description: "\u83B7\u5F97\u5B9A\u65F6\u51B2\u51FB\u6CE2\uFF0C\u5728\u654C\u7FA4\u8D34\u8EAB\u65F6\u6E05\u51FA\u5598\u606F\u7A7A\u95F4\u3002",
+        label: "\u65B0\u6B66\u5668\uFF1A\u65B0\u661F\u7206\u53D1"
+      },
+      "Escort Wing": {
+        title: "\u89E3\u9501 \u62A4\u822A\u50DA\u673A",
+        description: "\u90E8\u7F72\u62A4\u822A\u50DA\u673A\uFF0C\u5B83\u4F1A\u4F34\u98DE\u5E76\u4EE5\u540C\u6837\u8282\u594F\u53D1\u5C04\u652F\u63F4\u6FC0\u5149\u3002",
+        label: "\u65B0\u6B66\u5668\uFF1A\u62A4\u822A\u50DA\u673A"
+      }
+    },
+    en: {
+      "Orbit Shield": {
+        title: "Unlock Orbit Shield",
+        description: "Add rotating satellites that chew through anything close to your hull.",
+        label: "New weapon: Orbit Shield"
+      },
+      "Nova Blast": {
+        title: "Unlock Nova Blast",
+        description: "Gain a timed shockwave that clears breathing room when swarms collapse in.",
+        label: "New weapon: Nova Blast"
+      },
+      "Escort Wing": {
+        title: "Unlock Escort Wing",
+        description: "Deploy a wingmate that tracks beside you and fires a support laser at the same cadence.",
+        label: "New weapon: Escort Wing"
+      }
+    }
+  };
+  var UPGRADE_DESCRIPTIONS = {
+    "zh-CN": {
+      "Laser Beam": "\u63D0\u9AD8\u4F24\u5BB3\u3001\u5C04\u7A0B\u548C\u6FC0\u5149\u9891\u7387\u3002",
+      "Orbit Shield": "\u63D0\u9AD8\u4F24\u5BB3\u4E0E\u538B\u5236\u8303\u56F4\uFF0C\u5E76\u5728\u5173\u952E\u7B49\u7EA7\u8FFD\u52A0\u536B\u661F\u3002",
+      "Nova Blast": "\u6269\u5927\u7206\u70B8\u534A\u5F84\uFF0C\u5E76\u5F3A\u5316\u7206\u53D1\u4F24\u5BB3\u4EE5\u91CD\u7F6E\u5371\u9669\u5C40\u9762\u3002",
+      "Escort Wing": "\u5F3A\u5316\u50DA\u673A\u6FC0\u5149\uFF0C\u8BA9\u652F\u63F4\u706B\u529B\u66F4\u731B\uFF0C\u540C\u65F6\u4FDD\u6301\u4E0E\u4F60\u4E3B\u6B66\u5668\u540C\u6B65\u3002"
+    },
+    en: {
+      "Laser Beam": "Higher damage, longer reach, and faster beam cadence.",
+      "Orbit Shield": "More damage and wider orbit pressure, with extra satellites at key levels.",
+      "Nova Blast": "Bigger detonation radius with a stronger burst to reset dangerous screens.",
+      "Escort Wing": "Boost the wingmate beam so its support laser hits harder while keeping pace with your main emitter."
+    }
+  };
+  var DOCTRINE_TEXT = {
+    "zh-CN": {
+      bulwark: {
+        title: "\u5821\u5792\u534F\u8BAE",
+        shortLabel: "\u5821\u5792",
+        description: "\u9632\u62A4\u7CFB\u5347\u7EA7\u4F1A\u5F3A\u5316\u6838\u5FC3\u3002\u83B7\u5F97 +20 \u6700\u5927\u8239\u4F53\uFF0C\u5E76\u5EF6\u957F\u63A5\u89E6\u4FDD\u62A4\u65F6\u95F4\u3002"
+      },
+      slipstream: {
+        title: "\u6ED1\u6D41\u5B66\u8BF4",
+        shortLabel: "\u6ED1\u6D41",
+        description: "\u673A\u52A8\u7CFB\u5347\u7EA7\u4F1A\u52A0\u901F\u6574\u5957\u673A\u4F53\u3002\u83B7\u5F97\u79FB\u52A8\u901F\u5EA6\u5E76\u63D0\u5347\u6B66\u5668\u9891\u7387\u3002"
+      },
+      "nanite-lattice": {
+        title: "\u7EB3\u7C73\u6676\u683C",
+        shortLabel: "\u6676\u683C",
+        description: "\u953B\u9020\u7CFB\u5347\u7EA7\u4F1A\u5F3A\u5316\u541E\u566C\u8005\u5916\u58F3\u3002\u83B7\u5F97\u66F4\u9AD8\u56DE\u590D\u4E0E\u6B66\u5668\u4F24\u5BB3\u3002"
+      },
+      annihilation: {
+        title: "\u6E6E\u706D\u6A21\u5F0F",
+        shortLabel: "\u6E6E\u706D",
+        description: "\u706B\u529B\u7CFB\u5347\u7EA7\u4F1A\u9510\u5316\u6BCF\u4E2A\u53D1\u5C04\u5668\u3002\u6240\u6709\u6B66\u5668\u4F24\u5BB3\u66F4\u9AD8\uFF0C\u5FAA\u73AF\u66F4\u5FEB\u3002"
+      }
+    },
+    en: {
+      bulwark: {
+        title: "Bulwark Protocol",
+        shortLabel: "BULWARK",
+        description: "Ward upgrades harden the core. Gain +20 max hull and longer contact grace."
+      },
+      slipstream: {
+        title: "Slipstream Doctrine",
+        shortLabel: "SLIPSTREAM",
+        description: "Surge upgrades accelerate the whole rig. Gain speed and faster weapon cadence."
+      },
+      "nanite-lattice": {
+        title: "Nanite Lattice",
+        shortLabel: "LATTICE",
+        description: "Forge upgrades reinforce the swarm-eater shell. Gain regen and weapon damage."
+      },
+      annihilation: {
+        title: "Annihilation Pattern",
+        shortLabel: "ANNIHILATION",
+        description: "Force upgrades sharpen every emitter. Your weapons hit harder and cycle faster."
+      }
+    }
+  };
+  var TAG_TEXT = {
+    "zh-CN": {
+      force: "\u706B\u529B",
+      ward: "\u9632\u62A4",
+      surge: "\u673A\u52A8",
+      forge: "\u953B\u9020"
+    },
+    en: {
+      force: "FORCE",
+      ward: "WARD",
+      surge: "SURGE",
+      forge: "FORGE"
+    }
+  };
+  var currentLanguage = readStoredLanguage();
+  function readStoredLanguage() {
+    if (typeof window === "undefined") return DEFAULT_LANGUAGE;
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored === "zh-CN" || stored === "en") {
+        return stored;
+      }
+    } catch {
+    }
+    return DEFAULT_LANGUAGE;
+  }
+  function getLanguage() {
+    return currentLanguage;
+  }
+  function setLanguage(language) {
+    currentLanguage = language;
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, language);
+      } catch {
+      }
+    }
+    syncDocumentLanguage();
+  }
+  function syncDocumentLanguage() {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = currentLanguage;
+    document.title = getGameTitle();
+  }
+  function getGameTitle() {
+    return UI_TEXT[currentLanguage].gameTitle;
+  }
+  function getGameTitleLines(compact) {
+    if (currentLanguage === "zh-CN") {
+      return ["\u5B87\u5B99\u541E\u566C\u8005"];
+    }
+    return compact ? ["UNIVERSE", "EATER"] : ["UNIVERSE EATER"];
+  }
+  function getLanguageButtonLabel(language) {
+    return language === "zh-CN" ? "\u4E2D\u6587" : "English";
+  }
+  function getUiText(key) {
+    return UI_TEXT[currentLanguage][key];
+  }
+  function getWeaponName(name) {
+    return WEAPON_NAMES[currentLanguage][name];
+  }
+  function getPassiveTitle(id) {
+    return PASSIVE_TEXT[currentLanguage][id].title;
+  }
+  function getPassiveDescription(id) {
+    return PASSIVE_TEXT[currentLanguage][id].description;
+  }
+  function getPassiveLabel(id) {
+    return PASSIVE_TEXT[currentLanguage][id].label;
+  }
+  function getUnlockTitle(name) {
+    return UNLOCK_TEXT[currentLanguage][name].title;
+  }
+  function getUnlockDescription(name) {
+    return UNLOCK_TEXT[currentLanguage][name].description;
+  }
+  function getUnlockLabel(name) {
+    return UNLOCK_TEXT[currentLanguage][name].label;
+  }
+  function getWeaponUpgradeTitle(name, level) {
+    return currentLanguage === "zh-CN" ? `${getWeaponName(name)} ${level}\u7EA7` : `${getWeaponName(name)} Lv ${level}`;
+  }
+  function getWeaponUpgradeDescription(name) {
+    return UPGRADE_DESCRIPTIONS[currentLanguage][name];
+  }
+  function getWeaponUpgradeLabel(name, level) {
+    return currentLanguage === "zh-CN" ? `${getWeaponName(name)} -> ${level}\u7EA7` : `${getWeaponName(name)} -> Lv.${level}`;
+  }
+  function getDoctrineTitle(id) {
+    return DOCTRINE_TEXT[currentLanguage][id].title;
+  }
+  function getDoctrineShortLabel(id) {
+    return DOCTRINE_TEXT[currentLanguage][id].shortLabel;
+  }
+  function getDoctrineDescription(id) {
+    return DOCTRINE_TEXT[currentLanguage][id].description;
+  }
+  function getTagLabel(tag) {
+    return TAG_TEXT[currentLanguage][tag];
+  }
+  function formatHullLabel(percent) {
+    return currentLanguage === "zh-CN" ? `\u8239\u4F53 ${percent}%` : `HULL ${percent}%`;
+  }
+  function formatStageLabel(stage) {
+    return currentLanguage === "zh-CN" ? `\u9636\u6BB5 ${stage}` : `STAGE ${stage}`;
+  }
+  function formatStageClearTitle(stage) {
+    return currentLanguage === "zh-CN" ? `\u7B2C ${stage} \u9636\u6BB5\u901A\u5173` : `STAGE ${stage} CLEAR`;
+  }
+  function formatXpLabel(level, xp, nextXp) {
+    return currentLanguage === "zh-CN" ? `${level}\u7EA7  ${Math.floor(xp)}/${nextXp} \u7ECF\u9A8C` : `LV ${level}  ${Math.floor(xp)}/${nextXp} XP`;
+  }
+  function formatHudWeaponLevel(level) {
+    return currentLanguage === "zh-CN" ? `${level}\u7EA7` : `LV ${level}`;
+  }
+  function formatRerollLabel(remaining) {
+    return currentLanguage === "zh-CN" ? `\u91CD\u62BD [R]  \u5269\u4F59 ${remaining} \u6B21` : `REROLL [R]  ${remaining} LEFT`;
+  }
+  function formatRestartCountdown(seconds) {
+    return currentLanguage === "zh-CN" ? `${seconds.toFixed(1)} \u79D2\u540E\u53EF\u91CD\u5F00` : `Restart in ${seconds.toFixed(1)}s`;
+  }
+  function formatSurvivedStat(time) {
+    return currentLanguage === "zh-CN" ? `\u751F\u5B58\u65F6\u95F4  ${time}` : `Survived  ${time}`;
+  }
+  function formatReachedStageStat(stage) {
+    return currentLanguage === "zh-CN" ? `\u5230\u8FBE\u9636\u6BB5  ${stage}` : `Reached Stage  ${stage}`;
+  }
+  function formatKillsStat(kills) {
+    return currentLanguage === "zh-CN" ? `\u51FB\u8D25\u6570  ${kills}` : `Kills  ${kills}`;
+  }
+  function formatNextStageStat(stage) {
+    return currentLanguage === "zh-CN" ? `\u4E0B\u4E00\u9636\u6BB5  ${stage}` : `Next Stage  ${stage}`;
+  }
+  function formatTotalKillsStat(kills) {
+    return currentLanguage === "zh-CN" ? `\u603B\u51FB\u8D25\u6570  ${kills}` : `Total Kills  ${kills}`;
+  }
+  function formatLevelReachedStat(level) {
+    return currentLanguage === "zh-CN" ? `\u8FBE\u5230\u7B49\u7EA7  ${level}` : `Level Reached  ${level}`;
+  }
+  function formatStageEngaged(stage) {
+    return currentLanguage === "zh-CN" ? `\u7B2C ${stage} \u9636\u6BB5\u5F00\u59CB` : `Stage ${stage} engaged`;
+  }
+  function formatDoctrineOnline(id) {
+    return currentLanguage === "zh-CN" ? `${getDoctrineTitle(id)} \u5DF2\u6FC0\u6D3B` : `${getDoctrineTitle(id)} online`;
+  }
+  function uiFont(size, weight = "normal") {
+    const family = currentLanguage === "zh-CN" ? '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif' : '"SFMono-Regular", Menlo, Consolas, monospace';
+    return `${weight} ${size}px ${family}`;
+  }
+
   // src/upgrades.ts
   var DOCTRINES = [
     {
       id: "bulwark",
-      title: "Bulwark Protocol",
-      shortLabel: "BULWARK",
-      description: "Ward upgrades harden the core. Gain +20 max hull and longer contact grace.",
+      title: () => getDoctrineTitle("bulwark"),
+      shortLabel: () => getDoctrineShortLabel("bulwark"),
+      description: () => getDoctrineDescription("bulwark"),
       thresholdTag: "ward",
       thresholdCount: 2
     },
     {
       id: "slipstream",
-      title: "Slipstream Doctrine",
-      shortLabel: "SLIPSTREAM",
-      description: "Surge upgrades accelerate the whole rig. Gain speed and faster weapon cadence.",
+      title: () => getDoctrineTitle("slipstream"),
+      shortLabel: () => getDoctrineShortLabel("slipstream"),
+      description: () => getDoctrineDescription("slipstream"),
       thresholdTag: "surge",
       thresholdCount: 2
     },
     {
       id: "nanite-lattice",
-      title: "Nanite Lattice",
-      shortLabel: "LATTICE",
-      description: "Forge upgrades reinforce the swarm-eater shell. Gain regen and weapon damage.",
+      title: () => getDoctrineTitle("nanite-lattice"),
+      shortLabel: () => getDoctrineShortLabel("nanite-lattice"),
+      description: () => getDoctrineDescription("nanite-lattice"),
       thresholdTag: "forge",
       thresholdCount: 2
     },
     {
       id: "annihilation",
-      title: "Annihilation Pattern",
-      shortLabel: "ANNIHILATION",
-      description: "Force upgrades sharpen every emitter. Your weapons hit harder and cycle faster.",
+      title: () => getDoctrineTitle("annihilation"),
+      shortLabel: () => getDoctrineShortLabel("annihilation"),
+      description: () => getDoctrineDescription("annihilation"),
       thresholdTag: "force",
       thresholdCount: 3
     }
@@ -110,9 +478,9 @@ canvas {
         id: "passive-hull",
         kind: "passive",
         passiveId: "hull",
-        title: "Reinforced Hull",
-        description: "Increase maximum hull by 25 and instantly repair the new plating.",
-        label: "Reinforced Hull +25",
+        title: () => getPassiveTitle("hull"),
+        description: () => getPassiveDescription("hull"),
+        label: () => getPassiveLabel("hull"),
         iconName: "Reinforced Hull",
         tags: ["ward"]
       },
@@ -120,9 +488,9 @@ canvas {
         id: "passive-thrusters",
         kind: "passive",
         passiveId: "thrusters",
-        title: "Overdrive Thrusters",
-        description: "Boost movement speed so you can kite wider and break collapsing swarms.",
-        label: "Thrusters +18",
+        title: () => getPassiveTitle("thrusters"),
+        description: () => getPassiveDescription("thrusters"),
+        label: () => getPassiveLabel("thrusters"),
         iconName: "Overdrive Thrusters",
         tags: ["surge"]
       },
@@ -130,9 +498,9 @@ canvas {
         id: "passive-nanoforge",
         kind: "passive",
         passiveId: "nanoforge",
-        title: "Nanoforge",
-        description: "Accelerate hull regeneration and patch yourself up on install.",
-        label: "Nanoforge installed",
+        title: () => getPassiveTitle("nanoforge"),
+        description: () => getPassiveDescription("nanoforge"),
+        label: () => getPassiveLabel("nanoforge"),
         iconName: "Nanoforge",
         tags: ["forge"]
       },
@@ -140,9 +508,9 @@ canvas {
         id: "passive-plating",
         kind: "passive",
         passiveId: "plating",
-        title: "Phase Plating",
-        description: "Reduce incoming damage so mistakes cost less and boss pressure lands cleaner.",
-        label: "Phase Plating hardened",
+        title: () => getPassiveTitle("plating"),
+        description: () => getPassiveDescription("plating"),
+        label: () => getPassiveLabel("plating"),
         iconName: "Phase Plating",
         tags: ["ward", "forge"]
       }
@@ -158,9 +526,9 @@ canvas {
         kind: "unlock",
         weaponType: "orbit",
         weaponName: "Orbit Shield",
-        title: "Unlock Orbit Shield",
-        description: "Add rotating satellites that chew through anything close to your hull.",
-        label: "New weapon: Orbit Shield",
+        title: () => getUnlockTitle("Orbit Shield"),
+        description: () => getUnlockDescription("Orbit Shield"),
+        label: () => getUnlockLabel("Orbit Shield"),
         iconName: "Orbit Shield",
         tags: ["ward"]
       });
@@ -171,9 +539,9 @@ canvas {
         kind: "unlock",
         weaponType: "nova",
         weaponName: "Nova Blast",
-        title: "Unlock Nova Blast",
-        description: "Gain a timed shockwave that clears breathing room when swarms collapse in.",
-        label: "New weapon: Nova Blast",
+        title: () => getUnlockTitle("Nova Blast"),
+        description: () => getUnlockDescription("Nova Blast"),
+        label: () => getUnlockLabel("Nova Blast"),
         iconName: "Nova Blast",
         tags: ["force", "surge"]
       });
@@ -184,9 +552,9 @@ canvas {
         kind: "unlock",
         weaponType: "escort",
         weaponName: "Escort Wing",
-        title: "Unlock Escort Wing",
-        description: "Deploy a wingmate that tracks beside you and fires a support laser at the same cadence.",
-        label: "New weapon: Escort Wing",
+        title: () => getUnlockTitle("Escort Wing"),
+        description: () => getUnlockDescription("Escort Wing"),
+        label: () => getUnlockLabel("Escort Wing"),
         iconName: "Escort Wing",
         tags: ["force", "surge"]
       });
@@ -198,9 +566,9 @@ canvas {
           id: `upgrade-laser-${weapon.level + 1}`,
           kind: "upgrade",
           weaponName: "Laser Beam",
-          title: `Laser Beam Lv ${weapon.level + 1}`,
-          description: "Higher damage, longer reach, and faster beam cadence.",
-          label: `Laser Beam \u2192 Lv.${weapon.level + 1}`,
+          title: () => getWeaponUpgradeTitle("Laser Beam", weapon.level + 1),
+          description: () => getWeaponUpgradeDescription("Laser Beam"),
+          label: () => getWeaponUpgradeLabel("Laser Beam", weapon.level + 1),
           iconName: "Laser Beam",
           tags: ["force", "forge"]
         });
@@ -209,9 +577,9 @@ canvas {
           id: `upgrade-orbit-${weapon.level + 1}`,
           kind: "upgrade",
           weaponName: "Orbit Shield",
-          title: `Orbit Shield Lv ${weapon.level + 1}`,
-          description: "More damage and wider orbit pressure, with extra satellites at key levels.",
-          label: `Orbit Shield \u2192 Lv.${weapon.level + 1}`,
+          title: () => getWeaponUpgradeTitle("Orbit Shield", weapon.level + 1),
+          description: () => getWeaponUpgradeDescription("Orbit Shield"),
+          label: () => getWeaponUpgradeLabel("Orbit Shield", weapon.level + 1),
           iconName: "Orbit Shield",
           tags: ["ward"]
         });
@@ -220,9 +588,9 @@ canvas {
           id: `upgrade-nova-${weapon.level + 1}`,
           kind: "upgrade",
           weaponName: "Nova Blast",
-          title: `Nova Blast Lv ${weapon.level + 1}`,
-          description: "Bigger detonation radius with a stronger burst to reset dangerous screens.",
-          label: `Nova Blast \u2192 Lv.${weapon.level + 1}`,
+          title: () => getWeaponUpgradeTitle("Nova Blast", weapon.level + 1),
+          description: () => getWeaponUpgradeDescription("Nova Blast"),
+          label: () => getWeaponUpgradeLabel("Nova Blast", weapon.level + 1),
           iconName: "Nova Blast",
           tags: ["force", "surge"]
         });
@@ -231,9 +599,9 @@ canvas {
           id: `upgrade-escort-${weapon.level + 1}`,
           kind: "upgrade",
           weaponName: "Escort Wing",
-          title: `Escort Wing Lv ${weapon.level + 1}`,
-          description: "Boost the wingmate beam so its support laser hits harder while keeping pace with your main emitter.",
-          label: `Escort Wing \u2192 Lv.${weapon.level + 1}`,
+          title: () => getWeaponUpgradeTitle("Escort Wing", weapon.level + 1),
+          description: () => getWeaponUpgradeDescription("Escort Wing"),
+          label: () => getWeaponUpgradeLabel("Escort Wing", weapon.level + 1),
           iconName: "Escort Wing",
           tags: ["force", "surge"]
         });
@@ -384,7 +752,7 @@ canvas {
       this.totalElapsedTime = 0;
       this.gameDuration = 480;
       this.notifications = [{
-        text: "Keep moving. First level-ups unlock new weapons.",
+        text: () => getUiText("keepMovingTutorial"),
         timer: 4,
         alpha: 1,
         kind: "info"
@@ -411,7 +779,7 @@ canvas {
       this.draftChoices = [];
       this.selectedDraftIndex = 0;
       this.notifications.push({
-        text: `Stage ${this.stage} engaged`,
+        text: () => formatStageEngaged(this.stage),
         timer: 2.8,
         alpha: 1,
         kind: "unlock"
@@ -474,7 +842,7 @@ canvas {
       this.draftChoices = choices;
       this.selectedDraftIndex = 0;
       this.notifications.push({
-        text: "Draft rerolled",
+        text: () => getUiText("draftRerolled"),
         timer: 1.6,
         alpha: 1,
         kind: "info"
@@ -501,7 +869,7 @@ canvas {
         applyDoctrine(doctrine, wm, player);
         this.activeDoctrines.push(doctrine);
         this.notifications.push({
-          text: `${doctrine.title} online`,
+          text: () => formatDoctrineOnline(doctrine.id),
           timer: 3.2,
           alpha: 1,
           kind: "unlock"
@@ -792,7 +1160,7 @@ canvas {
       const bottomInset = safe.bottom + margin;
       ctx2.save();
       ctx2.textAlign = "center";
-      ctx2.font = "bold 28px monospace";
+      ctx2.font = uiFont(28, "bold");
       const timerText = game.timeRemainingFormatted;
       ctx2.fillStyle = "rgba(100, 200, 255, 0.15)";
       ctx2.fillText(timerText, w / 2, topInset + 24);
@@ -801,18 +1169,18 @@ canvas {
       ctx2.fillText(timerText, w / 2, topInset + 24);
       ctx2.restore();
       ctx2.textAlign = "left";
-      ctx2.font = "bold 14px monospace";
+      ctx2.font = uiFont(14, "bold");
       ctx2.fillStyle = hpRatio < 0.3 ? "rgba(255, 120, 120, 0.95)" : "rgba(190, 225, 255, 0.85)";
-      ctx2.fillText(`HULL ${Math.ceil(hpRatio * 100)}%`, leftInset, topInset + 18);
+      ctx2.fillText(formatHullLabel(Math.ceil(hpRatio * 100)), leftInset, topInset + 18);
       if (hpRatio < 0.35) {
         ctx2.fillStyle = "rgba(255, 120, 120, 0.65)";
-        ctx2.font = "12px monospace";
-        ctx2.fillText("CRITICAL", leftInset, topInset + 36);
+        ctx2.font = uiFont(12);
+        ctx2.fillText(getUiText("critical"), leftInset, topInset + 36);
       }
-      ctx2.font = "11px monospace";
+      ctx2.font = uiFont(11);
       ctx2.fillStyle = "rgba(160, 210, 255, 0.58)";
-      ctx2.fillText(`STAGE ${game.stage}`, leftInset, topInset + 52);
-      ctx2.font = "16px monospace";
+      ctx2.fillText(formatStageLabel(game.stage), leftInset, topInset + 52);
+      ctx2.font = uiFont(16);
       ctx2.textAlign = "right";
       ctx2.fillStyle = "rgba(255, 255, 255, 0.7)";
       ctx2.fillText(`${player.kills}`, w - rightInset, topInset + 19);
@@ -823,13 +1191,13 @@ canvas {
       ctx2.stroke();
       if (game.activeDoctrines.length > 0) {
         ctx2.textAlign = "right";
-        ctx2.font = "bold 10px monospace";
+        ctx2.font = uiFont(10, "bold");
         ctx2.fillStyle = "rgba(165, 205, 255, 0.55)";
-        ctx2.fillText("DOCTRINES", w - rightInset, topInset + 38);
-        ctx2.font = "11px monospace";
+        ctx2.fillText(getUiText("doctrines"), w - rightInset, topInset + 38);
+        ctx2.font = uiFont(11);
         for (let i = 0; i < game.activeDoctrines.length; i++) {
           ctx2.fillStyle = "rgba(230, 240, 255, 0.72)";
-          ctx2.fillText(game.activeDoctrines[i].shortLabel, w - rightInset, topInset + 54 + i * 14);
+          ctx2.fillText(game.activeDoctrines[i].shortLabel(), w - rightInset, topInset + 54 + i * 14);
         }
       }
       const barW = compactHud ? Math.max(160, Math.min(w - leftInset - rightInset - 28, 250)) : Math.max(180, Math.min(w * 0.5, w - leftInset - rightInset - 120));
@@ -862,9 +1230,9 @@ canvas {
         ctx2.restore();
       }
       ctx2.fillStyle = "rgba(255, 255, 255, 0.5)";
-      ctx2.font = "11px monospace";
+      ctx2.font = uiFont(11);
       ctx2.textAlign = "center";
-      ctx2.fillText(`LV ${player.level}  ${Math.floor(player.xp)}/${player.getXpForNextLevel()} XP`, w / 2, barY - 6);
+      ctx2.fillText(formatXpLabel(player.level, player.xp, player.getXpForNextLevel()), w / 2, barY - 6);
       const weaponSlots = [
         { name: "Laser Beam", weapon: wm.getWeapon("Laser Beam") },
         { name: "Orbit Shield", weapon: wm.getWeapon("Orbit Shield") },
@@ -883,25 +1251,25 @@ canvas {
       ctx2.lineWidth = 1;
       ctx2.stroke();
       ctx2.textAlign = "left";
-      ctx2.font = "bold 11px monospace";
+      ctx2.font = uiFont(11, "bold");
       ctx2.fillStyle = "rgba(160, 210, 255, 0.58)";
-      ctx2.fillText("ARMAMENT", weaponPanelX + 12, weaponPanelY + 18);
+      ctx2.fillText(getUiText("armament"), weaponPanelX + 12, weaponPanelY + 18);
       let wy = weaponPanelY + 38;
       for (const slot of weaponSlots) {
         const drawIcon = WEAPON_SHAPES[slot.name];
         if (drawIcon) {
           drawIcon(ctx2, weaponPanelX + 14, wy - 4, 7);
         }
-        ctx2.font = "13px monospace";
+        ctx2.font = uiFont(13);
         if (slot.weapon) {
           ctx2.fillStyle = "rgba(255, 255, 255, 0.74)";
-          ctx2.fillText(slot.name, weaponPanelX + 28, wy);
+          ctx2.fillText(getWeaponName(slot.name), weaponPanelX + 28, wy);
           ctx2.fillStyle = "rgba(110, 205, 255, 0.95)";
-          ctx2.fillText(`LV ${slot.weapon.level}`, weaponPanelX + 160, wy);
+          ctx2.fillText(formatHudWeaponLevel(slot.weapon.level), weaponPanelX + 160, wy);
         } else {
           ctx2.fillStyle = "rgba(255, 255, 255, 0.3)";
-          ctx2.fillText(slot.name, weaponPanelX + 28, wy);
-          ctx2.fillText("LOCKED", weaponPanelX + 160, wy);
+          ctx2.fillText(getWeaponName(slot.name), weaponPanelX + 28, wy);
+          ctx2.fillText(getUiText("locked"), weaponPanelX + 160, wy);
         }
         wy += 22;
       }
@@ -966,44 +1334,46 @@ canvas {
       ctx2.textAlign = "center";
       const compactTitle = w < 500;
       const titleSize = compactTitle ? Math.max(24, Math.min(34, Math.floor(w * 0.09))) : Math.max(30, Math.min(52, Math.floor(w * 0.13)));
-      ctx2.font = `bold ${titleSize}px monospace`;
-      if (compactTitle) {
+      ctx2.font = uiFont(titleSize, "bold");
+      const titleLines = getGameTitleLines(compactTitle);
+      if (titleLines.length === 2) {
         ctx2.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
-        ctx2.fillText("UNIVERSE", cx, cy - 44);
-        ctx2.fillText("EATER", cx, cy - 6);
+        ctx2.fillText(titleLines[0], cx, cy - 44);
+        ctx2.fillText(titleLines[1], cx, cy - 6);
         ctx2.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
-        ctx2.fillText("UNIVERSE", cx + 1, cy - 43);
-        ctx2.fillText("EATER", cx + 1, cy - 5);
+        ctx2.fillText(titleLines[0], cx + 1, cy - 43);
+        ctx2.fillText(titleLines[1], cx + 1, cy - 5);
         ctx2.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
-        ctx2.fillText("UNIVERSE", cx, cy - 44);
-        ctx2.fillText("EATER", cx, cy - 6);
+        ctx2.fillText(titleLines[0], cx, cy - 44);
+        ctx2.fillText(titleLines[1], cx, cy - 6);
       } else {
         ctx2.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
-        ctx2.fillText("UNIVERSE EATER", cx, cy - 30);
+        ctx2.fillText(titleLines[0], cx, cy - 30);
         ctx2.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
-        ctx2.fillText("UNIVERSE EATER", cx + 1, cy - 29);
+        ctx2.fillText(titleLines[0], cx + 1, cy - 29);
         ctx2.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
-        ctx2.fillText("UNIVERSE EATER", cx, cy - 30);
+        ctx2.fillText(titleLines[0], cx, cy - 30);
       }
       const subAlpha = Math.max(0, Math.min(1, (t - 0.5) * 2));
-      ctx2.font = `${w < 500 ? 12 : 14}px monospace`;
+      ctx2.font = uiFont(w < 500 ? 12 : 14);
       ctx2.fillStyle = `rgba(100, 180, 255, ${subAlpha * 0.6})`;
-      ctx2.fillText("SURVIVE 8 MINUTES", cx, cy + Math.max(0, titleSize * 0.55 - 18));
+      ctx2.fillText(getUiText("titleSubtitle"), cx, cy + Math.max(0, titleSize * 0.55 - 18));
       const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
       const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
-      ctx2.font = `${w < 500 ? 14 : 16}px monospace`;
+      ctx2.font = uiFont(w < 500 ? 14 : 16);
       ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe})`;
-      const startMsg = isTouchDevice() ? "Tap to start" : "Press any key to start";
+      const startMsg = isTouchDevice() ? getUiText("tapToStart") : getUiText("pressAnyKeyToStart");
       ctx2.fillText(startMsg, cx, cy + 60);
       const helpAlpha = Math.max(0, Math.min(1, (t - 1.3) * 2));
-      ctx2.font = `${w < 500 ? 11 : 13}px monospace`;
+      ctx2.font = uiFont(w < 500 ? 11 : 13);
       ctx2.fillStyle = `rgba(160, 200, 255, ${helpAlpha * 0.5})`;
-      ctx2.fillText("MOVE TO SURVIVE  \u2022  WEAPONS AUTO-FIRE", cx, cy + (w < 500 ? 88 : 95));
+      ctx2.fillText(getUiText("titleHintPrimary"), cx, cy + (w < 500 ? 88 : 95));
       if (w < 500) {
-        ctx2.fillText("STAGES GET HARDER  \u2022  BUILD CARRIES FORWARD", cx, cy + 106);
+        ctx2.fillText(getUiText("titleHintSecondaryCompact"), cx, cy + 106);
       } else {
-        ctx2.fillText("STAGES STACK DIFFICULTY  \u2022  YOUR BUILD CARRIES FORWARD", cx, cy + 116);
+        ctx2.fillText(getUiText("titleHintSecondaryWide"), cx, cy + 116);
       }
+      this.drawLanguageSelector(ctx2, canvas2);
     }
     drawNotifications(ctx2, canvas2, game) {
       const notifications = game.notifications;
@@ -1019,11 +1389,12 @@ canvas {
         let fontSize = isUnlock ? 22 : 18;
         const maxTextWidth = canvasWidth - 70;
         do {
-          ctx2.font = `bold ${fontSize}px monospace`;
-          if (ctx2.measureText(n.text).width <= maxTextWidth || fontSize <= 12) break;
+          ctx2.font = uiFont(fontSize, "bold");
+          const text = n.text();
+          if (ctx2.measureText(text).width <= maxTextWidth || fontSize <= 12) break;
           fontSize--;
         } while (fontSize > 12);
-        const textWidth = ctx2.measureText(n.text).width;
+        const textWidth = ctx2.measureText(n.text()).width;
         const pillW = Math.min(canvasWidth - 26, textWidth + (isUnlock ? 42 : 30));
         const pillH = fontSize >= 18 ? isUnlock ? 36 : 30 : 28;
         const pillX = (canvasWidth - pillW) / 2;
@@ -1035,7 +1406,7 @@ canvas {
         ctx2.fill();
         ctx2.stroke();
         ctx2.fillStyle = `rgba(${accent.text[0]}, ${accent.text[1]}, ${accent.text[2]}, ${n.alpha})`;
-        ctx2.fillText(n.text, canvasWidth / 2, y);
+        ctx2.fillText(n.text(), canvasWidth / 2, y);
       }
     }
     drawLevelUpDraft(ctx2, canvas2, game) {
@@ -1045,16 +1416,16 @@ canvas {
       ctx2.fillStyle = "rgba(4, 8, 18, 0.68)";
       ctx2.fillRect(0, 0, w, h);
       ctx2.textAlign = "center";
-      ctx2.font = "bold 38px monospace";
+      ctx2.font = uiFont(38, "bold");
       ctx2.fillStyle = "#ffffff";
-      ctx2.fillText("LEVEL UP", w / 2, layout.headerY);
-      ctx2.font = "14px monospace";
+      ctx2.fillText(getUiText("levelUpTitle"), w / 2, layout.headerY);
+      ctx2.font = uiFont(14);
       ctx2.fillStyle = "rgba(180, 215, 255, 0.72)";
-      ctx2.fillText("Choose your next mutation", w / 2, layout.headerY + 28);
-      ctx2.font = "12px monospace";
+      ctx2.fillText(getUiText("levelUpSubtitle"), w / 2, layout.headerY + 28);
+      ctx2.font = uiFont(12);
       ctx2.fillStyle = "rgba(180, 215, 255, 0.48)";
       ctx2.fillText(
-        isTouchDevice() ? "Tap a card to mutate" : "Arrow keys select  \u2022  Enter confirms  \u2022  R rerolls",
+        isTouchDevice() ? getUiText("tapCardToMutate") : getUiText("keyboardDraftControls"),
         w / 2,
         layout.headerY + 48
       );
@@ -1084,20 +1455,20 @@ canvas {
         const drawIcon = WEAPON_SHAPES[choice.iconName];
         if (drawIcon) drawIcon(ctx2, card.x + 30, card.y + 32, 9);
         ctx2.textAlign = "left";
-        ctx2.font = "bold 12px monospace";
+        ctx2.font = uiFont(12, "bold");
         ctx2.fillStyle = choice.kind === "unlock" ? "rgba(255, 210, 135, 0.85)" : "rgba(145, 210, 255, 0.72)";
         ctx2.fillText(`${i + 1}`, card.x + 56, card.y + 20);
-        ctx2.font = "bold 18px monospace";
+        ctx2.font = uiFont(18, "bold");
         ctx2.fillStyle = "#ffffff";
-        this.drawWrappedText(ctx2, choice.title, card.x + 20, card.y + 58, card.width - 40, 22);
-        ctx2.font = "13px monospace";
+        this.drawWrappedText(ctx2, choice.title(), card.x + 20, card.y + 58, card.width - 40, 22);
+        ctx2.font = uiFont(13);
         ctx2.fillStyle = "rgba(215, 228, 245, 0.72)";
-        this.drawWrappedText(ctx2, choice.description, card.x + 20, card.y + 92, card.width - 40, 18);
+        this.drawWrappedText(ctx2, choice.description(), card.x + 20, card.y + 92, card.width - 40, 18);
         let chipX = card.x + 20;
         const chipY = card.y + card.height - 26;
         for (const tag of choice.tags) {
-          const label = tag.toUpperCase();
-          ctx2.font = "bold 10px monospace";
+          const label = getTagLabel(tag);
+          ctx2.font = uiFont(10, "bold");
           const chipW = ctx2.measureText(label).width + 16;
           ctx2.beginPath();
           ctx2.roundRect(chipX, chipY, chipW, 18, 9);
@@ -1122,9 +1493,9 @@ canvas {
       ctx2.lineWidth = 1;
       ctx2.stroke();
       ctx2.textAlign = "center";
-      ctx2.font = "bold 13px monospace";
+      ctx2.font = uiFont(13, "bold");
       ctx2.fillStyle = rerollEnabled ? "rgba(200, 230, 255, 0.82)" : "rgba(170, 170, 180, 0.55)";
-      const rerollLabel = rerollEnabled ? `REROLL [R]  ${game.rerollsRemaining} LEFT` : "REROLL SPENT";
+      const rerollLabel = rerollEnabled ? formatRerollLabel(game.rerollsRemaining) : getUiText("rerollSpent");
       ctx2.fillText(rerollLabel, reroll.x + reroll.width / 2, reroll.y + 22);
     }
     getLevelUpActionAt(canvas2, game, x, y) {
@@ -1142,21 +1513,21 @@ canvas {
       return null;
     }
     drawGameOver(ctx2, canvas2, player, game, canRestart, restartCountdown) {
-      const prompt = canRestart ? isTouchDevice() ? "Tap to restart" : "Press any key to restart" : `Restart in ${restartCountdown.toFixed(1)}s`;
-      this.drawEndScreen(ctx2, canvas2, "GAME OVER", [255, 68, 68], [80, 0, 0], [
-        `Survived  ${formatTime(game.totalElapsedTime)}`,
-        `Reached Stage  ${game.stage}`,
-        `Kills  ${player.kills}`
-      ], prompt);
+      const prompt = canRestart ? isTouchDevice() ? getUiText("tapToRestart") : getUiText("pressAnyKeyToRestart") : formatRestartCountdown(restartCountdown);
+      this.drawEndScreen(ctx2, canvas2, getUiText("gameOver"), [255, 68, 68], [80, 0, 0], [
+        formatSurvivedStat(formatTime(game.totalElapsedTime)),
+        formatReachedStageStat(game.stage),
+        formatKillsStat(player.kills)
+      ], prompt, !canRestart);
     }
     drawVictory(ctx2, canvas2, player, game) {
-      this.drawEndScreen(ctx2, canvas2, `STAGE ${game.stage} CLEAR`, [68, 255, 136], [80, 60, 0], [
-        `Next Stage  ${game.stage + 1}`,
-        `Total Kills  ${player.kills}`,
-        `Level Reached  ${player.level}`
-      ], isTouchDevice() ? "Tap to enter the next stage" : "Press any key to enter the next stage");
+      this.drawEndScreen(ctx2, canvas2, formatStageClearTitle(game.stage), [68, 255, 136], [80, 60, 0], [
+        formatNextStageStat(game.stage + 1),
+        formatTotalKillsStat(player.kills),
+        formatLevelReachedStat(player.level)
+      ], isTouchDevice() ? getUiText("tapToNextStage") : getUiText("pressAnyKeyToNextStage"));
     }
-    drawEndScreen(ctx2, canvas2, title, titleColor, vignetteColor, stats, promptText) {
+    drawEndScreen(ctx2, canvas2, title, titleColor, vignetteColor, stats, promptText, subduedPrompt = false) {
       const w = canvas2.clientWidth;
       const h = canvas2.clientHeight;
       const cx = w / 2;
@@ -1177,7 +1548,7 @@ canvas {
       ctx2.save();
       ctx2.translate(cx, cy - 50);
       ctx2.scale(titleScale, titleScale);
-      ctx2.font = "bold 52px monospace";
+      ctx2.font = uiFont(52, "bold");
       ctx2.textAlign = "center";
       ctx2.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${titleAlpha * 0.15})`;
       ctx2.fillText(title, 0, 0);
@@ -1185,7 +1556,7 @@ canvas {
       ctx2.fillText(title, 0, 0);
       ctx2.restore();
       ctx2.textAlign = "center";
-      ctx2.font = "18px monospace";
+      ctx2.font = uiFont(18);
       for (let i = 0; i < stats.length; i++) {
         const statAlpha = Math.max(0, Math.min(1, (t - 0.4 - i * 0.2) * 3));
         ctx2.fillStyle = `rgba(255, 255, 255, ${statAlpha * 0.7})`;
@@ -1193,9 +1564,10 @@ canvas {
       }
       const promptAlpha = Math.max(0, Math.min(1, (t - 1.2) * 2));
       const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
-      ctx2.font = "14px monospace";
-      ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * (promptText.startsWith("Restart in") ? 0.55 : breathe * 0.5)})`;
+      ctx2.font = uiFont(14);
+      ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * (subduedPrompt ? 0.55 : breathe * 0.5)})`;
       ctx2.fillText(promptText, cx, cy + 95);
+      this.drawLanguageSelector(ctx2, canvas2);
     }
     drawVignette(ctx2, w, h, hpRatio) {
       const cx = w / 2;
@@ -1271,22 +1643,72 @@ canvas {
         }
       };
     }
+    drawLanguageSelector(ctx2, canvas2) {
+      const layout = this.getLanguageSelectorLayout(canvas2);
+      ctx2.save();
+      ctx2.textAlign = "center";
+      ctx2.font = uiFont(11, "bold");
+      ctx2.fillStyle = "rgba(180, 215, 255, 0.7)";
+      ctx2.fillText(getUiText("languageLabel"), canvas2.clientWidth / 2, layout.labelY);
+      for (const button of layout.buttons) {
+        const active = button.language === getLanguage();
+        ctx2.beginPath();
+        ctx2.roundRect(button.x, button.y, button.width, button.height, 10);
+        ctx2.fillStyle = active ? "rgba(70, 132, 230, 0.42)" : "rgba(10, 16, 30, 0.72)";
+        ctx2.fill();
+        ctx2.strokeStyle = active ? "rgba(170, 220, 255, 0.8)" : "rgba(160, 190, 235, 0.22)";
+        ctx2.lineWidth = active ? 1.5 : 1;
+        ctx2.stroke();
+        ctx2.font = uiFont(13, active ? "bold" : "normal");
+        ctx2.fillStyle = active ? "#ffffff" : "rgba(215, 228, 245, 0.78)";
+        ctx2.fillText(getLanguageButtonLabel(button.language), button.x + button.width / 2, button.y + 21);
+      }
+      ctx2.restore();
+    }
+    getLanguageActionAt(canvas2, x, y) {
+      const layout = this.getLanguageSelectorLayout(canvas2);
+      for (const button of layout.buttons) {
+        if (x >= button.x && x <= button.x + button.width && y >= button.y && y <= button.y + button.height) {
+          return button.language;
+        }
+      }
+      return null;
+    }
+    getLanguageSelectorLayout(canvas2) {
+      const w = canvas2.clientWidth;
+      const h = canvas2.clientHeight;
+      const safe = getSafeAreaInsets();
+      const bottomInset = safe.bottom + getTouchUiMargin();
+      const buttonWidth = 112;
+      const buttonHeight = 32;
+      const gap = 12;
+      const totalWidth = buttonWidth * 2 + gap;
+      const startX = (w - totalWidth) / 2;
+      const y = h - bottomInset - buttonHeight - 12;
+      return {
+        labelY: y - 10,
+        buttons: [
+          { language: "zh-CN", x: startX, y, width: buttonWidth, height: buttonHeight },
+          { language: "en", x: startX + buttonWidth + gap, y, width: buttonWidth, height: buttonHeight }
+        ]
+      };
+    }
     drawWrappedText(ctx2, text, x, y, maxWidth, lineHeight) {
-      const words = text.split(" ");
+      const tokens = text.includes(" ") ? text.split(/(\s+)/).filter(Boolean) : Array.from(text);
       let line = "";
       let lineY = y;
-      for (const word of words) {
-        const testLine = line ? `${line} ${word}` : word;
+      for (const token of tokens) {
+        const testLine = `${line}${token}`;
         if (ctx2.measureText(testLine).width > maxWidth && line) {
-          ctx2.fillText(line, x, lineY);
-          line = word;
+          ctx2.fillText(line.trimEnd(), x, lineY);
+          line = token.trimStart();
           lineY += lineHeight;
         } else {
           line = testLine;
         }
       }
       if (line) {
-        ctx2.fillText(line, x, lineY);
+        ctx2.fillText(line.trimEnd(), x, lineY);
       }
     }
   };
@@ -29961,6 +30383,13 @@ void main() {
         const rect = this.canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
+        if (this.game.state !== "playing" /* PLAYING */ && this.game.state !== "levelUp" /* LEVEL_UP */) {
+          const language = this.ui.getLanguageActionAt(this.canvas, x, y);
+          if (language) {
+            setLanguage(language);
+            return;
+          }
+        }
         if (this.game.state === "levelUp" /* LEVEL_UP */) {
           const action = this.ui.getLevelUpActionAt(this.canvas, this.game, x, y);
           if (!action) return;
@@ -30109,12 +30538,13 @@ void main() {
       this.ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
       this.ctx.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.font = "bold 48px monospace";
+      this.ctx.font = uiFont(48, "bold");
       this.ctx.textAlign = "center";
-      this.ctx.fillText("PAUSED", this.viewportWidth / 2, this.viewportHeight / 2 - 10);
-      this.ctx.font = "18px monospace";
+      this.ctx.fillText(getUiText("paused"), this.viewportWidth / 2, this.viewportHeight / 2 - 10);
+      this.ctx.font = uiFont(18);
       this.ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-      this.ctx.fillText("Press ESC or tap II to resume", this.viewportWidth / 2, this.viewportHeight / 2 + 30);
+      this.ctx.fillText(getUiText("resumePrompt"), this.viewportWidth / 2, this.viewportHeight / 2 + 30);
+      this.ui.drawLanguageSelector(this.ctx, this.canvas);
     }
     handleTapTransitions() {
       if (consumePauseTap()) {
@@ -30167,6 +30597,7 @@ void main() {
   if (!ctx) {
     throw new Error("Universe Eater could not acquire a 2D rendering context.");
   }
+  syncDocumentLanguage();
   var runtime = new GameRuntime(canvas, ctx);
   runtime.start();
 })();
