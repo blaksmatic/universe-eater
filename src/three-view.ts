@@ -4,6 +4,7 @@ import { GameWorld } from './world';
 import { wrappedAngle } from './utils';
 
 type LitMaterial = THREE.MeshLambertMaterial;
+type DetailMode = 'full' | 'lite';
 
 type EnemyParts = {
   wings?: THREE.Object3D[];
@@ -17,6 +18,7 @@ type EnemyParts = {
 
 type EnemyVisual = {
   type: EnemyType;
+  detail: DetailMode;
   group: THREE.Group;
   materials: LitMaterial[];
   seed: number;
@@ -31,6 +33,10 @@ type PlayerVisual = {
 
 const BASE_CLEAR_COLOR = 0x070b16;
 const PLAYER_BASE_RADIUS = 15;
+const REDUCED_DETAIL_ENTER_THRESHOLD = 24;
+const REDUCED_DETAIL_EXIT_THRESHOLD = 16;
+const REDUCED_PIXEL_RATIO_THRESHOLD = 18;
+const HEAVY_PIXEL_RATIO_THRESHOLD = 30;
 const BASE_RADII: Record<EnemyType, number> = {
   swarmer: 10,
   drifter: 20,
@@ -91,25 +97,35 @@ function isMobileLikeViewport(): boolean {
   return window.innerWidth < 900 || window.matchMedia('(pointer: coarse)').matches;
 }
 
+function createEnemyPool(): Record<EnemyType, EnemyVisual[]> {
+  return {
+    swarmer: [],
+    drifter: [],
+    titan: [],
+    overlord: [],
+  };
+}
+
 export class ThreeEntityRenderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
   private readonly playerVisual: PlayerVisual;
   private readonly enemyVisuals = new Map<Enemy, EnemyVisual>();
-  private readonly enemyPools: Record<EnemyType, EnemyVisual[]> = {
-    swarmer: [],
-    drifter: [],
-    titan: [],
-    overlord: [],
+  private readonly enemyPools: Record<DetailMode, Record<EnemyType, EnemyVisual[]>> = {
+    full: createEnemyPool(),
+    lite: createEnemyPool(),
   };
-  private readonly pixelRatioCap: number;
+  private readonly basePixelRatioCap: number;
+  private currentDevicePixelRatio = 1;
+  private currentPixelRatio = 1;
+  private detailMode: DetailMode = 'full';
   private width = 1;
   private height = 1;
 
   constructor(overlayCanvas: HTMLCanvasElement) {
     const compactQuality = isMobileLikeViewport();
-    this.pixelRatioCap = compactQuality ? 1.35 : 1.85;
+    this.basePixelRatioCap = compactQuality ? 1.35 : 1.85;
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: !compactQuality,
@@ -157,6 +173,7 @@ export class ThreeEntityRenderer {
   resize(width: number, height: number, dpr: number): void {
     this.width = width;
     this.height = height;
+    this.currentDevicePixelRatio = dpr;
     this.camera.left = -width / 2;
     this.camera.right = width / 2;
     this.camera.top = height / 2;
@@ -165,11 +182,13 @@ export class ThreeEntityRenderer {
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
 
-    this.renderer.setPixelRatio(Math.min(dpr, this.pixelRatioCap));
+    this.updatePixelRatio(1);
     this.renderer.setSize(width, height, false);
   }
 
   render(world: GameWorld | null, time: number): void {
+    this.applyAdaptiveQuality(world?.spawner.enemies.length ?? 0);
+
     if (!world) {
       this.playerVisual.group.visible = false;
       for (const visual of this.enemyVisuals.values()) {
@@ -228,13 +247,13 @@ export class ThreeEntityRenderer {
   }
 
   private acquireEnemyVisual(type: EnemyType): EnemyVisual {
-    const pooled = this.enemyPools[type].pop();
+    const pooled = this.enemyPools[this.detailMode][type].pop();
     if (pooled) {
       pooled.group.visible = true;
       return pooled;
     }
 
-    const visual = this.createEnemyVisual(type);
+    const visual = this.createEnemyVisual(type, this.detailMode);
     this.scene.add(visual.group);
     return visual;
   }
@@ -242,7 +261,7 @@ export class ThreeEntityRenderer {
   private releaseEnemyVisual(enemy: Enemy, visual: EnemyVisual): void {
     visual.group.visible = false;
     this.enemyVisuals.delete(enemy);
-    this.enemyPools[visual.type].push(visual);
+    this.enemyPools[visual.detail][visual.type].push(visual);
   }
 
   private updateEnemyVisual(enemy: Enemy, visual: EnemyVisual, world: GameWorld, time: number): void {
@@ -332,17 +351,51 @@ export class ThreeEntityRenderer {
     return { group: root, shell, core, fins };
   }
 
-  private createEnemyVisual(type: EnemyType): EnemyVisual {
+  private applyAdaptiveQuality(enemyCount: number): void {
+    const nextDetailMode: DetailMode = this.detailMode === 'full'
+      ? (enemyCount >= REDUCED_DETAIL_ENTER_THRESHOLD ? 'lite' : 'full')
+      : (enemyCount <= REDUCED_DETAIL_EXIT_THRESHOLD ? 'full' : 'lite');
+    if (nextDetailMode !== this.detailMode) {
+      this.detailMode = nextDetailMode;
+      this.recycleActiveEnemyVisuals();
+    }
+
+    const pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD
+      ? 0.62
+      : enemyCount >= REDUCED_PIXEL_RATIO_THRESHOLD
+        ? 0.8
+        : 1;
+    this.updatePixelRatio(pixelRatioScale);
+  }
+
+  private updatePixelRatio(scale: number): void {
+    const target = Math.min(this.currentDevicePixelRatio, this.basePixelRatioCap * scale);
+    if (Math.abs(target - this.currentPixelRatio) < 0.02) return;
+    this.currentPixelRatio = target;
+    this.renderer.setPixelRatio(target);
+    this.renderer.setSize(this.width, this.height, false);
+  }
+
+  private recycleActiveEnemyVisuals(): void {
+    const activeVisuals = Array.from(this.enemyVisuals.entries());
+    this.enemyVisuals.clear();
+    for (const [, visual] of activeVisuals) {
+      visual.group.visible = false;
+      this.enemyPools[visual.detail][visual.type].push(visual);
+    }
+  }
+
+  private createEnemyVisual(type: EnemyType, detail: DetailMode): EnemyVisual {
     const seed = Math.random();
     switch (type) {
       case 'swarmer':
-        return this.createSwarmerVisual(seed);
+        return detail === 'lite' ? this.createLiteSwarmerVisual(seed) : this.createSwarmerVisual(seed);
       case 'drifter':
-        return this.createDrifterVisual(seed);
+        return detail === 'lite' ? this.createLiteDrifterVisual(seed) : this.createDrifterVisual(seed);
       case 'titan':
-        return this.createTitanVisual(seed);
+        return detail === 'lite' ? this.createLiteTitanVisual(seed) : this.createTitanVisual(seed);
       case 'overlord':
-        return this.createOverlordVisual(seed);
+        return detail === 'lite' ? this.createLiteOverlordVisual(seed) : this.createOverlordVisual(seed);
     }
   }
 
@@ -377,19 +430,19 @@ export class ThreeEntityRenderer {
     wingMat.opacity = 0.76;
     const wings: THREE.Object3D[] = [];
     for (const side of [-1, 1] as const) {
-      const wing = createMesh(GEOMETRY.swarmerWing, wingMat.clone());
+      const wing = createMesh(GEOMETRY.swarmerWing, wingMat);
       wing.position.set(side * 8.7, -1.8, 1.8);
       wing.rotation.z = side * 0.5;
       root.add(wing);
       wings.push(wing);
-      materials.push(wing.material);
     }
+    materials.push(wingMat);
 
+    const legMat = makeMaterial(0x3d261d, 0x74453b);
     const legs: THREE.Object3D[] = [];
     for (let i = 0; i < 3; i++) {
       const legAngle = -0.8 + i * 0.8;
       for (const side of [-1, 1] as const) {
-        const legMat = makeMaterial(0x3d261d, 0x74453b);
         const leg = createMesh(GEOMETRY.swarmerLeg, legMat);
         leg.position.set(side * (5.5 + i * 1.4), i * 2.5 - 1.5, -2.6);
         leg.rotation.x = 1.1;
@@ -397,9 +450,9 @@ export class ThreeEntityRenderer {
         leg.userData.baseRotation = leg.rotation.z;
         root.add(leg);
         legs.push(leg);
-        materials.push(legMat);
       }
     }
+    materials.push(legMat);
 
     const stingerMat = makeMaterial(0x261615, 0x8f4238);
     const stinger = createMesh(GEOMETRY.swarmerStinger, stingerMat);
@@ -409,7 +462,7 @@ export class ThreeEntityRenderer {
     materials.push(stingerMat);
 
     root.userData = { wings, legs };
-    return { type: 'swarmer', group: root, materials, seed };
+    return { type: 'swarmer', detail: 'full', group: root, materials, seed };
   }
 
   private createDrifterVisual(seed: number): EnemyVisual {
@@ -429,21 +482,21 @@ export class ThreeEntityRenderer {
     root.add(core);
     materials.push(coreMat);
 
+    const frillMat = makeMaterial(0x5f928b, 0x9de8dd);
     const petals: THREE.Object3D[] = [];
     for (let i = 0; i < 5; i++) {
-      const frillMat = makeMaterial(0x5f928b, 0x9de8dd);
       const frill = createMesh(GEOMETRY.drifterFrill, frillMat);
       frill.position.set(0, 2, -4);
       frill.rotation.x = 0.75;
       root.add(frill);
       petals.push(frill);
-      materials.push(frillMat);
     }
+    materials.push(frillMat);
 
+    const tentacleMat = makeMaterial(0x47655f, 0x88dbce);
     const tentacles: THREE.Object3D[] = [];
     for (let i = 0; i < 6; i++) {
       const angle = -Math.PI * 0.82 + (i / 5) * Math.PI * 1.64;
-      const tentacleMat = makeMaterial(0x47655f, 0x88dbce);
       const tentacle = createMesh(GEOMETRY.drifterTentacle, tentacleMat);
       tentacle.position.set(Math.cos(angle) * 10.5, 14 + Math.sin(angle) * 2.4, -3.4);
       tentacle.rotation.z = angle + Math.PI;
@@ -451,11 +504,11 @@ export class ThreeEntityRenderer {
       tentacle.userData.baseRotation = tentacle.rotation.z;
       root.add(tentacle);
       tentacles.push(tentacle);
-      materials.push(tentacleMat);
     }
+    materials.push(tentacleMat);
 
     root.userData = { tentacles, petals, core };
-    return { type: 'drifter', group: root, materials, seed };
+    return { type: 'drifter', detail: 'full', group: root, materials, seed };
   }
 
   private createTitanVisual(seed: number): EnemyVisual {
@@ -475,29 +528,29 @@ export class ThreeEntityRenderer {
     root.add(core);
     materials.push(coreMat);
 
+    const spireMat = makeMaterial(0x3f3557, 0x9a7ee6);
     const petals: THREE.Object3D[] = [];
     for (let i = 0; i < 7; i++) {
-      const spireMat = makeMaterial(0x3f3557, 0x9a7ee6);
       const spire = createMesh(GEOMETRY.titanSpire, spireMat);
       spire.position.set(0, 0, -7.5);
       spire.rotation.x = 0.56;
       root.add(spire);
       petals.push(spire);
-      materials.push(spireMat);
     }
+    materials.push(spireMat);
 
+    const crustMat = makeMaterial(0x786489, 0xc6a0ff);
     for (let i = 0; i < 3; i++) {
-      const crustMat = makeMaterial(0x786489, 0xc6a0ff);
       const crust = createMesh(GEOMETRY.titanCrust, crustMat);
       crust.position.set((i - 1) * 10, i === 1 ? -8 : 7, 5 - i * 3);
       crust.scale.set(0.65, 0.5, 0.5);
       crust.rotation.set(0.2 * i, 0.3 + i * 0.2, i * 0.4);
       root.add(crust);
-      materials.push(crustMat);
     }
+    materials.push(crustMat);
 
     root.userData = { petals, core };
-    return { type: 'titan', group: root, materials, seed };
+    return { type: 'titan', detail: 'full', group: root, materials, seed };
   }
 
   private createOverlordVisual(seed: number): EnemyVisual {
@@ -525,21 +578,21 @@ export class ThreeEntityRenderer {
     root.add(core);
     materials.push(coreMat);
 
+    const wingMat = makeMaterial(0x6d4135, 0xc35f4e);
     const wings: THREE.Object3D[] = [];
     for (const side of [-1, 1] as const) {
-      const wingMat = makeMaterial(0x6d4135, 0xc35f4e);
       const wing = createMesh(GEOMETRY.overlordWing, wingMat);
       wing.position.set(side * 18.5, -1, -1.5);
       wing.rotation.z = side * 0.38;
       wing.rotation.x = 0.32;
       root.add(wing);
       wings.push(wing);
-      materials.push(wingMat);
     }
+    materials.push(wingMat);
 
+    const hornMat = makeMaterial(0x2a1915, 0x8d3a32);
     const crown: THREE.Object3D[] = [];
     for (let i = 0; i < 5; i++) {
-      const hornMat = makeMaterial(0x2a1915, 0x8d3a32);
       const horn = createMesh(GEOMETRY.overlordHorn, hornMat);
       horn.position.set(0, -16, 3);
       horn.rotation.x = 0.18;
@@ -547,22 +600,169 @@ export class ThreeEntityRenderer {
       horn.rotation.z = horn.userData.baseRotation;
       root.add(horn);
       crown.push(horn);
-      materials.push(hornMat);
     }
+    materials.push(hornMat);
 
+    const podMat = makeMaterial(0x7e3d2e, 0xff7b50);
     const pods: THREE.Object3D[] = [];
     for (const side of [-1, 1] as const) {
-      const podMat = makeMaterial(0x7e3d2e, 0xff7b50);
       const pod = createMesh(GEOMETRY.overlordPod, podMat);
       pod.position.set(side * 11, 19, 1);
       pod.scale.set(0.75, 1, 0.72);
       pod.userData.baseY = pod.position.y;
       root.add(pod);
       pods.push(pod);
-      materials.push(podMat);
     }
+    materials.push(podMat);
 
     root.userData = { wings, crown, pods, core };
-    return { type: 'overlord', group: root, materials, seed };
+    return { type: 'overlord', detail: 'full', group: root, materials, seed };
+  }
+
+  private createLiteSwarmerVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const thoraxMat = makeMaterial(0x8e4c30, 0xff7447);
+    varyMaterial(thoraxMat, (seed - 0.5) * 0.06, (seed - 0.5) * 0.08);
+    const thorax = createMesh(GEOMETRY.swarmerThorax, thoraxMat);
+    thorax.scale.set(1.16, 0.92, 0.82);
+    root.add(thorax);
+    materials.push(thoraxMat);
+
+    const abdomenMat = makeMaterial(0xc9853b, 0xffb24f);
+    const abdomen = createMesh(GEOMETRY.swarmerAbdomen, abdomenMat);
+    abdomen.position.set(0, 8.4, -0.6);
+    abdomen.scale.set(0.92, 1.15, 0.82);
+    root.add(abdomen);
+    materials.push(abdomenMat);
+
+    const wingMat = makeMaterial(0xd2deeb, 0xc4d8ff);
+    wingMat.transparent = true;
+    wingMat.opacity = 0.64;
+    const wings: THREE.Object3D[] = [];
+    for (const side of [-1, 1] as const) {
+      const wing = createMesh(GEOMETRY.swarmerWing, wingMat);
+      wing.position.set(side * 7.6, -0.8, 1.5);
+      wing.rotation.z = side * 0.46;
+      wing.scale.set(0.82, 0.82, 0.82);
+      root.add(wing);
+      wings.push(wing);
+    }
+    materials.push(wingMat);
+
+    root.userData = { wings };
+    return { type: 'swarmer', detail: 'lite', group: root, materials, seed };
+  }
+
+  private createLiteDrifterVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const mantleMat = makeMaterial(0x3a6d65, 0x69c7bb);
+    varyMaterial(mantleMat, (seed - 0.5) * 0.08, 0.03);
+    const mantle = createMesh(GEOMETRY.drifterMantle, mantleMat);
+    mantle.scale.set(1.08, 0.8, 0.74);
+    root.add(mantle);
+    materials.push(mantleMat);
+
+    const coreMat = makeMaterial(0xb6fff7, 0xb8fff1);
+    const core = createMesh(GEOMETRY.drifterCore, coreMat);
+    core.position.set(0, -1.4, 5.2);
+    root.add(core);
+    materials.push(coreMat);
+
+    const tentacleMat = makeMaterial(0x47655f, 0x88dbce);
+    const tentacles: THREE.Object3D[] = [];
+    for (let i = 0; i < 3; i++) {
+      const angle = -Math.PI * 0.72 + (i / 2) * Math.PI * 1.44;
+      const tentacle = createMesh(GEOMETRY.drifterTentacle, tentacleMat);
+      tentacle.position.set(Math.cos(angle) * 9.5, 12.5 + Math.sin(angle) * 1.6, -2.8);
+      tentacle.rotation.z = angle + Math.PI;
+      tentacle.rotation.x = 0.22;
+      tentacle.scale.set(0.9, 0.8, 0.9);
+      tentacle.userData.baseRotation = tentacle.rotation.z;
+      root.add(tentacle);
+      tentacles.push(tentacle);
+    }
+    materials.push(tentacleMat);
+
+    root.userData = { tentacles, core };
+    return { type: 'drifter', detail: 'lite', group: root, materials, seed };
+  }
+
+  private createLiteTitanVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const hullMat = makeMaterial(0x5f5a72, 0xa98fff);
+    varyMaterial(hullMat, (seed - 0.5) * 0.05, (seed - 0.5) * 0.06);
+    const hull = createMesh(GEOMETRY.titanHull, hullMat);
+    hull.scale.set(1.02, 0.9, 0.82);
+    root.add(hull);
+    materials.push(hullMat);
+
+    const coreMat = makeMaterial(0xf7e8ff, 0xf0c2ff);
+    const core = createMesh(GEOMETRY.titanCore, coreMat);
+    core.position.set(0, -1, 8.6);
+    root.add(core);
+    materials.push(coreMat);
+
+    const petals: THREE.Object3D[] = [];
+    const spireMat = makeMaterial(0x3f3557, 0x9a7ee6);
+    for (let i = 0; i < 3; i++) {
+      const spire = createMesh(GEOMETRY.titanSpire, spireMat);
+      spire.position.set(0, 0, -7);
+      spire.rotation.x = 0.52;
+      spire.scale.set(0.85, 0.85, 0.85);
+      root.add(spire);
+      petals.push(spire);
+    }
+    materials.push(spireMat);
+
+    root.userData = { petals, core };
+    return { type: 'titan', detail: 'lite', group: root, materials, seed };
+  }
+
+  private createLiteOverlordVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const thoraxMat = makeMaterial(0x60362a, 0xe25f46);
+    varyMaterial(thoraxMat, (seed - 0.5) * 0.03, 0.02);
+    const thorax = createMesh(GEOMETRY.overlordThorax, thoraxMat);
+    thorax.rotation.z = Math.PI / 6;
+    thorax.scale.set(1, 1, 0.66);
+    root.add(thorax);
+    materials.push(thoraxMat);
+
+    const abdomenMat = makeMaterial(0x9d5c30, 0xff9f51);
+    const abdomen = createMesh(GEOMETRY.overlordAbdomen, abdomenMat);
+    abdomen.position.set(0, 15, -2.4);
+    abdomen.scale.set(1.05, 1.28, 0.72);
+    root.add(abdomen);
+    materials.push(abdomenMat);
+
+    const coreMat = makeMaterial(0xffd79e, 0xffba6d);
+    const core = createMesh(GEOMETRY.overlordCore, coreMat);
+    core.position.set(0, -1, 8.8);
+    root.add(core);
+    materials.push(coreMat);
+
+    const wingMat = makeMaterial(0x6d4135, 0xc35f4e);
+    const wings: THREE.Object3D[] = [];
+    for (const side of [-1, 1] as const) {
+      const wing = createMesh(GEOMETRY.overlordWing, wingMat);
+      wing.position.set(side * 17, 0, -1.2);
+      wing.rotation.z = side * 0.34;
+      wing.rotation.x = 0.24;
+      wing.scale.set(0.9, 0.9, 0.86);
+      root.add(wing);
+      wings.push(wing);
+    }
+    materials.push(wingMat);
+
+    root.userData = { wings, core };
+    return { type: 'overlord', detail: 'lite', group: root, materials, seed };
   }
 }

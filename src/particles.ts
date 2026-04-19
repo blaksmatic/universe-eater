@@ -438,6 +438,26 @@ export class ParticleSystem {
   private particles: Particle[] = [];
   private screenEffects: ScreenEffect[] = [];
 
+  private getParticleLoadScale(): number {
+    const load = this.particles.length / MAX_PARTICLES;
+    if (load >= 0.85) return 0.35;
+    if (load >= 0.65) return 0.5;
+    if (load >= 0.45) return 0.7;
+    return 1;
+  }
+
+  private emitParticle(factory: () => Particle): void {
+    if (this.particles.length >= MAX_PARTICLES) return;
+    this.particles.push(factory());
+  }
+
+  private emitBurst(count: number, factory: () => Particle): void {
+    const allowed = Math.max(0, Math.min(count, MAX_PARTICLES - this.particles.length));
+    for (let i = 0; i < allowed; i++) {
+      this.particles.push(factory());
+    }
+  }
+
   clear(): void {
     this.particles = [];
     this.screenEffects = [];
@@ -445,48 +465,40 @@ export class ParticleSystem {
 
   spawnDeath(x: number, y: number, radius: number, outlineColor: string): void {
     if (this.particles.length >= MAX_PARTICLES) return;
+    const loadScale = this.getParticleLoadScale();
 
     // Hollow ring bubble-up
-    this.particles.push(new DeathParticle(x, y, radius, outlineColor));
+    this.emitParticle(() => new DeathParticle(x, y, radius, outlineColor));
 
     // Explosion burst
-    const burstCount = 8 + Math.floor(Math.random() * 8);
-    for (let i = 0; i < burstCount; i++) {
-      this.particles.push(new ExplosionParticle(x, y, outlineColor));
-    }
+    const burstCount = Math.max(4, Math.round((8 + Math.floor(Math.random() * 8)) * loadScale));
+    this.emitBurst(burstCount, () => new ExplosionParticle(x, y, outlineColor));
 
     // Spark trails
-    const sparkCount = 6 + Math.floor(radius * 0.3);
-    for (let i = 0; i < sparkCount; i++) {
-      this.particles.push(new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
-    }
+    const sparkCount = Math.max(3, Math.round((6 + radius * 0.3) * loadScale));
+    this.emitBurst(sparkCount, () => new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
 
     // Rotating debris
-    const debrisCount = 4 + Math.floor(radius * 0.15);
-    for (let i = 0; i < debrisCount; i++) {
-      this.particles.push(new DebrisParticle(x, y, outlineColor, radius));
-    }
+    const debrisCount = Math.max(2, Math.round((4 + radius * 0.15) * loadScale));
+    this.emitBurst(debrisCount, () => new DebrisParticle(x, y, outlineColor, radius));
 
     // Glow pool
-    this.particles.push(new GlowPool(x, y, outlineColor, radius));
+    this.emitParticle(() => new GlowPool(x, y, outlineColor, radius));
 
     // Flash for bigger enemies
     if (radius > 25) {
-      this.particles.push(new FlashParticle(x, y, radius));
+      this.emitParticle(() => new FlashParticle(x, y, radius));
     }
   }
 
   spawnXpOrbs(x: number, y: number, playerX: number, playerY: number, count: number): void {
-    if (this.particles.length >= MAX_PARTICLES) return;
-
-    for (let i = 0; i < count; i++) {
-      this.particles.push(new XpOrb(x, y, playerX, playerY));
-    }
+    if (count <= 0 || this.particles.length >= MAX_PARTICLES) return;
+    const orbCount = Math.max(1, Math.round(count * this.getParticleLoadScale()));
+    this.emitBurst(orbCount, () => new XpOrb(x, y, playerX, playerY));
   }
 
   spawnFlash(x: number, y: number, radius: number): void {
-    if (this.particles.length >= MAX_PARTICLES) return;
-    this.particles.push(new FlashParticle(x, y, radius));
+    this.emitParticle(() => new FlashParticle(x, y, radius));
   }
 
   addScreenFlash(r: number, g: number, b: number, alpha: number, duration: number): void {

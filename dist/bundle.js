@@ -2278,6 +2278,7 @@
   var CHARGE_SPEED = 500;
   var SPAWN_DURATION = 0.3;
   var HIT_FLASH_DURATION = 0.08;
+  var ENEMY_HP_SCALE = 0.5;
   var ENEMY_TYPES = {
     swarmer: {
       baseRadius: 10,
@@ -2348,7 +2349,7 @@
       this.y = y;
       this.radius = config.baseRadius + randomRange(-config.radiusVariation / 2, config.radiusVariation / 2);
       const sizeRatio = this.radius / config.baseRadius;
-      this.maxHp = config.baseHp * sizeRatio * hpScale;
+      this.maxHp = config.baseHp * sizeRatio * hpScale * ENEMY_HP_SCALE;
       this.hp = this.maxHp;
       this.speed = config.speed * speedScale;
       this.color = config.color;
@@ -3173,39 +3174,49 @@
       this.particles = [];
       this.screenEffects = [];
     }
+    getParticleLoadScale() {
+      const load = this.particles.length / MAX_PARTICLES;
+      if (load >= 0.85) return 0.35;
+      if (load >= 0.65) return 0.5;
+      if (load >= 0.45) return 0.7;
+      return 1;
+    }
+    emitParticle(factory) {
+      if (this.particles.length >= MAX_PARTICLES) return;
+      this.particles.push(factory());
+    }
+    emitBurst(count, factory) {
+      const allowed = Math.max(0, Math.min(count, MAX_PARTICLES - this.particles.length));
+      for (let i = 0; i < allowed; i++) {
+        this.particles.push(factory());
+      }
+    }
     clear() {
       this.particles = [];
       this.screenEffects = [];
     }
     spawnDeath(x, y, radius, outlineColor) {
       if (this.particles.length >= MAX_PARTICLES) return;
-      this.particles.push(new DeathParticle(x, y, radius, outlineColor));
-      const burstCount = 8 + Math.floor(Math.random() * 8);
-      for (let i = 0; i < burstCount; i++) {
-        this.particles.push(new ExplosionParticle(x, y, outlineColor));
-      }
-      const sparkCount = 6 + Math.floor(radius * 0.3);
-      for (let i = 0; i < sparkCount; i++) {
-        this.particles.push(new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
-      }
-      const debrisCount = 4 + Math.floor(radius * 0.15);
-      for (let i = 0; i < debrisCount; i++) {
-        this.particles.push(new DebrisParticle(x, y, outlineColor, radius));
-      }
-      this.particles.push(new GlowPool(x, y, outlineColor, radius));
+      const loadScale = this.getParticleLoadScale();
+      this.emitParticle(() => new DeathParticle(x, y, radius, outlineColor));
+      const burstCount = Math.max(4, Math.round((8 + Math.floor(Math.random() * 8)) * loadScale));
+      this.emitBurst(burstCount, () => new ExplosionParticle(x, y, outlineColor));
+      const sparkCount = Math.max(3, Math.round((6 + radius * 0.3) * loadScale));
+      this.emitBurst(sparkCount, () => new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
+      const debrisCount = Math.max(2, Math.round((4 + radius * 0.15) * loadScale));
+      this.emitBurst(debrisCount, () => new DebrisParticle(x, y, outlineColor, radius));
+      this.emitParticle(() => new GlowPool(x, y, outlineColor, radius));
       if (radius > 25) {
-        this.particles.push(new FlashParticle(x, y, radius));
+        this.emitParticle(() => new FlashParticle(x, y, radius));
       }
     }
     spawnXpOrbs(x, y, playerX, playerY, count) {
-      if (this.particles.length >= MAX_PARTICLES) return;
-      for (let i = 0; i < count; i++) {
-        this.particles.push(new XpOrb(x, y, playerX, playerY));
-      }
+      if (count <= 0 || this.particles.length >= MAX_PARTICLES) return;
+      const orbCount = Math.max(1, Math.round(count * this.getParticleLoadScale()));
+      this.emitBurst(orbCount, () => new XpOrb(x, y, playerX, playerY));
     }
     spawnFlash(x, y, radius) {
-      if (this.particles.length >= MAX_PARTICLES) return;
-      this.particles.push(new FlashParticle(x, y, radius));
+      this.emitParticle(() => new FlashParticle(x, y, radius));
     }
     addScreenFlash(r, g, b, alpha, duration) {
       this.screenEffects.push(new ScreenFlash(r, g, b, alpha, duration));
@@ -29810,6 +29821,10 @@ void main() {
   // src/three-view.ts
   var BASE_CLEAR_COLOR = 461590;
   var PLAYER_BASE_RADIUS = 15;
+  var REDUCED_DETAIL_ENTER_THRESHOLD = 24;
+  var REDUCED_DETAIL_EXIT_THRESHOLD = 16;
+  var REDUCED_PIXEL_RATIO_THRESHOLD = 18;
+  var HEAVY_PIXEL_RATIO_THRESHOLD = 30;
   var BASE_RADII = {
     swarmer: 10,
     drifter: 20,
@@ -29861,21 +29876,30 @@ void main() {
   function isMobileLikeViewport() {
     return window.innerWidth < 900 || window.matchMedia("(pointer: coarse)").matches;
   }
+  function createEnemyPool() {
+    return {
+      swarmer: [],
+      drifter: [],
+      titan: [],
+      overlord: []
+    };
+  }
   var ThreeEntityRenderer = class {
     constructor(overlayCanvas) {
       this.scene = new Scene();
       this.camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 1e3);
       this.enemyVisuals = /* @__PURE__ */ new Map();
       this.enemyPools = {
-        swarmer: [],
-        drifter: [],
-        titan: [],
-        overlord: []
+        full: createEnemyPool(),
+        lite: createEnemyPool()
       };
+      this.currentDevicePixelRatio = 1;
+      this.currentPixelRatio = 1;
+      this.detailMode = "full";
       this.width = 1;
       this.height = 1;
       const compactQuality = isMobileLikeViewport();
-      this.pixelRatioCap = compactQuality ? 1.35 : 1.85;
+      this.basePixelRatioCap = compactQuality ? 1.35 : 1.85;
       this.renderer = new WebGLRenderer({
         antialias: !compactQuality,
         alpha: false,
@@ -29914,6 +29938,7 @@ void main() {
     resize(width, height, dpr) {
       this.width = width;
       this.height = height;
+      this.currentDevicePixelRatio = dpr;
       this.camera.left = -width / 2;
       this.camera.right = width / 2;
       this.camera.top = height / 2;
@@ -29921,10 +29946,11 @@ void main() {
       this.camera.position.set(0, 0, 400);
       this.camera.lookAt(0, 0, 0);
       this.camera.updateProjectionMatrix();
-      this.renderer.setPixelRatio(Math.min(dpr, this.pixelRatioCap));
+      this.updatePixelRatio(1);
       this.renderer.setSize(width, height, false);
     }
     render(world, time) {
+      this.applyAdaptiveQuality(world?.spawner.enemies.length ?? 0);
       if (!world) {
         this.playerVisual.group.visible = false;
         for (const visual of this.enemyVisuals.values()) {
@@ -29974,19 +30000,19 @@ void main() {
       }
     }
     acquireEnemyVisual(type) {
-      const pooled = this.enemyPools[type].pop();
+      const pooled = this.enemyPools[this.detailMode][type].pop();
       if (pooled) {
         pooled.group.visible = true;
         return pooled;
       }
-      const visual = this.createEnemyVisual(type);
+      const visual = this.createEnemyVisual(type, this.detailMode);
       this.scene.add(visual.group);
       return visual;
     }
     releaseEnemyVisual(enemy, visual) {
       visual.group.visible = false;
       this.enemyVisuals.delete(enemy);
-      this.enemyPools[visual.type].push(visual);
+      this.enemyPools[visual.detail][visual.type].push(visual);
     }
     updateEnemyVisual(enemy, visual, world, time) {
       const visible = world.camera.isVisible(enemy.x, enemy.y, enemy.radius + 120);
@@ -30062,17 +30088,41 @@ void main() {
       }
       return { group: root, shell, core, fins };
     }
-    createEnemyVisual(type) {
+    applyAdaptiveQuality(enemyCount) {
+      const nextDetailMode = this.detailMode === "full" ? enemyCount >= REDUCED_DETAIL_ENTER_THRESHOLD ? "lite" : "full" : enemyCount <= REDUCED_DETAIL_EXIT_THRESHOLD ? "full" : "lite";
+      if (nextDetailMode !== this.detailMode) {
+        this.detailMode = nextDetailMode;
+        this.recycleActiveEnemyVisuals();
+      }
+      const pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD ? 0.62 : enemyCount >= REDUCED_PIXEL_RATIO_THRESHOLD ? 0.8 : 1;
+      this.updatePixelRatio(pixelRatioScale);
+    }
+    updatePixelRatio(scale) {
+      const target = Math.min(this.currentDevicePixelRatio, this.basePixelRatioCap * scale);
+      if (Math.abs(target - this.currentPixelRatio) < 0.02) return;
+      this.currentPixelRatio = target;
+      this.renderer.setPixelRatio(target);
+      this.renderer.setSize(this.width, this.height, false);
+    }
+    recycleActiveEnemyVisuals() {
+      const activeVisuals = Array.from(this.enemyVisuals.entries());
+      this.enemyVisuals.clear();
+      for (const [, visual] of activeVisuals) {
+        visual.group.visible = false;
+        this.enemyPools[visual.detail][visual.type].push(visual);
+      }
+    }
+    createEnemyVisual(type, detail) {
       const seed = Math.random();
       switch (type) {
         case "swarmer":
-          return this.createSwarmerVisual(seed);
+          return detail === "lite" ? this.createLiteSwarmerVisual(seed) : this.createSwarmerVisual(seed);
         case "drifter":
-          return this.createDrifterVisual(seed);
+          return detail === "lite" ? this.createLiteDrifterVisual(seed) : this.createDrifterVisual(seed);
         case "titan":
-          return this.createTitanVisual(seed);
+          return detail === "lite" ? this.createLiteTitanVisual(seed) : this.createTitanVisual(seed);
         case "overlord":
-          return this.createOverlordVisual(seed);
+          return detail === "lite" ? this.createLiteOverlordVisual(seed) : this.createOverlordVisual(seed);
       }
     }
     createSwarmerVisual(seed) {
@@ -30102,18 +30152,18 @@ void main() {
       wingMat.opacity = 0.76;
       const wings = [];
       for (const side of [-1, 1]) {
-        const wing = createMesh(GEOMETRY.swarmerWing, wingMat.clone());
+        const wing = createMesh(GEOMETRY.swarmerWing, wingMat);
         wing.position.set(side * 8.7, -1.8, 1.8);
         wing.rotation.z = side * 0.5;
         root.add(wing);
         wings.push(wing);
-        materials.push(wing.material);
       }
+      materials.push(wingMat);
+      const legMat = makeMaterial(4007453, 7619899);
       const legs = [];
       for (let i = 0; i < 3; i++) {
         const legAngle = -0.8 + i * 0.8;
         for (const side of [-1, 1]) {
-          const legMat = makeMaterial(4007453, 7619899);
           const leg = createMesh(GEOMETRY.swarmerLeg, legMat);
           leg.position.set(side * (5.5 + i * 1.4), i * 2.5 - 1.5, -2.6);
           leg.rotation.x = 1.1;
@@ -30121,9 +30171,9 @@ void main() {
           leg.userData.baseRotation = leg.rotation.z;
           root.add(leg);
           legs.push(leg);
-          materials.push(legMat);
         }
       }
+      materials.push(legMat);
       const stingerMat = makeMaterial(2496021, 9388600);
       const stinger = createMesh(GEOMETRY.swarmerStinger, stingerMat);
       stinger.position.set(0, 15, -0.2);
@@ -30131,7 +30181,7 @@ void main() {
       root.add(stinger);
       materials.push(stingerMat);
       root.userData = { wings, legs };
-      return { type: "swarmer", group: root, materials, seed };
+      return { type: "swarmer", detail: "full", group: root, materials, seed };
     }
     createDrifterVisual(seed) {
       const root = new Group();
@@ -30147,20 +30197,20 @@ void main() {
       core.position.set(0, -1.5, 5.8);
       root.add(core);
       materials.push(coreMat);
+      const frillMat = makeMaterial(6263435, 10348765);
       const petals = [];
       for (let i = 0; i < 5; i++) {
-        const frillMat = makeMaterial(6263435, 10348765);
         const frill = createMesh(GEOMETRY.drifterFrill, frillMat);
         frill.position.set(0, 2, -4);
         frill.rotation.x = 0.75;
         root.add(frill);
         petals.push(frill);
-        materials.push(frillMat);
       }
+      materials.push(frillMat);
+      const tentacleMat = makeMaterial(4679007, 8969166);
       const tentacles = [];
       for (let i = 0; i < 6; i++) {
         const angle = -Math.PI * 0.82 + i / 5 * Math.PI * 1.64;
-        const tentacleMat = makeMaterial(4679007, 8969166);
         const tentacle = createMesh(GEOMETRY.drifterTentacle, tentacleMat);
         tentacle.position.set(Math.cos(angle) * 10.5, 14 + Math.sin(angle) * 2.4, -3.4);
         tentacle.rotation.z = angle + Math.PI;
@@ -30168,10 +30218,10 @@ void main() {
         tentacle.userData.baseRotation = tentacle.rotation.z;
         root.add(tentacle);
         tentacles.push(tentacle);
-        materials.push(tentacleMat);
       }
+      materials.push(tentacleMat);
       root.userData = { tentacles, petals, core };
-      return { type: "drifter", group: root, materials, seed };
+      return { type: "drifter", detail: "full", group: root, materials, seed };
     }
     createTitanVisual(seed) {
       const root = new Group();
@@ -30187,27 +30237,27 @@ void main() {
       core.position.set(0, -1, 10);
       root.add(core);
       materials.push(coreMat);
+      const spireMat = makeMaterial(4142423, 10125030);
       const petals = [];
       for (let i = 0; i < 7; i++) {
-        const spireMat = makeMaterial(4142423, 10125030);
         const spire = createMesh(GEOMETRY.titanSpire, spireMat);
         spire.position.set(0, 0, -7.5);
         spire.rotation.x = 0.56;
         root.add(spire);
         petals.push(spire);
-        materials.push(spireMat);
       }
+      materials.push(spireMat);
+      const crustMat = makeMaterial(7890057, 13017343);
       for (let i = 0; i < 3; i++) {
-        const crustMat = makeMaterial(7890057, 13017343);
         const crust = createMesh(GEOMETRY.titanCrust, crustMat);
         crust.position.set((i - 1) * 10, i === 1 ? -8 : 7, 5 - i * 3);
         crust.scale.set(0.65, 0.5, 0.5);
         crust.rotation.set(0.2 * i, 0.3 + i * 0.2, i * 0.4);
         root.add(crust);
-        materials.push(crustMat);
       }
+      materials.push(crustMat);
       root.userData = { petals, core };
-      return { type: "titan", group: root, materials, seed };
+      return { type: "titan", detail: "full", group: root, materials, seed };
     }
     createOverlordVisual(seed) {
       const root = new Group();
@@ -30230,20 +30280,20 @@ void main() {
       core.position.set(0, -1, 9.2);
       root.add(core);
       materials.push(coreMat);
+      const wingMat = makeMaterial(7160117, 12803918);
       const wings = [];
       for (const side of [-1, 1]) {
-        const wingMat = makeMaterial(7160117, 12803918);
         const wing = createMesh(GEOMETRY.overlordWing, wingMat);
         wing.position.set(side * 18.5, -1, -1.5);
         wing.rotation.z = side * 0.38;
         wing.rotation.x = 0.32;
         root.add(wing);
         wings.push(wing);
-        materials.push(wingMat);
       }
+      materials.push(wingMat);
+      const hornMat = makeMaterial(2758933, 9255474);
       const crown = [];
       for (let i = 0; i < 5; i++) {
-        const hornMat = makeMaterial(2758933, 9255474);
         const horn = createMesh(GEOMETRY.overlordHorn, hornMat);
         horn.position.set(0, -16, 3);
         horn.rotation.x = 0.18;
@@ -30251,21 +30301,147 @@ void main() {
         horn.rotation.z = horn.userData.baseRotation;
         root.add(horn);
         crown.push(horn);
-        materials.push(hornMat);
       }
+      materials.push(hornMat);
+      const podMat = makeMaterial(8273198, 16743248);
       const pods = [];
       for (const side of [-1, 1]) {
-        const podMat = makeMaterial(8273198, 16743248);
         const pod = createMesh(GEOMETRY.overlordPod, podMat);
         pod.position.set(side * 11, 19, 1);
         pod.scale.set(0.75, 1, 0.72);
         pod.userData.baseY = pod.position.y;
         root.add(pod);
         pods.push(pod);
-        materials.push(podMat);
       }
+      materials.push(podMat);
       root.userData = { wings, crown, pods, core };
-      return { type: "overlord", group: root, materials, seed };
+      return { type: "overlord", detail: "full", group: root, materials, seed };
+    }
+    createLiteSwarmerVisual(seed) {
+      const root = new Group();
+      const materials = [];
+      const thoraxMat = makeMaterial(9325616, 16741447);
+      varyMaterial(thoraxMat, (seed - 0.5) * 0.06, (seed - 0.5) * 0.08);
+      const thorax = createMesh(GEOMETRY.swarmerThorax, thoraxMat);
+      thorax.scale.set(1.16, 0.92, 0.82);
+      root.add(thorax);
+      materials.push(thoraxMat);
+      const abdomenMat = makeMaterial(13206843, 16757327);
+      const abdomen = createMesh(GEOMETRY.swarmerAbdomen, abdomenMat);
+      abdomen.position.set(0, 8.4, -0.6);
+      abdomen.scale.set(0.92, 1.15, 0.82);
+      root.add(abdomen);
+      materials.push(abdomenMat);
+      const wingMat = makeMaterial(13819627, 12900607);
+      wingMat.transparent = true;
+      wingMat.opacity = 0.64;
+      const wings = [];
+      for (const side of [-1, 1]) {
+        const wing = createMesh(GEOMETRY.swarmerWing, wingMat);
+        wing.position.set(side * 7.6, -0.8, 1.5);
+        wing.rotation.z = side * 0.46;
+        wing.scale.set(0.82, 0.82, 0.82);
+        root.add(wing);
+        wings.push(wing);
+      }
+      materials.push(wingMat);
+      root.userData = { wings };
+      return { type: "swarmer", detail: "lite", group: root, materials, seed };
+    }
+    createLiteDrifterVisual(seed) {
+      const root = new Group();
+      const materials = [];
+      const mantleMat = makeMaterial(3829093, 6932411);
+      varyMaterial(mantleMat, (seed - 0.5) * 0.08, 0.03);
+      const mantle = createMesh(GEOMETRY.drifterMantle, mantleMat);
+      mantle.scale.set(1.08, 0.8, 0.74);
+      root.add(mantle);
+      materials.push(mantleMat);
+      const coreMat = makeMaterial(11993079, 12124145);
+      const core = createMesh(GEOMETRY.drifterCore, coreMat);
+      core.position.set(0, -1.4, 5.2);
+      root.add(core);
+      materials.push(coreMat);
+      const tentacleMat = makeMaterial(4679007, 8969166);
+      const tentacles = [];
+      for (let i = 0; i < 3; i++) {
+        const angle = -Math.PI * 0.72 + i / 2 * Math.PI * 1.44;
+        const tentacle = createMesh(GEOMETRY.drifterTentacle, tentacleMat);
+        tentacle.position.set(Math.cos(angle) * 9.5, 12.5 + Math.sin(angle) * 1.6, -2.8);
+        tentacle.rotation.z = angle + Math.PI;
+        tentacle.rotation.x = 0.22;
+        tentacle.scale.set(0.9, 0.8, 0.9);
+        tentacle.userData.baseRotation = tentacle.rotation.z;
+        root.add(tentacle);
+        tentacles.push(tentacle);
+      }
+      materials.push(tentacleMat);
+      root.userData = { tentacles, core };
+      return { type: "drifter", detail: "lite", group: root, materials, seed };
+    }
+    createLiteTitanVisual(seed) {
+      const root = new Group();
+      const materials = [];
+      const hullMat = makeMaterial(6249074, 11112447);
+      varyMaterial(hullMat, (seed - 0.5) * 0.05, (seed - 0.5) * 0.06);
+      const hull = createMesh(GEOMETRY.titanHull, hullMat);
+      hull.scale.set(1.02, 0.9, 0.82);
+      root.add(hull);
+      materials.push(hullMat);
+      const coreMat = makeMaterial(16247039, 15778559);
+      const core = createMesh(GEOMETRY.titanCore, coreMat);
+      core.position.set(0, -1, 8.6);
+      root.add(core);
+      materials.push(coreMat);
+      const petals = [];
+      const spireMat = makeMaterial(4142423, 10125030);
+      for (let i = 0; i < 3; i++) {
+        const spire = createMesh(GEOMETRY.titanSpire, spireMat);
+        spire.position.set(0, 0, -7);
+        spire.rotation.x = 0.52;
+        spire.scale.set(0.85, 0.85, 0.85);
+        root.add(spire);
+        petals.push(spire);
+      }
+      materials.push(spireMat);
+      root.userData = { petals, core };
+      return { type: "titan", detail: "lite", group: root, materials, seed };
+    }
+    createLiteOverlordVisual(seed) {
+      const root = new Group();
+      const materials = [];
+      const thoraxMat = makeMaterial(6305322, 14835526);
+      varyMaterial(thoraxMat, (seed - 0.5) * 0.03, 0.02);
+      const thorax = createMesh(GEOMETRY.overlordThorax, thoraxMat);
+      thorax.rotation.z = Math.PI / 6;
+      thorax.scale.set(1, 1, 0.66);
+      root.add(thorax);
+      materials.push(thoraxMat);
+      const abdomenMat = makeMaterial(10312752, 16752465);
+      const abdomen = createMesh(GEOMETRY.overlordAbdomen, abdomenMat);
+      abdomen.position.set(0, 15, -2.4);
+      abdomen.scale.set(1.05, 1.28, 0.72);
+      root.add(abdomen);
+      materials.push(abdomenMat);
+      const coreMat = makeMaterial(16766878, 16759405);
+      const core = createMesh(GEOMETRY.overlordCore, coreMat);
+      core.position.set(0, -1, 8.8);
+      root.add(core);
+      materials.push(coreMat);
+      const wingMat = makeMaterial(7160117, 12803918);
+      const wings = [];
+      for (const side of [-1, 1]) {
+        const wing = createMesh(GEOMETRY.overlordWing, wingMat);
+        wing.position.set(side * 17, 0, -1.2);
+        wing.rotation.z = side * 0.34;
+        wing.rotation.x = 0.24;
+        wing.scale.set(0.9, 0.9, 0.86);
+        root.add(wing);
+        wings.push(wing);
+      }
+      materials.push(wingMat);
+      root.userData = { wings, core };
+      return { type: "overlord", detail: "lite", group: root, materials, seed };
     }
   };
 

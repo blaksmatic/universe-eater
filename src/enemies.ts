@@ -4,6 +4,7 @@ import { Camera } from './camera';
 const CHARGE_SPEED = 500;
 const SPAWN_DURATION = 0.3;
 const HIT_FLASH_DURATION = 0.08;
+const ENEMY_HP_SCALE = 0.5;
 
 interface EnemyTypeConfig {
   baseRadius: number;
@@ -89,7 +90,7 @@ export class Enemy {
     this.y = y;
     this.radius = config.baseRadius + randomRange(-config.radiusVariation / 2, config.radiusVariation / 2);
     const sizeRatio = this.radius / config.baseRadius;
-    this.maxHp = config.baseHp * sizeRatio * hpScale;
+    this.maxHp = config.baseHp * sizeRatio * hpScale * ENEMY_HP_SCALE;
     this.hp = this.maxHp;
     this.speed = config.speed * speedScale;
     this.color = config.color;
