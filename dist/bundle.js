@@ -1720,6 +1720,7 @@
   };
 
   // src/player.ts
+  var LEVEL_XP_SCALE = 0.7;
   var Player = class {
     constructor() {
       this.x = MAP_WIDTH / 2;
@@ -1740,7 +1741,7 @@
       this.contactGraceDuration = 0.35;
     }
     getXpForNextLevel() {
-      return Math.floor(8 * Math.pow(1.35, this.level - 1));
+      return Math.max(1, Math.floor(8 * Math.pow(1.35, this.level - 1) * LEVEL_XP_SCALE));
     }
     addXp(amount) {
       this.xp += amount;

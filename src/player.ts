@@ -8,6 +8,8 @@ interface Ripple {
   duration: number;
 }
 
+const LEVEL_XP_SCALE = 0.7;
+
 export class Player {
   x = MAP_WIDTH / 2;
   y = MAP_HEIGHT / 2;
@@ -27,7 +29,7 @@ export class Player {
   contactGraceDuration = 0.35;
 
   getXpForNextLevel(): number {
-    return Math.floor(8 * Math.pow(1.35, this.level - 1));
+    return Math.max(1, Math.floor(8 * Math.pow(1.35, this.level - 1) * LEVEL_XP_SCALE));
   }
 
   addXp(amount: number): boolean {
