@@ -3,7 +3,7 @@ import { Player } from './player';
 import { WeaponManager } from './weapons';
 import { Language, formatHudWeaponLevel, formatHullLabel, formatKillsStat, formatLevelReachedStat, formatNextStageStat, formatReachedStageStat, formatRestartCountdown, formatRerollLabel, formatStageClearTitle, formatStageLabel, formatSurvivedStat, formatTotalKillsStat, formatXpLabel, getGameTitleLines, getLanguage, getLanguageButtonLabel, getTagLabel, getUiText, getWeaponName, uiFont } from './i18n';
 import { PassiveName, WeaponName } from './ids';
-import { formatTime, TWO_PI, easeOutCubic } from './utils';
+import { formatTime, TWO_PI, easeOutCubic, roundedRect } from './utils';
 import {
   touch,
   isTouchDevice,
@@ -65,7 +65,7 @@ const WEAPON_SHAPES: Record<WeaponName | PassiveName, (ctx: CanvasRenderingConte
   },
   'Reinforced Hull': (ctx, x, y, s) => {
     ctx.beginPath();
-    ctx.roundRect(x - s * 0.7, y - s * 0.85, s * 1.4, s * 1.7, 2);
+    roundedRect(ctx, x - s * 0.7, y - s * 0.85, s * 1.4, s * 1.7, 2);
     ctx.strokeStyle = 'rgba(255, 135, 135, 0.9)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -205,14 +205,14 @@ export class UI {
     const barRadius = barH / 2;
 
     ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, barRadius);
+    roundedRect(ctx, barX, barY, barW, barH, barRadius);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
     ctx.fill();
 
     if (xpRatio > 0.01) {
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(barX, barY, barW, barH, barRadius);
+      roundedRect(ctx, barX, barY, barW, barH, barRadius);
       ctx.clip();
       const fillW = barW * xpRatio;
       const grad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
@@ -247,7 +247,7 @@ export class UI {
     const weaponPanelH = 24 + weaponSlots.length * 22 + 14;
     const weaponPanelY = Math.max(topInset + 54, barY - weaponPanelH - (compactHud ? 32 : 22));
     ctx.beginPath();
-    ctx.roundRect(weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH, 10);
+    roundedRect(ctx, weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH, 10);
     ctx.fillStyle = 'rgba(8, 14, 30, 0.55)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(120, 180, 255, 0.14)';
@@ -300,8 +300,8 @@ export class UI {
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.beginPath();
-    ctx.roundRect(x - 7, y - 8, 5, 16, 1);
-    ctx.roundRect(x + 2, y - 8, 5, 16, 1);
+    roundedRect(ctx, x - 7, y - 8, 5, 16, 1);
+    roundedRect(ctx, x + 2, y - 8, 5, 16, 1);
     ctx.fill();
   }
 
@@ -436,7 +436,7 @@ export class UI {
       ctx.strokeStyle = `rgba(${accent.stroke[0]}, ${accent.stroke[1]}, ${accent.stroke[2]}, ${0.45 * n.alpha})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(pillX, y - pillH / 2 - 4, pillW, pillH, 6);
+      roundedRect(ctx, pillX, y - pillH / 2 - 4, pillW, pillH, 6);
       ctx.fill();
       ctx.stroke();
 
@@ -476,7 +476,7 @@ export class UI {
       const isSelected = i === game.selectedDraftIndex;
 
       ctx.beginPath();
-      ctx.roundRect(card.x, card.y, card.width, card.height, 14);
+      roundedRect(ctx, card.x, card.y, card.width, card.height, 14);
       ctx.fillStyle = isSelected
         ? choice.kind === 'unlock' ? 'rgba(54, 38, 16, 0.94)' : 'rgba(20, 28, 54, 0.94)'
         : choice.kind === 'unlock' ? 'rgba(40, 30, 14, 0.88)' : 'rgba(14, 20, 38, 0.88)';
@@ -489,7 +489,7 @@ export class UI {
 
       if (isSelected) {
         ctx.beginPath();
-        ctx.roundRect(card.x - 4, card.y - 4, card.width + 8, card.height + 8, 16);
+        roundedRect(ctx, card.x - 4, card.y - 4, card.width + 8, card.height + 8, 16);
         ctx.strokeStyle = choice.kind === 'unlock' ? 'rgba(255, 210, 135, 0.26)' : 'rgba(150, 220, 255, 0.22)';
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -522,7 +522,7 @@ export class UI {
         ctx.font = uiFont(10, 'bold');
         const chipW = ctx.measureText(label).width + 16;
         ctx.beginPath();
-        ctx.roundRect(chipX, chipY, chipW, 18, 9);
+        roundedRect(ctx, chipX, chipY, chipW, 18, 9);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
         ctx.fill();
         ctx.strokeStyle = 'rgba(180, 210, 255, 0.16)';
@@ -537,7 +537,7 @@ export class UI {
 
     const reroll = layout.rerollButton;
     ctx.beginPath();
-    ctx.roundRect(reroll.x, reroll.y, reroll.width, reroll.height, 10);
+    roundedRect(ctx, reroll.x, reroll.y, reroll.width, reroll.height, 10);
     const rerollEnabled = game.rerollsRemaining > 0;
     ctx.fillStyle = rerollEnabled ? 'rgba(18, 26, 52, 0.9)' : 'rgba(22, 22, 28, 0.82)';
     ctx.fill();
@@ -767,7 +767,7 @@ export class UI {
     for (const button of layout.buttons) {
       const active = button.language === getLanguage();
       ctx.beginPath();
-      ctx.roundRect(button.x, button.y, button.width, button.height, 10);
+      roundedRect(ctx, button.x, button.y, button.width, button.height, 10);
       ctx.fillStyle = active ? 'rgba(70, 132, 230, 0.42)' : 'rgba(10, 16, 30, 0.72)';
       ctx.fill();
       ctx.strokeStyle = active ? 'rgba(170, 220, 255, 0.8)' : 'rgba(160, 190, 235, 0.22)';
