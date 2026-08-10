@@ -1,0 +1,42 @@
+{
+  "description": "Universe Eater - WeChat Mini Game port",
+  "appid": "wxd7a29dec46fb74c9",
+  "projectname": "universe-eater",
+  "setting": {
+    "es6": false,
+    "minified": false,
+    "postcss": false,
+    "urlCheck": false,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "enhance": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "compileType": "game",
+  "miniprogramRoot": "./",
+  "srcMiniprogramRoot": "./",
+  "libVersion": "3.4.0",
+  "condition": {},
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "isGameTourist": false,
+  "editorSetting": {}
+}

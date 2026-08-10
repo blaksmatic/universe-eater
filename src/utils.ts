@@ -103,6 +103,37 @@ export function tracePoly(
   ctx.closePath();
 }
 
+/**
+ * Trace a rounded rectangle without relying on Canvas 2D's roundRect API.
+ *
+ * Some iOS WeChat Mini Game Canvas runtimes do not implement
+ * CanvasRenderingContext2D.roundRect(), while quadraticCurveTo is widely
+ * supported. The helper only defines the path; callers can fill or stroke it.
+ */
+export function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const r = Math.max(0, Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2));
+  const right = x + width;
+  const bottom = y + height;
+
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(right - r, y);
+  ctx.quadraticCurveTo(right, y, right, y + r);
+  ctx.lineTo(right, bottom - r);
+  ctx.quadraticCurveTo(right, bottom, right - r, bottom);
+  ctx.lineTo(x + r, bottom);
+  ctx.quadraticCurveTo(x, bottom, x, bottom - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 export function easeOutBack(t: number): number {
   const c = 1.4;
   return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
