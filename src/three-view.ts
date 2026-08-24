@@ -261,8 +261,22 @@ export class ThreeEntityRenderer {
         visual = this.acquireEnemyVisual(enemy.type);
         this.enemyVisuals.set(enemy, visual);
       }
+      this.applyStageTint(visual, enemy);
       this.updateEnemyVisual(enemy, visual, world, time);
     }
+  }
+
+  /** Boss bodies shift hue per Mk stage so each stage reads as a new foe. */
+  private applyStageTint(visual: EnemyVisual, enemy: Enemy): void {
+    if (!enemy.isBoss) return;
+    const tintFor = (visual.group.userData.tintFor as number | undefined) ?? -1;
+    if (tintFor === enemy.stage) return;
+    const hueShift = ((enemy.stage - 1) % 5) * 0.078;
+    for (const material of visual.materials) {
+      material.color.offsetHSL(hueShift, 0, 0);
+      material.emissive.copy(material.color).multiplyScalar(0.5);
+    }
+    visual.group.userData.tintFor = enemy.stage;
   }
 
   private acquireEnemyVisual(type: EnemyType): EnemyVisual {

@@ -8,6 +8,7 @@ import { WeaponManager } from './weapons';
 import { WorldCombatSystem, CombatFrameResult } from './world-combat';
 import { WorldMotionTracker } from './world-motion';
 import { WorldRenderer } from './world-renderer';
+import { composeSpawnMods, type MutatorId } from './mutators';
 
 export interface WorldUpdateResult extends CombatFrameResult {
   levelUps: number;
@@ -91,9 +92,21 @@ export class GameWorld {
     const result = this.combat.consumeDefeatedEnemies();
     this.spawner.removeDead();
     const bossPhaseEvents = this.spawner.drainBossPhaseEvents();
+    if (bossPhaseEvents > 0) {
+      // Phase transition: sweep the boss's bullets for a breathing-room beat.
+      const boss = this.spawner.activeBoss;
+      if (boss) boss.projectiles = [];
+    }
     this.particles.update(dt);
 
     return { ...result, levelUps: result.levelUps, bossPhaseEvents };
+  }
+
+  /** Clear every hostile bullet on the field (boss death sweep). */
+  clearHostileBullets(): void {
+    for (const enemy of this.spawner.enemies) {
+      enemy.projectiles = [];
+    }
   }
 
   drawTitle(ctx: CanvasRenderingContext2D, time: number): void {
@@ -112,8 +125,8 @@ export class GameWorld {
     this.renderer.drawEndBackdrop(ctx, time);
   }
 
-  prepareNextStage(stage: number, stageDuration: number): void {
-    this.spawner.setStage(stage, stageDuration);
+  prepareNextStage(stage: number, stageDuration: number, mutators: MutatorId[] = []): void {
+    this.spawner.setStage(stage, stageDuration, composeSpawnMods(mutators));
     this.spawner.clear();
     this.particles.clear();
     this.camera.follow(this.player.x, this.player.y);

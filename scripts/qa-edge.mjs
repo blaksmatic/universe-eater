@@ -108,6 +108,21 @@ async function scenarioRestart(page) {
   let died = false;
   for (let i = 0; i < 48; i++) {
     await page.waitForTimeout(250);
+    await page.evaluate(() => {
+      const rt = window.__universeEater;
+      if (rt.game.state === 'levelUp' && rt.game.draftChoices.length) {
+        rt.game.chooseDraft(0, rt.world.weaponManager, rt.world.player);
+        return;
+      }
+      if (rt.game.state !== 'playing') return;
+      rt.world.player.hp = 1;
+      // Guarantee contact: teleport the nearest enemy onto the player.
+      const e = rt.world.spawner.enemies[0];
+      if (e && !e.dead) {
+        e.x = rt.world.player.x + 15;
+        e.y = rt.world.player.y;
+      }
+    });
     const s = await getState(page);
     if (s.state === 'gameOver') { died = true; break; }
     if (s.state !== 'playing') break;
@@ -432,7 +447,7 @@ async function scenarioBomber(page) {
   while (Date.now() < end) {
     await page.evaluate(() => {
       const rt = window.__universeEater;
-      if (rt.game.state === 'playing') rt.world.player.hp = Math.min(rt.world.player.maxHp, rt.world.player.hp + 40);
+      if (rt.game.state === 'playing') rt.world.player.hp = rt.world.player.maxHp;
     });
     // High-frequency sampling: bombers rush the player and self-destruct fast,
     // so slow polling misses them.

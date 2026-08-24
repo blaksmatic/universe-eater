@@ -1,5 +1,6 @@
 import { wrappedAngle, wrappedDistance, randomRange, wrapPosition, drawSphereShading, TWO_PI, tracePoly, easeOutBack } from './utils';
 import { Camera } from './camera';
+import { NEUTRAL_SPAWN_MODS, type EnemySpawnMods } from './mutators';
 
 const CHARGE_SPEED = 500;
 const BOSS_CHARGE_SPEED = 620;
@@ -72,6 +73,15 @@ export interface EnemySpawnOptions {
   scale?: number;
   hpScale?: number;
   xpScale?: number;
+  /** Stage mutator multipliers. */
+  hpMul?: number;
+  speedMul?: number;
+  radiusMul?: number;
+  bulletSpeedMul?: number;
+  bulletLifeMul?: number;
+  eliteXpMul?: number;
+  /** Extra difficulty offset from mutators like VETERANS. */
+  stageOffset?: number;
 }
 
 export class Enemy {
@@ -90,12 +100,15 @@ export class Enemy {
   noXp = false;
   type: EnemyType;
   readonly isBoss: boolean;
+  stage = 1;
   isElite = false;
   bossPhase: 1 | 2 | 3 = 1;
   canSummon = false;
   projectiles: BossProjectile[] = [];
   /** Blinking fuse indicator for bombers / boss charge windups. */
   fuseRatio = 0;
+  private bulletSpeedMul = 1;
+  private bulletLifeMul = 1;
   private rotation = 0;
   private summonTimer = 0;
   private shootTimer = 0;
@@ -126,7 +139,7 @@ export class Enemy {
 
   constructor(type: EnemyType, x: number, y: number, stage = 1, options: EnemySpawnOptions = {}) {
     const config = ENEMY_TYPES[type];
-    const difficulty = Math.max(0, stage - 1);
+    const difficulty = Math.max(0, stage - 1 + (options.stageOffset ?? 0));
     const hpScale = 1 + difficulty * 0.42;
     const speedScale = 1 + difficulty * 0.07;
     const damageScale = 1 + difficulty * 0.1;
@@ -135,22 +148,27 @@ export class Enemy {
     this.type = type;
     this.isBoss = type === 'boss';
     this.isElite = options.elite ?? false;
+    this.stage = stage;
     this.x = x;
     this.y = y;
 
     const eliteScale = this.isElite ? 1.55 : 1;
     this.radius = (config.baseRadius + randomRange(-config.radiusVariation / 2, config.radiusVariation / 2))
-      * (options.scale ?? 1) * eliteScale;
+      * (options.scale ?? 1) * (options.radiusMul ?? 1) * eliteScale;
     const sizeRatio = this.radius / config.baseRadius;
     const eliteHp = this.isElite ? 3.2 : 1;
     this.maxHp = config.baseHp * sizeRatio * hpScale * ENEMY_HP_SCALE
-      * (options.hpScale ?? 1) * eliteHp;
+      * (options.hpScale ?? 1) * (options.hpMul ?? 1) * eliteHp;
     this.hp = this.maxHp;
-    this.speed = config.speed * speedScale * (this.isElite ? 0.92 : 1);
+    this.speed = config.speed * speedScale * (options.speedMul ?? 1) * (this.isElite ? 0.92 : 1);
     this.color = config.color;
     this.outlineColor = config.outlineColor;
-    this.xpDrop = Math.max(1, Math.round(config.xpDrop * xpScale * (options.xpScale ?? 1) * (this.isElite ? 3 : 1)));
+    this.xpDrop = Math.max(1, Math.round(
+      config.xpDrop * xpScale * (options.xpScale ?? 1) * (this.isElite ? 3 * (options.eliteXpMul ?? 1) : 1),
+    ));
     this.damageMultiplier = config.damageMultiplier * damageScale * (this.isElite ? 1.45 : 1);
+    this.bulletSpeedMul = options.bulletSpeedMul ?? 1;
+    this.bulletLifeMul = options.bulletLifeMul ?? 1;
     this.spikeCount = type === 'swarmer' ? Math.floor(randomRange(5, 8)) : 6;
     this.wobblePhase = Math.random() * TWO_PI;
     this.spawnDuration = this.isBoss ? BOSS_SPAWN_DURATION : SPAWN_DURATION;
@@ -171,7 +189,22 @@ export class Enemy {
     if (this.isBoss) {
       this.summonTimer = 7;
       this.spiralGap = 4;
+      this.applyBossStageSkin(stage);
     }
+  }
+
+  /** Per-stage boss identity: color shifts each Mk level. */
+  private applyBossStageSkin(stage: number): void {
+    const skins: { color: [number, number, number]; outline: string }[] = [
+      { color: [255, 40, 90], outline: '#ff285a' },     // Mk.1 crimson
+      { color: [190, 80, 255], outline: '#be50ff' },    // Mk.2 violet
+      { color: [255, 190, 40], outline: '#ffbe28' },    // Mk.3 gold
+      { color: [140, 255, 60], outline: '#8cff3c' },    // Mk.4 acid
+      { color: [80, 220, 255], outline: '#50dcff' },    // Mk.5 ice
+    ];
+    const skin = skins[(Math.max(1, stage) - 1) % skins.length];
+    this.color = skin.color;
+    this.outlineColor = skin.outline;
   }
 
   get spawnProgress(): number {
@@ -181,9 +214,9 @@ export class Enemy {
   private fireProjectile(angle: number, speed: number, damage: number, radius = 4, lifetime = 3): void {
     this.projectiles.push({
       x: this.x, y: this.y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      lifetime,
+      vx: Math.cos(angle) * speed * this.bulletSpeedMul,
+      vy: Math.sin(angle) * speed * this.bulletSpeedMul,
+      lifetime: lifetime * this.bulletLifeMul,
       radius,
       damage,
     });
@@ -1006,9 +1039,11 @@ export class EnemySpawner {
   private bossPhaseEvents = 0;
   private spawnTimer = -2.2;
   private stage = 1;
+  private spawnMods: EnemySpawnMods = NEUTRAL_SPAWN_MODS;
 
-  setStage(stage: number, stageDuration: number): void {
+  setStage(stage: number, stageDuration: number, spawnMods: EnemySpawnMods = NEUTRAL_SPAWN_MODS): void {
     this.stage = Math.max(1, stage);
+    this.spawnMods = spawnMods;
     // Duration is used by callers for pacing; the spawner paces off elapsed time.
     void stageDuration;
   }
@@ -1036,7 +1071,14 @@ export class EnemySpawner {
       playerX + Math.cos(angle) * 720,
       playerY + Math.sin(angle) * 720,
     );
-    const boss = new Enemy('boss', pos.x, pos.y, this.stage);
+    const boss = new Enemy('boss', pos.x, pos.y, this.stage, {
+      hpMul: this.spawnMods.hpMul,
+      speedMul: this.spawnMods.speedMul,
+      radiusMul: this.spawnMods.radiusMul,
+      bulletSpeedMul: this.spawnMods.bulletSpeedMul,
+      bulletLifeMul: this.spawnMods.bulletLifeMul,
+      stageOffset: this.spawnMods.scaleBonus,
+    });
     this.enemies.push(boss);
     this.bossSpawned = true;
     return boss;
@@ -1049,7 +1091,7 @@ export class EnemySpawner {
       const shards = 3;
       for (let i = 0; i < shards; i++) {
         const gp = wrapPosition(enemy.x + randomRange(-26, 26), enemy.y + randomRange(-26, 26));
-        this.enemies.push(new Enemy('swarmer', gp.x, gp.y, this.stage, { scale: 0.55, hpScale: 0.35 }));
+        this.enemies.push(new Enemy('swarmer', gp.x, gp.y, this.stage, this.spawnOptions(false, { scale: 0.55, hpScale: 0.35 })));
       }
     }
   }
@@ -1161,9 +1203,24 @@ export class EnemySpawner {
   }
 
   private maybeElite(type: EnemyType): boolean {
-    const baseChance = Math.min(0.18, 0.03 + (this.stage - 1) * 0.035);
+    const baseChance = Math.min(0.18, 0.03 + (this.stage - 1) * 0.035) * this.spawnMods.eliteChanceMul;
     const chance = type === 'swarmer' ? baseChance * 0.5 : baseChance;
-    return Math.random() < chance;
+    return Math.random() < Math.min(0.5, chance);
+  }
+
+  private spawnOptions(elite: boolean, extra: { scale?: number; hpScale?: number } = {}): EnemySpawnOptions {
+    const m = this.spawnMods;
+    return {
+      elite,
+      ...extra,
+      hpMul: m.hpMul,
+      speedMul: m.speedMul,
+      radiusMul: m.radiusMul,
+      bulletSpeedMul: m.bulletSpeedMul,
+      bulletLifeMul: m.bulletLifeMul,
+      eliteXpMul: m.eliteXpMul,
+      stageOffset: m.scaleBonus,
+    };
   }
 
   private spawnEnemy(type: EnemyType, camera: Camera, elapsed: number): void {
@@ -1187,23 +1244,26 @@ export class EnemySpawner {
 
     if (type === 'swarmer') {
       const count = this.getSwarmerCount(elapsed);
-      for (let i = 0; i < count; i++) {
+      // During the boss fight the arena stays focused: smaller packs.
+      const packCount = this.bossSpawned ? Math.max(1, Math.ceil(count / 2)) : count;
+      for (let i = 0; i < packCount; i++) {
         const gp = wrapPosition(pos.x + randomRange(-40, 40), pos.y + randomRange(-40, 40));
-        this.enemies.push(new Enemy('swarmer', gp.x, gp.y, this.stage, { elite: this.maybeElite('swarmer') }));
+        this.enemies.push(new Enemy('swarmer', gp.x, gp.y, this.stage, this.spawnOptions(this.maybeElite('swarmer'))));
       }
     } else if (type === 'drifter' && elapsed > 75 && Math.random() < Math.min(0.7, 0.35 + (this.stage - 1) * 0.06)) {
-      this.enemies.push(new Enemy('drifter', pos.x, pos.y, this.stage, { elite: this.maybeElite('drifter') }));
+      this.enemies.push(new Enemy('drifter', pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite('drifter'))));
       const dp = wrapPosition(pos.x + randomRange(-30, 30), pos.y + randomRange(-30, 30));
       this.enemies.push(new Enemy('drifter', dp.x, dp.y, this.stage));
     } else {
-      this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage, { elite: this.maybeElite(type) }));
+      this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite(type))));
     }
   }
 
   update(dt: number, elapsed: number, playerX: number, playerY: number, camera: Camera): void {
     const config = this.getSpawnConfig(elapsed);
     this.spawnTimer += dt;
-    const interval = this.bossSpawned ? config.spawnInterval * 1.7 : config.spawnInterval;
+    // Boss fight thins the trash stream so the duel stays the focus.
+    const interval = this.bossSpawned ? config.spawnInterval * 2.4 : config.spawnInterval;
     if (this.spawnTimer >= interval) {
       this.spawnTimer = 0;
       this.spawnEnemy(this.pickType(config.types), camera, elapsed);
@@ -1222,7 +1282,7 @@ export class EnemySpawner {
             summoner.x + randomRange(-80, 80),
             summoner.y + randomRange(-80, 80),
           );
-          this.enemies.push(new Enemy('swarmer', sp.x, sp.y, this.stage));
+          this.enemies.push(new Enemy('swarmer', sp.x, sp.y, this.stage, this.spawnOptions(false)));
         }
       }
       if (summoner.consumePhaseNotification()) {

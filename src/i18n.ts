@@ -1,4 +1,4 @@
-import { DoctrineId, PassiveId, PassiveName, UpgradeTag, WeaponName } from './ids';
+import { DoctrineId, MutatorId, PassiveId, PassiveName, UpgradeTag, WeaponName } from './ids';
 
 export type Language = 'zh-CN' | 'en';
 export type TextResolver = () => string;
@@ -394,6 +394,83 @@ const TAG_TEXT: Record<Language, Record<UpgradeTag, string>> = {
   },
 };
 
+const MUTATOR_TEXT: Record<Language, Record<MutatorId, { name: string; short: string; desc: string }>> = {
+  'zh-CN': {
+    frenzy: {
+      name: '虫群狂潮',
+      short: '狂潮',
+      desc: '刷怪更快，但敌人更脆弱。',
+    },
+    heavy: {
+      name: '重甲压境',
+      short: '重甲',
+      desc: '敌人更肉，出怪更慢。带上穿透火力。',
+    },
+    overdrive: {
+      name: '过载领域',
+      short: '过载',
+      desc: '所有敌人移速提高 20%。保持走位！',
+    },
+    shrapnel: {
+      name: '弹幕风暴',
+      short: '弹幕',
+      desc: '敌方子弹更快更久。冲刺穿过弹幕缝隙。',
+    },
+    elites: {
+      name: '精锐猎场',
+      short: '精锐',
+      desc: '精锐出现率大增，掉落也更多。高风险高回报。',
+    },
+    tiny: {
+      name: '微缩虫群',
+      short: '微缩',
+      desc: '敌人更小更快更脆。别眨眼。',
+    },
+    veterans: {
+      name: '老兵登场',
+      short: '老兵',
+      desc: '敌人按更高难度等级强化。尊重前辈。',
+    },
+  },
+  en: {
+    frenzy: {
+      name: 'Swarm Frenzy',
+      short: 'FRENZY',
+      desc: 'Faster spawns, but frailer enemies.',
+    },
+    heavy: {
+      name: 'Heavy Mantle',
+      short: 'HEAVY',
+      desc: 'Tougher enemies, slower waves. Bring piercing fire.',
+    },
+    overdrive: {
+      name: 'Overdrive Field',
+      short: 'OVERDRIVE',
+      desc: 'All enemies move 20% faster. Keep moving!',
+    },
+    shrapnel: {
+      name: 'Shrapnel Storm',
+      short: 'SHRAPNEL',
+      desc: 'Enemy bullets fly faster and last longer. Dash through the gaps.',
+    },
+    elites: {
+      name: 'Elite Hunt',
+      short: 'ELITE',
+      desc: 'Elites everywhere — and they pay far better. High risk, high reward.',
+    },
+    tiny: {
+      name: 'Tiny Terrors',
+      short: 'TINY',
+      desc: 'Enemies shrink, speed up, and go fragile. Blink and they swarm.',
+    },
+    veterans: {
+      name: 'Veteran Corps',
+      short: 'VETERAN',
+      desc: 'Enemies scale two difficulty levels higher. Respect your elders.',
+    },
+  },
+};
+
 let currentLanguage = readStoredLanguage();
 
 function readStoredLanguage(): Language {
@@ -512,6 +589,22 @@ export function getDoctrineDescription(id: DoctrineId): string {
 
 export function getTagLabel(tag: UpgradeTag): string {
   return TAG_TEXT[currentLanguage][tag];
+}
+
+export function getMutatorName(id: MutatorId): string {
+  return MUTATOR_TEXT[currentLanguage][id].name;
+}
+
+export function getMutatorShort(id: MutatorId): string {
+  return MUTATOR_TEXT[currentLanguage][id].short;
+}
+
+export function getMutatorDesc(id: MutatorId): string {
+  return MUTATOR_TEXT[currentLanguage][id].desc;
+}
+
+export function formatStageMutators(stage: number): string {
+  return currentLanguage === 'zh-CN' ? `阶段 ${stage} 环境修正` : `STAGE ${stage} MUTATORS`;
 }
 
 export function formatHullLabel(percent: number): string {

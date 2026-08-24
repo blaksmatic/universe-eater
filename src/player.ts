@@ -52,6 +52,8 @@ export class Player {
   private hurtTimer = 0;
   private contactCooldown = 0;
   private readonly hurtDuration = 0.22;
+  /** Brief window after any hit that blocks further damage (prevents bullet-wall melts). */
+  private postHitInvuln = 0;
   private shimmerPhase = 0;
   contactGraceDuration = 0.35;
 
@@ -70,11 +72,12 @@ export class Player {
   }
 
   takeDamage(amount: number): boolean {
-    if (this.invulnTimer > 0) return false;
+    if (this.invulnTimer > 0 || this.postHitInvuln > 0) return false;
     const adjustedAmount = amount * this.damageTakenMultiplier;
     if (adjustedAmount <= 0) return false;
     this.hp = Math.max(0, this.hp - adjustedAmount);
     this.hurtTimer = Math.max(this.hurtTimer, this.hurtDuration);
+    this.postHitInvuln = 0.25;
     return true;
   }
 
@@ -194,6 +197,7 @@ export class Player {
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.contactCooldown = Math.max(0, this.contactCooldown - dt);
     this.invulnTimer = Math.max(0, this.invulnTimer - dt);
+    this.postHitInvuln = Math.max(0, this.postHitInvuln - dt);
 
     let dx = 0;
     let dy = 0;

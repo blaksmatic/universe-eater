@@ -24,6 +24,8 @@ export type UpgradeTag = 'force' | 'ward' | 'surge' | 'forge';
 
 export type DoctrineId = 'bulwark' | 'slipstream' | 'nanite-lattice' | 'annihilation';
 
+export type MutatorId = 'frenzy' | 'heavy' | 'overdrive' | 'shrapnel' | 'elites' | 'tiny' | 'veterans';
+
 /** Maximum stacks per repeatable passive (Infinity = uncapped). */
 export const PASSIVE_CAPS: Record<PassiveId, number> = {
   hull: Infinity,

@@ -12,10 +12,11 @@ import {
   createEmptyTraitCounts,
   getNewDoctrines,
 } from './upgrades';
-import { TextResolver, formatDoctrineOnline, formatStageEngaged, formatBossTitle, getUiText } from './i18n';
+import { TextResolver, formatDoctrineOnline, formatStageEngaged, formatBossTitle, formatStageMutators, getMutatorDesc, getMutatorName, getUiText } from './i18n';
 import { formatTime } from './utils';
 import { isTouchDevice } from './input';
 import { PASSIVE_CAPS } from './ids';
+import { rollMutators, type MutatorId } from './mutators';
 
 export enum GameState {
   TITLE = 'title',
@@ -61,6 +62,8 @@ export class Game {
   activeDoctrines: Doctrine[] = [];
   /** True once the countdown hit zero and the boss encounter began. */
   bossEngaged = false;
+  /** Active stage mutators (empty for stage 1). */
+  mutators: MutatorId[] = [];
   private scheduled: ScheduledNotification[] = [
     {
       atElapsed: 6,
@@ -112,6 +115,7 @@ export class Game {
     this.draftChoices = [];
     this.selectedDraftIndex = 0;
     this.rerollsRemaining = Math.min(3, this.rerollsRemaining + 1);
+    this.mutators = rollMutators(this.stage);
     this.notifications.push({
       text: () => formatStageEngaged(this.stage),
       timer: 2.8,
@@ -124,6 +128,22 @@ export class Game {
       alpha: 1,
       kind: 'danger',
     });
+    if (this.mutators.length > 0) {
+      this.notifications.push({
+        text: () => `${formatStageMutators(this.stage)}: ${this.mutators.map(m => getMutatorName(m)).join(' + ')}`,
+        timer: 4.2,
+        alpha: 1,
+        kind: 'danger',
+      });
+      for (const id of this.mutators) {
+        this.notifications.push({
+          text: () => `${getMutatorName(id)} — ${getMutatorDesc(id)}`,
+          timer: 4.6,
+          alpha: 1,
+          kind: 'info',
+        });
+      }
+    }
   }
 
   queueLevelUps(count: number, wm: WeaponManager): void {

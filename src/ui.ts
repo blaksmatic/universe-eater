@@ -2,6 +2,7 @@ import { Game } from './game';
 import { Player } from './player';
 import { WeaponManager, WEAPON_ORDER } from './weapons';
 import { Enemy } from './enemies';
+import { mutatorShort } from './mutators';
 import { Language, formatBossTitle, formatCombo, formatHudWeaponLevel, formatHullLabel, formatKillsStat, formatLevelReachedStat, formatLockedCount, formatNextStageStat, formatReachedStageStat, formatRestartCountdown, formatRerollLabel, formatStageClearTitle, formatStageLabel, formatSurvivedStat, formatTotalKillsStat, formatXpLabel, getGameTitleLines, getLanguage, getLanguageButtonLabel, getTagLabel, getUiText, getWeaponName, uiFont } from './i18n';
 import { PassiveName, WeaponName } from './ids';
 import { loadRecords, loadSettings, saveSettings, RecordUpdateResult } from './storage';
@@ -315,6 +316,12 @@ export class UI {
     ctx.font = uiFont(11);
     ctx.fillStyle = 'rgba(160, 210, 255, 0.58)';
     ctx.fillText(formatStageLabel(game.stage), leftInset, topInset + 52);
+
+    if (game.mutators.length > 0) {
+      ctx.font = uiFont(10, 'bold');
+      ctx.fillStyle = 'rgba(255, 195, 110, 0.75)';
+      ctx.fillText(game.mutators.map(m => mutatorShort(m)).join(' · '), leftInset, topInset + 68);
+    }
 
     ctx.font = uiFont(16);
     ctx.textAlign = 'right';

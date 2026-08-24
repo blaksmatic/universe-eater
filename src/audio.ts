@@ -21,6 +21,8 @@ class AudioEngine {
 
   private lastPlayed: Record<string, number> = {};
   private settings = loadSettings();
+  /** 0 = exploration, 1 = boss fight (faster arps + bass pulse). */
+  intensity = 0;
 
   get soundEnabled(): boolean {
     return this.settings.soundEnabled;
@@ -313,19 +315,41 @@ class AudioEngine {
   updateMusic(): void {
     if (!this.ctx || !this.musicBus || !this.musicStarted || !this.settings.musicEnabled) return;
     const PENTATONIC = [220, 261.6, 293.7, 329.6, 392, 440, 523.2];
+    const BASS = [55, 55, 65.4, 73.4];
     const lookahead = 0.25;
-    const stepDur = 0.24;
+    const boss = this.intensity >= 1;
+    const stepDur = boss ? 0.185 : 0.24;
+    const noteChance = boss ? 0.85 : 0.72;
 
     while (this.nextArpTime < this.ctx.currentTime + lookahead) {
-      if (Math.random() < 0.72) {
-        const octave = Math.random() < 0.3 ? 2 : 1;
+      if (boss && this.arpStep % 8 === 0) {
+        // Driving bass pulse under boss fights.
+        const bassOsc = this.ctx.createOscillator();
+        bassOsc.type = 'sawtooth';
+        bassOsc.frequency.value = BASS[Math.floor(this.arpStep / 8) % BASS.length];
+        const bassGain = this.ctx.createGain();
+        bassGain.gain.setValueAtTime(0, this.nextArpTime);
+        bassGain.gain.linearRampToValueAtTime(0.09, this.nextArpTime + 0.02);
+        bassGain.gain.exponentialRampToValueAtTime(0.0001, this.nextArpTime + stepDur * 6);
+        const bassFilter = this.ctx.createBiquadFilter();
+        bassFilter.type = 'lowpass';
+        bassFilter.frequency.value = 260;
+        bassOsc.connect(bassFilter);
+        bassFilter.connect(bassGain);
+        bassGain.connect(this.musicBus);
+        bassOsc.start(this.nextArpTime);
+        bassOsc.stop(this.nextArpTime + stepDur * 7);
+      }
+
+      if (Math.random() < noteChance) {
+        const octave = Math.random() < (boss ? 0.45 : 0.3) ? 2 : 1;
         const note = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)] * octave;
         const osc = this.ctx.createOscillator();
         osc.type = 'triangle';
         osc.frequency.value = note;
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(0, this.nextArpTime);
-        gain.gain.linearRampToValueAtTime(0.055, this.nextArpTime + 0.02);
+        gain.gain.linearRampToValueAtTime(boss ? 0.065 : 0.055, this.nextArpTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.0001, this.nextArpTime + stepDur * 1.8);
 
         const echoDelay = this.ctx.createDelay(1);

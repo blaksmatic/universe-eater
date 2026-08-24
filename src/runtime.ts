@@ -272,6 +272,7 @@ export class GameRuntime {
   };
 
   private audioTick(): void {
+    audio.intensity = this.game.bossEngaged ? 1 : 0;
     audio.updateMusic();
   }
 
@@ -297,6 +298,7 @@ export class GameRuntime {
       this.game.notifyBossDefeated();
       audio.playBossDeath();
       audio.playVictoryFanfare();
+      this.world.clearHostileBullets();
       this.finishRun();
       this.game.state = GameState.VICTORY;
       return;
@@ -401,7 +403,7 @@ export class GameRuntime {
 
   private advanceStage(): void {
     this.game.advanceStage();
-    this.world.prepareNextStage(this.game.stage, this.game.gameDuration);
+    this.world.prepareNextStage(this.game.stage, this.game.gameDuration, this.game.mutators);
     this.restartAllowedAt = 0;
     this.lastRecordResult = null;
   }
