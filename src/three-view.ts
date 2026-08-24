@@ -6,6 +6,13 @@ import { wrappedAngle } from './utils';
 type LitMaterial = THREE.MeshLambertMaterial;
 type DetailMode = 'full' | 'lite';
 
+interface ComposerLike {
+  render(): void;
+  setSize(width: number, height: number): void;
+  setPixelRatio(ratio: number): void;
+  setBloomEnabled(enabled: boolean): void;
+}
+
 type EnemyParts = {
   wings?: THREE.Object3D[];
   tentacles?: THREE.Object3D[];
@@ -86,12 +93,26 @@ const GEOMETRY = {
 };
 
 function makeMaterial(color: number, emissive = color): LitMaterial {
-  return new THREE.MeshLambertMaterial({
-    color,
-    emissive,
-    emissiveIntensity: 0.18,
+  const mat = new THREE.MeshLambertMaterial({
+    color: vivid(color, 1.55, 0.14),
+    emissive: vivid(emissive, 1.1, 0.06),
+    emissiveIntensity: 0.5,
     flatShading: true,
   });
+  return mat;
+}
+
+/** Push a hex color toward vivid neon: saturation & lightness lift. */
+function vivid(hex: number, satBoost: number, lightBoost: number): THREE.Color {
+  const c = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  c.setHSL(
+    hsl.h,
+    Math.min(1, hsl.s * satBoost + 0.15),
+    Math.min(0.62, hsl.l * 1.35 + lightBoost),
+  );
+  return c;
 }
 
 function varyMaterial(material: LitMaterial, hueShift: number, lightnessShift: number): void {
@@ -135,6 +156,9 @@ export class ThreeEntityRenderer {
     full: createEnemyPool(),
     lite: createEnemyPool(),
   };
+  private composer: ComposerLike | null = null;
+  private composerReady = false;
+  private slowFrames = 0;
   private readonly basePixelRatioCap: number;
   private currentDevicePixelRatio = 1;
   private currentPixelRatio = 1;
@@ -172,22 +196,120 @@ export class ThreeEntityRenderer {
     const parent = overlayCanvas.parentElement ?? document.body;
     parent.insertBefore(this.renderer.domElement, overlayCanvas);
 
-    this.scene.add(new THREE.AmbientLight(0x8aa5ff, 1.1));
+    this.scene.background = this.createGradientBackdrop();
+    this.scene.add(new THREE.AmbientLight(0x8aa5ff, 1.35));
 
-    const hemi = new THREE.HemisphereLight(0x9ed0ff, 0x11151b, 0.9);
+    const hemi = new THREE.HemisphereLight(0x9ed0ff, 0x11151b, 1.0);
     this.scene.add(hemi);
 
-    const key = new THREE.DirectionalLight(0xe0eeff, 1.9);
+    const key = new THREE.DirectionalLight(0xe0eeff, 2.1);
     key.position.set(-0.5, 0.8, 1.3);
     this.scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xffc695, 0.6);
+    const fill = new THREE.DirectionalLight(0xffc695, 0.7);
     fill.position.set(0.85, -0.5, 1);
     this.scene.add(fill);
 
+    // Rim/back light — cool edge separation so silhouettes pop off the dark.
+    const rim = new THREE.DirectionalLight(0x5f7fff, 1.6);
+    rim.position.set(0.2, -0.4, -1.2);
+    this.scene.add(rim);
+
+    this.createDustField();
     this.playerVisual = this.createPlayerVisual();
     this.scene.add(this.playerVisual.group);
+
+    void this.initComposer(compactQuality);
   }
+
+  /** Post-processing (bloom) is loaded lazily and degrades gracefully. */
+  private async initComposer(compactQuality: boolean): Promise<void> {
+    try {
+      const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+        import('three/examples/jsm/postprocessing/EffectComposer.js'),
+        import('three/examples/jsm/postprocessing/RenderPass.js'),
+        import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+        import('three/examples/jsm/postprocessing/OutputPass.js'),
+      ]);
+
+      const composer = new EffectComposer(this.renderer);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      // Half-res bloom on compact devices keeps the glow cheap.
+      const bloomRes = compactQuality
+        ? new THREE.Vector2(Math.max(2, Math.floor(this.width / 2)), Math.max(2, Math.floor(this.height / 2)))
+        : new THREE.Vector2(this.width, this.height);
+      const bloom = new UnrealBloomPass(bloomRes, compactQuality ? 0.7 : 0.85, 0.55, 0.42);
+      composer.addPass(bloom);
+      composer.addPass(new OutputPass());
+      composer.setSize(this.width, this.height);
+      composer.setPixelRatio(this.currentPixelRatio);
+
+      this.composer = {
+        render: () => composer.render(),
+        setSize: (w, h) => composer.setSize(w, h),
+        setPixelRatio: (r) => composer.setPixelRatio(r),
+        setBloomEnabled: (enabled) => { bloom.enabled = enabled; },
+      };
+      this.composerReady = true;
+    } catch {
+      this.composer = null;
+      this.composerReady = true;
+    }
+  }
+
+  /** Deep-space gradient backdrop rendered behind everything. */
+  private createGradientBackdrop(): THREE.Texture | THREE.Color {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = 32;
+      cv.height = 256;
+      const g = cv.getContext('2d');
+      if (!g) return new THREE.Color(BASE_CLEAR_COLOR);
+      const grad = g.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0, '#0b1030');
+      grad.addColorStop(0.45, '#090d24');
+      grad.addColorStop(1, '#05070f');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 32, 256);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    } catch {
+      return new THREE.Color(BASE_CLEAR_COLOR);
+    }
+  }
+
+  /** Additive drifting dust motes for parallax depth. */
+  private createDustField(): void {
+    try {
+      const count = 160;
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 3200;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 2000;
+        positions[i * 3 + 2] = -60 - Math.random() * 220;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color: 0x7fb4ff,
+        size: 5,
+        sizeAttenuation: false,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const points = new THREE.Points(geo, mat);
+      points.userData.drift = true;
+      this.scene.add(points);
+      this.dustPoints = points;
+    } catch {
+      // Dust is decorative; ignore failures.
+    }
+  }
+
+  private dustPoints: THREE.Points | null = null;
 
   resize(width: number, height: number, dpr: number): void {
     this.width = width;
@@ -203,23 +325,38 @@ export class ThreeEntityRenderer {
 
     this.updatePixelRatio(1);
     this.renderer.setSize(width, height, false);
+    this.composer?.setSize(width, height);
   }
 
   render(world: GameWorld | null, time: number): void {
     this.applyAdaptiveQuality(world?.spawner.enemies.length ?? 0);
+
+    if (this.dustPoints) {
+      this.dustPoints.rotation.z = time * 0.008;
+      this.dustPoints.position.x = Math.sin(time * 0.05) * 30;
+      this.dustPoints.position.y = Math.cos(time * 0.04) * 20;
+    }
 
     if (!world) {
       this.playerVisual.group.visible = false;
       for (const visual of this.enemyVisuals.values()) {
         visual.group.visible = false;
       }
-      this.renderer.render(this.scene, this.camera);
+      this.renderFrame();
       return;
     }
 
     this.syncPlayer(world, time);
     this.syncEnemies(world, time);
-    this.renderer.render(this.scene, this.camera);
+    this.renderFrame();
+  }
+
+  private renderFrame(): void {
+    if (this.composer) {
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   private syncPlayer(world: GameWorld, time: number): void {
@@ -242,8 +379,8 @@ export class ThreeEntityRenderer {
       fin.rotation.x = 0.34 + Math.sin(time * 2 + i) * 0.16;
     }
 
-    this.playerVisual.shell.material.emissiveIntensity = 0.18 + player.hurtRatio * 0.65;
-    this.playerVisual.core.material.emissiveIntensity = 0.36 + player.hurtRatio * 0.55;
+    this.playerVisual.shell.material.emissiveIntensity = 0.55 + player.hurtRatio * 0.65;
+    this.playerVisual.core.material.emissiveIntensity = 0.85 + player.hurtRatio * 0.55;
   }
 
   private syncEnemies(world: GameWorld, time: number): void {
@@ -324,10 +461,10 @@ export class ThreeEntityRenderer {
       emissiveBoost = enemy.fuseRatio * (Math.sin(time * 30) > 0 ? 0.9 : 0.1);
     }
     if (enemy.isBoss) {
-      emissiveBoost = 0.55 + (enemy.bossPhase - 1) * 0.25 + lowHealth * 0.2;
+      emissiveBoost = 0.45 + (enemy.bossPhase - 1) * 0.22 + lowHealth * 0.2;
     }
     for (const material of visual.materials) {
-      material.emissiveIntensity = 0.14 + lowHealth * 0.32 + emissiveBoost;
+      material.emissiveIntensity = 0.42 + lowHealth * 0.28 + emissiveBoost;
     }
 
     const parts = visual.group.userData as EnemyParts;
@@ -373,16 +510,16 @@ export class ThreeEntityRenderer {
   private createPlayerVisual(): PlayerVisual {
     const root = new THREE.Group();
 
-    const shell = createMesh(GEOMETRY.playerShell, makeMaterial(0x2f6dff, 0x5aa0ff));
+    const shell = createMesh(GEOMETRY.playerShell, makeMaterial(0x2f6dff, 0x5ab8ff));
     shell.scale.set(1.08, 0.95, 0.8);
     root.add(shell);
 
-    const core = createMesh(GEOMETRY.playerCore, makeMaterial(0x9fd9ff, 0x8ecbff));
+    const core = createMesh(GEOMETRY.playerCore, makeMaterial(0xafe3ff, 0xbfeaff));
     root.add(core);
 
     const fins: THREE.Mesh<THREE.BoxGeometry, LitMaterial>[] = [];
     for (let i = 0; i < 3; i++) {
-      const fin = createMesh(GEOMETRY.playerFin, makeMaterial(0x5e9dff, 0x7dc0ff));
+      const fin = createMesh(GEOMETRY.playerFin, makeMaterial(0x5e9dff, 0x86d4ff));
       fin.position.set(0, 0, -3.5);
       root.add(fin);
       fins.push(fin);
@@ -406,6 +543,26 @@ export class ThreeEntityRenderer {
         ? 0.8
         : 1;
     this.updatePixelRatio(pixelRatioScale);
+
+    // Sustained slow frames: drop bloom before anything else.
+    if (this.composer && this.composerReady) {
+      if (this.lastFrameCost > 24) {
+        this.slowFrames++;
+        if (this.slowFrames > 90) {
+          this.composer.setBloomEnabled(false);
+          this.slowFrames = -1000000; // never re-enable this session
+        }
+      } else if (this.slowFrames > 0) {
+        this.slowFrames--;
+      }
+    }
+  }
+
+  private lastFrameCost = 0;
+
+  /** Called by the runtime loop wrapper to report frame pacing. */
+  reportFrameCost(ms: number): void {
+    this.lastFrameCost = this.lastFrameCost * 0.9 + ms * 0.1;
   }
 
   private updatePixelRatio(scale: number): void {
@@ -414,6 +571,8 @@ export class ThreeEntityRenderer {
     this.currentPixelRatio = target;
     this.renderer.setPixelRatio(target);
     this.renderer.setSize(this.width, this.height, false);
+    this.composer?.setPixelRatio(target);
+    this.composer?.setSize(this.width, this.height);
   }
 
   private recycleActiveEnemyVisuals(): void {

@@ -32,12 +32,12 @@ interface RingDef {
 }
 
 const RING_DEFS: RingDef[] = [
-  { sides: 6,  radius: 180, speed:  0.15,  color: 0, alpha: 0.045 },
-  { sides: 4,  radius: 300, speed: -0.10,  color: 1, alpha: 0.035 },
-  { sides: 8,  radius: 420, speed:  0.07,  color: 3, alpha: 0.028 },
-  { sides: 3,  radius: 550, speed: -0.18,  color: 2, alpha: 0.022 },
-  { sides: 5,  radius: 700, speed:  0.12,  color: 4, alpha: 0.020 },
-  { sides: 10, radius: 900, speed: -0.04,  color: 0, alpha: 0.016 },
+  { sides: 6,  radius: 180, speed:  0.15,  color: 0, alpha: 0.09 },
+  { sides: 4,  radius: 300, speed: -0.10,  color: 1, alpha: 0.07 },
+  { sides: 8,  radius: 420, speed:  0.07,  color: 3, alpha: 0.055 },
+  { sides: 3,  radius: 550, speed: -0.18,  color: 2, alpha: 0.045 },
+  { sides: 5,  radius: 700, speed:  0.12,  color: 4, alpha: 0.04 },
+  { sides: 10, radius: 900, speed: -0.04,  color: 0, alpha: 0.032 },
 ];
 
 const NUM_RADIALS = 24;
@@ -60,7 +60,7 @@ export class BackgroundGeometry {
         rotation: Math.random() * TWO_PI,
         rotSpeed: randomRange(-0.2, 0.2),
         color: Math.floor(Math.random() * NEON.length),
-        alpha: randomRange(0.015, 0.04),
+        alpha: randomRange(0.03, 0.08),
         pulsePhase: Math.random() * TWO_PI,
         parallax: randomRange(0.05, 0.25),
       });
@@ -93,7 +93,7 @@ export class BackgroundGeometry {
     const offX = (camera.x * GRID_PARALLAX) % sp;
     const offY = (camera.y * GRID_PARALLAX) % sp;
     const pulse = 0.6 + 0.4 * Math.sin(time * 0.3);
-    const baseAlpha = 0.024 * pulse;
+    const baseAlpha = 0.05 * pulse;
     const [r, g, b] = NEON[3];
 
     // Glow pass (thick, dim)
@@ -177,7 +177,7 @@ export class BackgroundGeometry {
       const angle = baseRot + (i / NUM_RADIALS) * TWO_PI;
       const pulse = 0.5 + 0.5 * Math.sin(time * 0.8 + i * 0.5);
       const len = RADIAL_MAX_LEN * (0.5 + 0.5 * pulse);
-      const alpha = 0.015 * pulse;
+      const alpha = 0.028 * pulse;
 
       const ex = cx + Math.cos(angle) * len;
       const ey = cy + Math.sin(angle) * len;

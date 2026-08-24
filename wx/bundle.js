@@ -42,9 +42,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// wx/empty-three.js
+// wx/empty-three/index.js
 var require_empty_three = __commonJS({
-  "wx/empty-three.js"(exports, module2) {
+  "wx/empty-three/index.js"(exports, module2) {
     "use strict";
     function StubCtor() {
     }
@@ -69,6 +69,50 @@ var require_empty_three = __commonJS({
       WebGLRenderer: StubCtor,
       SRGBColorSpace: "srgb"
     };
+  }
+});
+
+// wx/empty-three/examples/jsm/postprocessing/EffectComposer.js
+var require_EffectComposer = __commonJS({
+  "wx/empty-three/examples/jsm/postprocessing/EffectComposer.js"(exports, module2) {
+    "use strict";
+    function StubCtor() {
+    }
+    StubCtor.prototype = {};
+    module2.exports = { EffectComposer: StubCtor };
+  }
+});
+
+// wx/empty-three/examples/jsm/postprocessing/RenderPass.js
+var require_RenderPass = __commonJS({
+  "wx/empty-three/examples/jsm/postprocessing/RenderPass.js"(exports, module2) {
+    "use strict";
+    function StubCtor() {
+    }
+    StubCtor.prototype = {};
+    module2.exports = { RenderPass: StubCtor };
+  }
+});
+
+// wx/empty-three/examples/jsm/postprocessing/UnrealBloomPass.js
+var require_UnrealBloomPass = __commonJS({
+  "wx/empty-three/examples/jsm/postprocessing/UnrealBloomPass.js"(exports, module2) {
+    "use strict";
+    function StubCtor() {
+    }
+    StubCtor.prototype = {};
+    module2.exports = { UnrealBloomPass: StubCtor };
+  }
+});
+
+// wx/empty-three/examples/jsm/postprocessing/OutputPass.js
+var require_OutputPass = __commonJS({
+  "wx/empty-three/examples/jsm/postprocessing/OutputPass.js"(exports, module2) {
+    "use strict";
+    function StubCtor() {
+    }
+    StubCtor.prototype = {};
+    module2.exports = { OutputPass: StubCtor };
   }
 });
 
@@ -445,6 +489,82 @@ var TAG_TEXT = {
     forge: "FORGE"
   }
 };
+var MUTATOR_TEXT = {
+  "zh-CN": {
+    frenzy: {
+      name: "\u866B\u7FA4\u72C2\u6F6E",
+      short: "\u72C2\u6F6E",
+      desc: "\u5237\u602A\u66F4\u5FEB\uFF0C\u4F46\u654C\u4EBA\u66F4\u8106\u5F31\u3002"
+    },
+    heavy: {
+      name: "\u91CD\u7532\u538B\u5883",
+      short: "\u91CD\u7532",
+      desc: "\u654C\u4EBA\u66F4\u8089\uFF0C\u51FA\u602A\u66F4\u6162\u3002\u5E26\u4E0A\u7A7F\u900F\u706B\u529B\u3002"
+    },
+    overdrive: {
+      name: "\u8FC7\u8F7D\u9886\u57DF",
+      short: "\u8FC7\u8F7D",
+      desc: "\u6240\u6709\u654C\u4EBA\u79FB\u901F\u63D0\u9AD8 20%\u3002\u4FDD\u6301\u8D70\u4F4D\uFF01"
+    },
+    shrapnel: {
+      name: "\u5F39\u5E55\u98CE\u66B4",
+      short: "\u5F39\u5E55",
+      desc: "\u654C\u65B9\u5B50\u5F39\u66F4\u5FEB\u66F4\u4E45\u3002\u51B2\u523A\u7A7F\u8FC7\u5F39\u5E55\u7F1D\u9699\u3002"
+    },
+    elites: {
+      name: "\u7CBE\u9510\u730E\u573A",
+      short: "\u7CBE\u9510",
+      desc: "\u7CBE\u9510\u51FA\u73B0\u7387\u5927\u589E\uFF0C\u6389\u843D\u4E5F\u66F4\u591A\u3002\u9AD8\u98CE\u9669\u9AD8\u56DE\u62A5\u3002"
+    },
+    tiny: {
+      name: "\u5FAE\u7F29\u866B\u7FA4",
+      short: "\u5FAE\u7F29",
+      desc: "\u654C\u4EBA\u66F4\u5C0F\u66F4\u5FEB\u66F4\u8106\u3002\u522B\u7728\u773C\u3002"
+    },
+    veterans: {
+      name: "\u8001\u5175\u767B\u573A",
+      short: "\u8001\u5175",
+      desc: "\u654C\u4EBA\u6309\u66F4\u9AD8\u96BE\u5EA6\u7B49\u7EA7\u5F3A\u5316\u3002\u5C0A\u91CD\u524D\u8F88\u3002"
+    }
+  },
+  en: {
+    frenzy: {
+      name: "Swarm Frenzy",
+      short: "FRENZY",
+      desc: "Faster spawns, but frailer enemies."
+    },
+    heavy: {
+      name: "Heavy Mantle",
+      short: "HEAVY",
+      desc: "Tougher enemies, slower waves. Bring piercing fire."
+    },
+    overdrive: {
+      name: "Overdrive Field",
+      short: "OVERDRIVE",
+      desc: "All enemies move 20% faster. Keep moving!"
+    },
+    shrapnel: {
+      name: "Shrapnel Storm",
+      short: "SHRAPNEL",
+      desc: "Enemy bullets fly faster and last longer. Dash through the gaps."
+    },
+    elites: {
+      name: "Elite Hunt",
+      short: "ELITE",
+      desc: "Elites everywhere \u2014 and they pay far better. High risk, high reward."
+    },
+    tiny: {
+      name: "Tiny Terrors",
+      short: "TINY",
+      desc: "Enemies shrink, speed up, and go fragile. Blink and they swarm."
+    },
+    veterans: {
+      name: "Veteran Corps",
+      short: "VETERAN",
+      desc: "Enemies scale two difficulty levels higher. Respect your elders."
+    }
+  }
+};
 var currentLanguage = readStoredLanguage();
 function readStoredLanguage() {
   if (typeof __win === "undefined") return DEFAULT_LANGUAGE;
@@ -531,6 +651,18 @@ function getDoctrineDescription(id) {
 }
 function getTagLabel(tag) {
   return TAG_TEXT[currentLanguage][tag];
+}
+function getMutatorName(id) {
+  return MUTATOR_TEXT[currentLanguage][id].name;
+}
+function getMutatorShort(id) {
+  return MUTATOR_TEXT[currentLanguage][id].short;
+}
+function getMutatorDesc(id) {
+  return MUTATOR_TEXT[currentLanguage][id].desc;
+}
+function formatStageMutators(stage) {
+  return currentLanguage === "zh-CN" ? `\u9636\u6BB5 ${stage} \u73AF\u5883\u4FEE\u6B63` : `STAGE ${stage} MUTATORS`;
 }
 function formatHullLabel(percent) {
   return currentLanguage === "zh-CN" ? `\u8239\u4F53 ${percent}%` : `HULL ${percent}%`;
@@ -1087,6 +1219,70 @@ function triggerHaptic(pattern) {
 }
 var JOYSTICK_DISPLAY_RADIUS = JOYSTICK_RADIUS;
 
+// src/mutators.ts
+var NEUTRAL_SPAWN_MODS = {
+  hpMul: 1,
+  speedMul: 1,
+  radiusMul: 1,
+  intervalMul: 1,
+  bulletSpeedMul: 1,
+  bulletLifeMul: 1,
+  eliteChanceMul: 1,
+  eliteXpMul: 1,
+  scaleBonus: 0
+};
+var MUTATOR_ORDER = ["frenzy", "heavy", "overdrive", "shrapnel", "elites", "tiny", "veterans"];
+function mutatorShort(id) {
+  return getMutatorShort(id);
+}
+function rollMutators(stage) {
+  if (stage < 2) return [];
+  const pool = [...MUTATOR_ORDER];
+  const picked = [];
+  const first = Math.floor(Math.random() * pool.length);
+  picked.push(pool.splice(first, 1)[0]);
+  if (stage >= 3 && Math.random() < 0.4 && pool.length > 0) {
+    const second = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(second, 1)[0]);
+  }
+  return picked;
+}
+function composeSpawnMods(ids) {
+  const mods = __spreadValues({}, NEUTRAL_SPAWN_MODS);
+  for (const id of ids) {
+    switch (id) {
+      case "frenzy":
+        mods.intervalMul *= 0.8;
+        mods.hpMul *= 0.85;
+        break;
+      case "heavy":
+        mods.hpMul *= 1.4;
+        mods.intervalMul *= 1.15;
+        break;
+      case "overdrive":
+        mods.speedMul *= 1.2;
+        break;
+      case "shrapnel":
+        mods.bulletSpeedMul *= 1.25;
+        mods.bulletLifeMul *= 1.2;
+        break;
+      case "elites":
+        mods.eliteChanceMul *= 2.2;
+        mods.eliteXpMul *= 1.5;
+        break;
+      case "tiny":
+        mods.radiusMul *= 0.6;
+        mods.speedMul *= 1.25;
+        mods.hpMul *= 0.7;
+        break;
+      case "veterans":
+        mods.scaleBonus += 2;
+        break;
+    }
+  }
+  return mods;
+}
+
 // src/game.ts
 var Game = class {
   constructor() {
@@ -1110,6 +1306,8 @@ var Game = class {
     this.activeDoctrines = [];
     /** True once the countdown hit zero and the boss encounter began. */
     this.bossEngaged = false;
+    /** Active stage mutators (empty for stage 1). */
+    this.mutators = [];
     this.scheduled = [
       {
         atElapsed: 6,
@@ -1156,6 +1354,7 @@ var Game = class {
     this.draftChoices = [];
     this.selectedDraftIndex = 0;
     this.rerollsRemaining = Math.min(3, this.rerollsRemaining + 1);
+    this.mutators = rollMutators(this.stage);
     this.notifications.push({
       text: () => formatStageEngaged(this.stage),
       timer: 2.8,
@@ -1168,6 +1367,22 @@ var Game = class {
       alpha: 1,
       kind: "danger"
     });
+    if (this.mutators.length > 0) {
+      this.notifications.push({
+        text: () => `${formatStageMutators(this.stage)}: ${this.mutators.map((m) => getMutatorName(m)).join(" + ")}`,
+        timer: 4.2,
+        alpha: 1,
+        kind: "danger"
+      });
+      for (const id of this.mutators) {
+        this.notifications.push({
+          text: () => `${getMutatorName(id)} \u2014 ${getMutatorDesc(id)}`,
+          timer: 4.6,
+          alpha: 1,
+          kind: "info"
+        });
+      }
+    }
   }
   queueLevelUps(count, wm) {
     if (count <= 0) return;
@@ -1378,6 +1593,8 @@ var AudioEngine = class {
     this.padNodes = [];
     this.lastPlayed = {};
     this.settings = loadSettings();
+    /** 0 = exploration, 1 = boss fight (faster arps + bass pulse). */
+    this.intensity = 0;
   }
   get soundEnabled() {
     return this.settings.soundEnabled;
@@ -1620,18 +1837,38 @@ var AudioEngine = class {
   updateMusic() {
     if (!this.ctx || !this.musicBus || !this.musicStarted || !this.settings.musicEnabled) return;
     const PENTATONIC = [220, 261.6, 293.7, 329.6, 392, 440, 523.2];
+    const BASS = [55, 55, 65.4, 73.4];
     const lookahead = 0.25;
-    const stepDur = 0.24;
+    const boss = this.intensity >= 1;
+    const stepDur = boss ? 0.185 : 0.24;
+    const noteChance = boss ? 0.85 : 0.72;
     while (this.nextArpTime < this.ctx.currentTime + lookahead) {
-      if (Math.random() < 0.72) {
-        const octave = Math.random() < 0.3 ? 2 : 1;
+      if (boss && this.arpStep % 8 === 0) {
+        const bassOsc = this.ctx.createOscillator();
+        bassOsc.type = "sawtooth";
+        bassOsc.frequency.value = BASS[Math.floor(this.arpStep / 8) % BASS.length];
+        const bassGain = this.ctx.createGain();
+        bassGain.gain.setValueAtTime(0, this.nextArpTime);
+        bassGain.gain.linearRampToValueAtTime(0.09, this.nextArpTime + 0.02);
+        bassGain.gain.exponentialRampToValueAtTime(1e-4, this.nextArpTime + stepDur * 6);
+        const bassFilter = this.ctx.createBiquadFilter();
+        bassFilter.type = "lowpass";
+        bassFilter.frequency.value = 260;
+        bassOsc.connect(bassFilter);
+        bassFilter.connect(bassGain);
+        bassGain.connect(this.musicBus);
+        bassOsc.start(this.nextArpTime);
+        bassOsc.stop(this.nextArpTime + stepDur * 7);
+      }
+      if (Math.random() < noteChance) {
+        const octave = Math.random() < (boss ? 0.45 : 0.3) ? 2 : 1;
         const note = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)] * octave;
         const osc = this.ctx.createOscillator();
         osc.type = "triangle";
         osc.frequency.value = note;
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(0, this.nextArpTime);
-        gain.gain.linearRampToValueAtTime(0.055, this.nextArpTime + 0.02);
+        gain.gain.linearRampToValueAtTime(boss ? 0.065 : 0.055, this.nextArpTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(1e-4, this.nextArpTime + stepDur * 1.8);
         const echoDelay = this.ctx.createDelay(1);
         echoDelay.delayTime.value = stepDur * 3;
@@ -3024,6 +3261,11 @@ var UI = class {
     ctx2.font = uiFont(11);
     ctx2.fillStyle = "rgba(160, 210, 255, 0.58)";
     ctx2.fillText(formatStageLabel(game.stage), leftInset, topInset + 52);
+    if (game.mutators.length > 0) {
+      ctx2.font = uiFont(10, "bold");
+      ctx2.fillStyle = "rgba(255, 195, 110, 0.75)";
+      ctx2.fillText(game.mutators.map((m) => mutatorShort(m)).join(" \xB7 "), leftInset, topInset + 68);
+    }
     ctx2.font = uiFont(16);
     ctx2.textAlign = "right";
     ctx2.fillStyle = "rgba(255, 255, 255, 0.7)";
@@ -4051,6 +4293,8 @@ var Player = class {
     this.hurtTimer = 0;
     this.contactCooldown = 0;
     this.hurtDuration = 0.22;
+    /** Brief window after any hit that blocks further damage (prevents bullet-wall melts). */
+    this.postHitInvuln = 0;
     this.shimmerPhase = 0;
     this.contactGraceDuration = 0.35;
   }
@@ -4067,11 +4311,12 @@ var Player = class {
     return false;
   }
   takeDamage(amount) {
-    if (this.invulnTimer > 0) return false;
+    if (this.invulnTimer > 0 || this.postHitInvuln > 0) return false;
     const adjustedAmount = amount * this.damageTakenMultiplier;
     if (adjustedAmount <= 0) return false;
     this.hp = Math.max(0, this.hp - adjustedAmount);
     this.hurtTimer = Math.max(this.hurtTimer, this.hurtDuration);
+    this.postHitInvuln = 0.25;
     return true;
   }
   takeContactHit(amount) {
@@ -4165,6 +4410,7 @@ var Player = class {
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.contactCooldown = Math.max(0, this.contactCooldown - dt);
     this.invulnTimer = Math.max(0, this.invulnTimer - dt);
+    this.postHitInvuln = Math.max(0, this.postHitInvuln - dt);
     let dx = 0;
     let dy = 0;
     if (touch.active) {
@@ -4774,12 +5020,15 @@ var Enemy = class {
     this.dead = false;
     /** Set when an enemy dies without rewarding XP (bomber self-detonation). */
     this.noXp = false;
+    this.stage = 1;
     this.isElite = false;
     this.bossPhase = 1;
     this.canSummon = false;
     this.projectiles = [];
     /** Blinking fuse indicator for bombers / boss charge windups. */
     this.fuseRatio = 0;
+    this.bulletSpeedMul = 1;
+    this.bulletLifeMul = 1;
     this.rotation = 0;
     this.summonTimer = 0;
     this.shootTimer = 0;
@@ -4802,29 +5051,34 @@ var Enemy = class {
     this.spawnAge = 0;
     this.hitFlash = 0;
     this.innerRotation = 0;
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     const config = ENEMY_TYPES[type];
-    const difficulty = Math.max(0, stage - 1);
+    const difficulty = Math.max(0, stage - 1 + ((_a = options.stageOffset) != null ? _a : 0));
     const hpScale = 1 + difficulty * 0.42;
     const speedScale = 1 + difficulty * 0.07;
     const damageScale = 1 + difficulty * 0.1;
     const xpScale = 1 + difficulty * 0.18;
     this.type = type;
     this.isBoss = type === "boss";
-    this.isElite = (_a = options.elite) != null ? _a : false;
+    this.isElite = (_b = options.elite) != null ? _b : false;
+    this.stage = stage;
     this.x = x;
     this.y = y;
     const eliteScale = this.isElite ? 1.55 : 1;
-    this.radius = (config.baseRadius + randomRange(-config.radiusVariation / 2, config.radiusVariation / 2)) * ((_b = options.scale) != null ? _b : 1) * eliteScale;
+    this.radius = (config.baseRadius + randomRange(-config.radiusVariation / 2, config.radiusVariation / 2)) * ((_c = options.scale) != null ? _c : 1) * ((_d = options.radiusMul) != null ? _d : 1) * eliteScale;
     const sizeRatio = this.radius / config.baseRadius;
     const eliteHp = this.isElite ? 3.2 : 1;
-    this.maxHp = config.baseHp * sizeRatio * hpScale * ENEMY_HP_SCALE * ((_c = options.hpScale) != null ? _c : 1) * eliteHp;
+    this.maxHp = config.baseHp * sizeRatio * hpScale * ENEMY_HP_SCALE * ((_e = options.hpScale) != null ? _e : 1) * ((_f = options.hpMul) != null ? _f : 1) * eliteHp;
     this.hp = this.maxHp;
-    this.speed = config.speed * speedScale * (this.isElite ? 0.92 : 1);
+    this.speed = config.speed * speedScale * ((_g = options.speedMul) != null ? _g : 1) * (this.isElite ? 0.92 : 1);
     this.color = config.color;
     this.outlineColor = config.outlineColor;
-    this.xpDrop = Math.max(1, Math.round(config.xpDrop * xpScale * ((_d = options.xpScale) != null ? _d : 1) * (this.isElite ? 3 : 1)));
+    this.xpDrop = Math.max(1, Math.round(
+      config.xpDrop * xpScale * ((_h = options.xpScale) != null ? _h : 1) * (this.isElite ? 3 * ((_i = options.eliteXpMul) != null ? _i : 1) : 1)
+    ));
     this.damageMultiplier = config.damageMultiplier * damageScale * (this.isElite ? 1.45 : 1);
+    this.bulletSpeedMul = (_j = options.bulletSpeedMul) != null ? _j : 1;
+    this.bulletLifeMul = (_k = options.bulletLifeMul) != null ? _k : 1;
     this.spikeCount = type === "swarmer" ? Math.floor(randomRange(5, 8)) : 6;
     this.wobblePhase = Math.random() * TWO_PI;
     this.spawnDuration = this.isBoss ? BOSS_SPAWN_DURATION : SPAWN_DURATION;
@@ -4844,7 +5098,26 @@ var Enemy = class {
     if (this.isBoss) {
       this.summonTimer = 7;
       this.spiralGap = 4;
+      this.applyBossStageSkin(stage);
     }
+  }
+  /** Per-stage boss identity: color shifts each Mk level. */
+  applyBossStageSkin(stage) {
+    const skins = [
+      { color: [255, 40, 90], outline: "#ff285a" },
+      // Mk.1 crimson
+      { color: [190, 80, 255], outline: "#be50ff" },
+      // Mk.2 violet
+      { color: [255, 190, 40], outline: "#ffbe28" },
+      // Mk.3 gold
+      { color: [140, 255, 60], outline: "#8cff3c" },
+      // Mk.4 acid
+      { color: [80, 220, 255], outline: "#50dcff" }
+      // Mk.5 ice
+    ];
+    const skin = skins[(Math.max(1, stage) - 1) % skins.length];
+    this.color = skin.color;
+    this.outlineColor = skin.outline;
   }
   get spawnProgress() {
     return Math.min(1, this.spawnAge / this.spawnDuration);
@@ -4853,9 +5126,9 @@ var Enemy = class {
     this.projectiles.push({
       x: this.x,
       y: this.y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      lifetime,
+      vx: Math.cos(angle) * speed * this.bulletSpeedMul,
+      vy: Math.sin(angle) * speed * this.bulletSpeedMul,
+      lifetime: lifetime * this.bulletLifeMul,
       radius,
       damage
     });
@@ -5570,9 +5843,11 @@ var EnemySpawner = class {
     this.bossPhaseEvents = 0;
     this.spawnTimer = -2.2;
     this.stage = 1;
+    this.spawnMods = NEUTRAL_SPAWN_MODS;
   }
-  setStage(stage, stageDuration) {
+  setStage(stage, stageDuration, spawnMods = NEUTRAL_SPAWN_MODS) {
     this.stage = Math.max(1, stage);
+    this.spawnMods = spawnMods;
     void stageDuration;
   }
   clear() {
@@ -5596,7 +5871,14 @@ var EnemySpawner = class {
       playerX + Math.cos(angle) * 720,
       playerY + Math.sin(angle) * 720
     );
-    const boss = new Enemy("boss", pos.x, pos.y, this.stage);
+    const boss = new Enemy("boss", pos.x, pos.y, this.stage, {
+      hpMul: this.spawnMods.hpMul,
+      speedMul: this.spawnMods.speedMul,
+      radiusMul: this.spawnMods.radiusMul,
+      bulletSpeedMul: this.spawnMods.bulletSpeedMul,
+      bulletLifeMul: this.spawnMods.bulletLifeMul,
+      stageOffset: this.spawnMods.scaleBonus
+    });
     this.enemies.push(boss);
     this.bossSpawned = true;
     return boss;
@@ -5608,7 +5890,7 @@ var EnemySpawner = class {
       const shards = 3;
       for (let i = 0; i < shards; i++) {
         const gp = wrapPosition(enemy.x + randomRange(-26, 26), enemy.y + randomRange(-26, 26));
-        this.enemies.push(new Enemy("swarmer", gp.x, gp.y, this.stage, { scale: 0.55, hpScale: 0.35 }));
+        this.enemies.push(new Enemy("swarmer", gp.x, gp.y, this.stage, this.spawnOptions(false, { scale: 0.55, hpScale: 0.35 })));
       }
     }
   }
@@ -5713,9 +5995,23 @@ var EnemySpawner = class {
     return Math.floor(randomRange(3, 6)) + extra;
   }
   maybeElite(type) {
-    const baseChance = Math.min(0.18, 0.03 + (this.stage - 1) * 0.035);
+    const baseChance = Math.min(0.18, 0.03 + (this.stage - 1) * 0.035) * this.spawnMods.eliteChanceMul;
     const chance = type === "swarmer" ? baseChance * 0.5 : baseChance;
-    return Math.random() < chance;
+    return Math.random() < Math.min(0.5, chance);
+  }
+  spawnOptions(elite, extra = {}) {
+    const m = this.spawnMods;
+    return __spreadProps(__spreadValues({
+      elite
+    }, extra), {
+      hpMul: m.hpMul,
+      speedMul: m.speedMul,
+      radiusMul: m.radiusMul,
+      bulletSpeedMul: m.bulletSpeedMul,
+      bulletLifeMul: m.bulletLifeMul,
+      eliteXpMul: m.eliteXpMul,
+      stageOffset: m.scaleBonus
+    });
   }
   spawnEnemy(type, camera, elapsed) {
     const margin = elapsed < 45 ? 140 : 100;
@@ -5746,22 +6042,23 @@ var EnemySpawner = class {
     }
     if (type === "swarmer") {
       const count = this.getSwarmerCount(elapsed);
-      for (let i = 0; i < count; i++) {
+      const packCount = this.bossSpawned ? Math.max(1, Math.ceil(count / 2)) : count;
+      for (let i = 0; i < packCount; i++) {
         const gp = wrapPosition(pos.x + randomRange(-40, 40), pos.y + randomRange(-40, 40));
-        this.enemies.push(new Enemy("swarmer", gp.x, gp.y, this.stage, { elite: this.maybeElite("swarmer") }));
+        this.enemies.push(new Enemy("swarmer", gp.x, gp.y, this.stage, this.spawnOptions(this.maybeElite("swarmer"))));
       }
     } else if (type === "drifter" && elapsed > 75 && Math.random() < Math.min(0.7, 0.35 + (this.stage - 1) * 0.06)) {
-      this.enemies.push(new Enemy("drifter", pos.x, pos.y, this.stage, { elite: this.maybeElite("drifter") }));
+      this.enemies.push(new Enemy("drifter", pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite("drifter"))));
       const dp = wrapPosition(pos.x + randomRange(-30, 30), pos.y + randomRange(-30, 30));
       this.enemies.push(new Enemy("drifter", dp.x, dp.y, this.stage));
     } else {
-      this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage, { elite: this.maybeElite(type) }));
+      this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite(type))));
     }
   }
   update(dt, elapsed, playerX, playerY, camera) {
     const config = this.getSpawnConfig(elapsed);
     this.spawnTimer += dt;
-    const interval = this.bossSpawned ? config.spawnInterval * 1.7 : config.spawnInterval;
+    const interval = this.bossSpawned ? config.spawnInterval * 2.4 : config.spawnInterval;
     if (this.spawnTimer >= interval) {
       this.spawnTimer = 0;
       this.spawnEnemy(this.pickType(config.types), camera, elapsed);
@@ -5779,7 +6076,7 @@ var EnemySpawner = class {
             summoner.x + randomRange(-80, 80),
             summoner.y + randomRange(-80, 80)
           );
-          this.enemies.push(new Enemy("swarmer", sp.x, sp.y, this.stage));
+          this.enemies.push(new Enemy("swarmer", sp.x, sp.y, this.stage, this.spawnOptions(false)));
         }
       }
       if (summoner.consumePhaseNotification()) {
@@ -6599,8 +6896,18 @@ var GameWorld = class {
     const result = this.combat.consumeDefeatedEnemies();
     this.spawner.removeDead();
     const bossPhaseEvents = this.spawner.drainBossPhaseEvents();
+    if (bossPhaseEvents > 0) {
+      const boss = this.spawner.activeBoss;
+      if (boss) boss.projectiles = [];
+    }
     this.particles.update(dt);
     return __spreadProps(__spreadValues({}, result), { levelUps: result.levelUps, bossPhaseEvents });
+  }
+  /** Clear every hostile bullet on the field (boss death sweep). */
+  clearHostileBullets() {
+    for (const enemy of this.spawner.enemies) {
+      enemy.projectiles = [];
+    }
   }
   drawTitle(ctx2, time) {
     this.renderer.drawTitle(ctx2, time);
@@ -6614,8 +6921,8 @@ var GameWorld = class {
   drawEndBackdrop(ctx2, time) {
     this.renderer.drawEndBackdrop(ctx2, time);
   }
-  prepareNextStage(stage, stageDuration) {
-    this.spawner.setStage(stage, stageDuration);
+  prepareNextStage(stage, stageDuration, mutators = []) {
+    this.spawner.setStage(stage, stageDuration, composeSpawnMods(mutators));
     this.spawner.clear();
     this.particles.clear();
     this.camera.follow(this.player.x, this.player.y);
@@ -6687,12 +6994,24 @@ var GEOMETRY = {
   bossSatellite: new THREE.OctahedronGeometry(4.4, 0)
 };
 function makeMaterial(color, emissive = color) {
-  return new THREE.MeshLambertMaterial({
-    color,
-    emissive,
-    emissiveIntensity: 0.18,
+  const mat = new THREE.MeshLambertMaterial({
+    color: vivid(color, 1.55, 0.14),
+    emissive: vivid(emissive, 1.1, 0.06),
+    emissiveIntensity: 0.5,
     flatShading: true
   });
+  return mat;
+}
+function vivid(hex, satBoost, lightBoost) {
+  const c = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  c.setHSL(
+    hsl.h,
+    Math.min(1, hsl.s * satBoost + 0.15),
+    Math.min(0.62, hsl.l * 1.35 + lightBoost)
+  );
+  return c;
 }
 function varyMaterial(material, hueShift, lightnessShift) {
   material.color.offsetHSL(hueShift, 0, lightnessShift);
@@ -6727,11 +7046,16 @@ var ThreeEntityRenderer = class {
       full: createEnemyPool(),
       lite: createEnemyPool()
     };
+    this.composer = null;
+    this.composerReady = false;
+    this.slowFrames = 0;
     this.currentDevicePixelRatio = 1;
     this.currentPixelRatio = 1;
     this.detailMode = "full";
     this.width = 1;
     this.height = 1;
+    this.dustPoints = null;
+    this.lastFrameCost = 0;
     var _a;
     const compactQuality = isMobileLikeViewport();
     this.basePixelRatioCap = compactQuality ? 1.35 : 1.85;
@@ -6758,19 +7082,106 @@ var ThreeEntityRenderer = class {
     overlayCanvas.style.background = "transparent";
     const parent = (_a = overlayCanvas.parentElement) != null ? _a : __doc.body;
     parent.insertBefore(this.renderer.domElement, overlayCanvas);
-    this.scene.add(new THREE.AmbientLight(9086463, 1.1));
-    const hemi = new THREE.HemisphereLight(10408191, 1119515, 0.9);
+    this.scene.background = this.createGradientBackdrop();
+    this.scene.add(new THREE.AmbientLight(9086463, 1.35));
+    const hemi = new THREE.HemisphereLight(10408191, 1119515, 1);
     this.scene.add(hemi);
-    const key = new THREE.DirectionalLight(14741247, 1.9);
+    const key = new THREE.DirectionalLight(14741247, 2.1);
     key.position.set(-0.5, 0.8, 1.3);
     this.scene.add(key);
-    const fill = new THREE.DirectionalLight(16762517, 0.6);
+    const fill = new THREE.DirectionalLight(16762517, 0.7);
     fill.position.set(0.85, -0.5, 1);
     this.scene.add(fill);
+    const rim = new THREE.DirectionalLight(6258687, 1.6);
+    rim.position.set(0.2, -0.4, -1.2);
+    this.scene.add(rim);
+    this.createDustField();
     this.playerVisual = this.createPlayerVisual();
     this.scene.add(this.playerVisual.group);
+    void this.initComposer(compactQuality);
+  }
+  /** Post-processing (bloom) is loaded lazily and degrades gracefully. */
+  async initComposer(compactQuality) {
+    try {
+      const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+        Promise.resolve().then(() => __toESM(require_EffectComposer())),
+        Promise.resolve().then(() => __toESM(require_RenderPass())),
+        Promise.resolve().then(() => __toESM(require_UnrealBloomPass())),
+        Promise.resolve().then(() => __toESM(require_OutputPass()))
+      ]);
+      const composer = new EffectComposer(this.renderer);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      const bloomRes = compactQuality ? new THREE.Vector2(Math.max(2, Math.floor(this.width / 2)), Math.max(2, Math.floor(this.height / 2))) : new THREE.Vector2(this.width, this.height);
+      const bloom = new UnrealBloomPass(bloomRes, compactQuality ? 0.7 : 0.85, 0.55, 0.42);
+      composer.addPass(bloom);
+      composer.addPass(new OutputPass());
+      composer.setSize(this.width, this.height);
+      composer.setPixelRatio(this.currentPixelRatio);
+      this.composer = {
+        render: () => composer.render(),
+        setSize: (w, h) => composer.setSize(w, h),
+        setPixelRatio: (r) => composer.setPixelRatio(r),
+        setBloomEnabled: (enabled) => {
+          bloom.enabled = enabled;
+        }
+      };
+      this.composerReady = true;
+    } catch (e) {
+      this.composer = null;
+      this.composerReady = true;
+    }
+  }
+  /** Deep-space gradient backdrop rendered behind everything. */
+  createGradientBackdrop() {
+    try {
+      const cv = __doc.createElement("canvas");
+      cv.width = 32;
+      cv.height = 256;
+      const g = cv.getContext("2d");
+      if (!g) return new THREE.Color(BASE_CLEAR_COLOR);
+      const grad = g.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0, "#0b1030");
+      grad.addColorStop(0.45, "#090d24");
+      grad.addColorStop(1, "#05070f");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 32, 256);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    } catch (e) {
+      return new THREE.Color(BASE_CLEAR_COLOR);
+    }
+  }
+  /** Additive drifting dust motes for parallax depth. */
+  createDustField() {
+    try {
+      const count = 160;
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 3200;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 2e3;
+        positions[i * 3 + 2] = -60 - Math.random() * 220;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color: 8369407,
+        size: 5,
+        sizeAttenuation: false,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const points = new THREE.Points(geo, mat);
+      points.userData.drift = true;
+      this.scene.add(points);
+      this.dustPoints = points;
+    } catch (e) {
+    }
   }
   resize(width, height, dpr) {
+    var _a;
     this.width = width;
     this.height = height;
     this.currentDevicePixelRatio = dpr;
@@ -6783,21 +7194,34 @@ var ThreeEntityRenderer = class {
     this.camera.updateProjectionMatrix();
     this.updatePixelRatio(1);
     this.renderer.setSize(width, height, false);
+    (_a = this.composer) == null ? void 0 : _a.setSize(width, height);
   }
   render(world, time) {
     var _a;
     this.applyAdaptiveQuality((_a = world == null ? void 0 : world.spawner.enemies.length) != null ? _a : 0);
+    if (this.dustPoints) {
+      this.dustPoints.rotation.z = time * 8e-3;
+      this.dustPoints.position.x = Math.sin(time * 0.05) * 30;
+      this.dustPoints.position.y = Math.cos(time * 0.04) * 20;
+    }
     if (!world) {
       this.playerVisual.group.visible = false;
       for (const visual of this.enemyVisuals.values()) {
         visual.group.visible = false;
       }
-      this.renderer.render(this.scene, this.camera);
+      this.renderFrame();
       return;
     }
     this.syncPlayer(world, time);
     this.syncEnemies(world, time);
-    this.renderer.render(this.scene, this.camera);
+    this.renderFrame();
+  }
+  renderFrame() {
+    if (this.composer) {
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
   syncPlayer(world, time) {
     const player = world.player;
@@ -6816,8 +7240,8 @@ var ThreeEntityRenderer = class {
       fin.rotation.z = i / this.playerVisual.fins.length * Math.PI * 2 + time * 0.42;
       fin.rotation.x = 0.34 + Math.sin(time * 2 + i) * 0.16;
     }
-    this.playerVisual.shell.material.emissiveIntensity = 0.18 + player.hurtRatio * 0.65;
-    this.playerVisual.core.material.emissiveIntensity = 0.36 + player.hurtRatio * 0.55;
+    this.playerVisual.shell.material.emissiveIntensity = 0.55 + player.hurtRatio * 0.65;
+    this.playerVisual.core.material.emissiveIntensity = 0.85 + player.hurtRatio * 0.55;
   }
   syncEnemies(world, time) {
     const active = new Set(world.spawner.enemies);
@@ -6832,8 +7256,22 @@ var ThreeEntityRenderer = class {
         visual = this.acquireEnemyVisual(enemy.type);
         this.enemyVisuals.set(enemy, visual);
       }
+      this.applyStageTint(visual, enemy);
       this.updateEnemyVisual(enemy, visual, world, time);
     }
+  }
+  /** Boss bodies shift hue per Mk stage so each stage reads as a new foe. */
+  applyStageTint(visual, enemy) {
+    var _a;
+    if (!enemy.isBoss) return;
+    const tintFor = (_a = visual.group.userData.tintFor) != null ? _a : -1;
+    if (tintFor === enemy.stage) return;
+    const hueShift = (enemy.stage - 1) % 5 * 0.078;
+    for (const material of visual.materials) {
+      material.color.offsetHSL(hueShift, 0, 0);
+      material.emissive.copy(material.color).multiplyScalar(0.5);
+    }
+    visual.group.userData.tintFor = enemy.stage;
   }
   acquireEnemyVisual(type) {
     const pooled = this.enemyPools[this.detailMode][type].pop();
@@ -6872,10 +7310,10 @@ var ThreeEntityRenderer = class {
       emissiveBoost = enemy.fuseRatio * (Math.sin(time * 30) > 0 ? 0.9 : 0.1);
     }
     if (enemy.isBoss) {
-      emissiveBoost = 0.55 + (enemy.bossPhase - 1) * 0.25 + lowHealth * 0.2;
+      emissiveBoost = 0.45 + (enemy.bossPhase - 1) * 0.22 + lowHealth * 0.2;
     }
     for (const material of visual.materials) {
-      material.emissiveIntensity = 0.14 + lowHealth * 0.32 + emissiveBoost;
+      material.emissiveIntensity = 0.42 + lowHealth * 0.28 + emissiveBoost;
     }
     const parts = visual.group.userData;
     if (parts.wings) {
@@ -6917,14 +7355,14 @@ var ThreeEntityRenderer = class {
   }
   createPlayerVisual() {
     const root = new THREE.Group();
-    const shell = createMesh(GEOMETRY.playerShell, makeMaterial(3108351, 5939455));
+    const shell = createMesh(GEOMETRY.playerShell, makeMaterial(3108351, 5945599));
     shell.scale.set(1.08, 0.95, 0.8);
     root.add(shell);
-    const core = createMesh(GEOMETRY.playerCore, makeMaterial(10476031, 9358335));
+    const core = createMesh(GEOMETRY.playerCore, makeMaterial(11527167, 12577535));
     root.add(core);
     const fins = [];
     for (let i = 0; i < 3; i++) {
-      const fin = createMesh(GEOMETRY.playerFin, makeMaterial(6200831, 8241407));
+      const fin = createMesh(GEOMETRY.playerFin, makeMaterial(6200831, 8836351));
       fin.position.set(0, 0, -3.5);
       root.add(fin);
       fins.push(fin);
@@ -6939,13 +7377,31 @@ var ThreeEntityRenderer = class {
     }
     const pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD ? 0.62 : enemyCount >= REDUCED_PIXEL_RATIO_THRESHOLD ? 0.8 : 1;
     this.updatePixelRatio(pixelRatioScale);
+    if (this.composer && this.composerReady) {
+      if (this.lastFrameCost > 24) {
+        this.slowFrames++;
+        if (this.slowFrames > 90) {
+          this.composer.setBloomEnabled(false);
+          this.slowFrames = -1e6;
+        }
+      } else if (this.slowFrames > 0) {
+        this.slowFrames--;
+      }
+    }
+  }
+  /** Called by the runtime loop wrapper to report frame pacing. */
+  reportFrameCost(ms) {
+    this.lastFrameCost = this.lastFrameCost * 0.9 + ms * 0.1;
   }
   updatePixelRatio(scale) {
+    var _a, _b;
     const target = Math.min(this.currentDevicePixelRatio, this.basePixelRatioCap * scale);
     if (Math.abs(target - this.currentPixelRatio) < 0.02) return;
     this.currentPixelRatio = target;
     this.renderer.setPixelRatio(target);
     this.renderer.setSize(this.width, this.height, false);
+    (_a = this.composer) == null ? void 0 : _a.setPixelRatio(target);
+    (_b = this.composer) == null ? void 0 : _b.setSize(this.width, this.height);
   }
   recycleActiveEnemyVisuals() {
     const activeVisuals = Array.from(this.enemyVisuals.entries());
@@ -7685,6 +8141,7 @@ var GameRuntime = class {
     audio.unlock();
   }
   audioTick() {
+    audio.intensity = this.game.bossEngaged ? 1 : 0;
     audio.updateMusic();
   }
   updatePlaying(dt) {
@@ -7705,6 +8162,7 @@ var GameRuntime = class {
       this.game.notifyBossDefeated();
       audio.playBossDeath();
       audio.playVictoryFanfare();
+      this.world.clearHostileBullets();
       this.finishRun();
       this.game.state = "victory" /* VICTORY */;
       return;
@@ -7799,7 +8257,7 @@ var GameRuntime = class {
   }
   advanceStage() {
     this.game.advanceStage();
-    this.world.prepareNextStage(this.game.stage, this.game.gameDuration);
+    this.world.prepareNextStage(this.game.stage, this.game.gameDuration, this.game.mutators);
     this.restartAllowedAt = 0;
     this.lastRecordResult = null;
   }

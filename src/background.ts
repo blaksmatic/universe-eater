@@ -11,6 +11,7 @@ interface Star {
   brightness: number;
   twinkleSpeed: number;
   twinkleOffset: number;
+  tint: [number, number, number];
 }
 
 interface Nebula {
@@ -30,28 +31,41 @@ interface DustParticle {
   vy: number;
 }
 
+const STAR_TINTS: [number, number, number][] = [
+  [235, 242, 255],  // ice white
+  [170, 205, 255],  // blue
+  [255, 230, 190],  // warm
+  [210, 180, 255],  // violet
+  [160, 255, 235],  // teal
+];
+
 function createStar(layer: number): Star {
   return {
     x: Math.random() * MAP_WIDTH,
     y: Math.random() * MAP_HEIGHT,
     layer,
     size: layer === 0 ? randomRange(0.5, 1) : layer === 1 ? randomRange(1, 2) : randomRange(1.5, 3),
-    brightness: randomRange(0.3, 1.0),
+    brightness: randomRange(0.35, 1.0),
     twinkleSpeed: randomRange(0.5, 2.0),
     twinkleOffset: Math.random() * TWO_PI,
+    tint: STAR_TINTS[Math.floor(Math.random() * STAR_TINTS.length)],
   };
 }
 
 function createNebula(): Nebula {
   const colors: [number, number, number][] = [
-    [100, 50, 150], [50, 80, 180], [150, 50, 100], [40, 100, 160],
+    [120, 60, 220],    // violet
+    [40, 110, 230],    // azure
+    [220, 60, 160],    // magenta
+    [30, 180, 200],    // teal
+    [90, 60, 255],     // deep indigo
   ];
   return {
     x: Math.random() * MAP_WIDTH,
     y: Math.random() * MAP_HEIGHT,
-    radius: randomRange(200, 600),
+    radius: randomRange(320, 900),
     color: colors[Math.floor(Math.random() * colors.length)],
-    alpha: randomRange(0.03, 0.08),
+    alpha: randomRange(0.05, 0.11),
   };
 }
 
@@ -77,9 +91,9 @@ export class Background {
   constructor() {
     for (let i = 0; i < 300; i++) this.stars.push(createStar(0));
     for (let i = 0; i < 150; i++) this.stars.push(createStar(1));
-    for (let i = 0; i < 80; i++) this.stars.push(createStar(2));
-    for (let i = 0; i < 6; i++) this.nebulae.push(createNebula());
-    for (let i = 0; i < 50; i++) this.dust.push(createDust());
+    for (let i = 0; i < 90; i++) this.stars.push(createStar(2));
+    for (let i = 0; i < 8; i++) this.nebulae.push(createNebula());
+    for (let i = 0; i < 60; i++) this.dust.push(createDust());
   }
 
   update(dt: number, playerSpeed = 0, vx = 0, vy = 0): void {
@@ -144,18 +158,19 @@ export class Background {
         screenY += offY * driftFactor * oscillation * this.driftIntensity;
       }
 
-      const twinkle = 0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
+      const twinkle = 0.55 + 0.45 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
       const alpha = star.brightness * twinkle;
 
       // Depth-of-field: far layer stars are softer
-      const dofAlpha = star.layer === 0 ? alpha * 0.5 : alpha;
+      const dofAlpha = star.layer === 0 ? alpha * 0.55 : alpha;
+      const [tr, tg, tb] = star.tint;
 
-      // Glow halo for foreground stars
-      if (star.layer === 2 && star.size > 2) {
-        const glowR = drawSize * 3;
+      // Colored glow halo for foreground stars
+      if (star.layer === 2 && star.size > 1.8) {
+        const glowR = drawSize * 4;
         const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, glowR);
-        glow.addColorStop(0, `rgba(200, 220, 255, ${dofAlpha * 0.3})`);
-        glow.addColorStop(1, 'rgba(200, 220, 255, 0)');
+        glow.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha * 0.4})`);
+        glow.addColorStop(1, `rgba(${tr}, ${tg}, ${tb}, 0)`);
         ctx.fillStyle = glow;
         ctx.beginPath();
         ctx.arc(screenX, screenY, glowR, 0, TWO_PI);
@@ -170,12 +185,12 @@ export class Background {
         ctx.beginPath();
         ctx.moveTo(screenX - nx * streakLen, screenY - ny * streakLen);
         ctx.lineTo(screenX + nx * streakLen, screenY + ny * streakLen);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${dofAlpha * 0.7})`;
+        ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha * 0.75})`;
         ctx.lineWidth = drawSize * 0.8;
         ctx.lineCap = 'round';
         ctx.stroke();
       } else {
-        ctx.fillStyle = `rgba(255, 255, 255, ${dofAlpha})`;
+        ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha})`;
         ctx.beginPath();
         ctx.arc(screenX, screenY, drawSize, 0, TWO_PI);
         ctx.fill();
@@ -187,7 +202,7 @@ export class Background {
       const screen = camera.worldToScreen(d.x, d.y);
       if (screen.x < -10 || screen.x > camera.width + 10 ||
           screen.y < -10 || screen.y > camera.height + 10) continue;
-      ctx.fillStyle = `rgba(180, 200, 255, ${d.alpha})`;
+      ctx.fillStyle = `rgba(150, 190, 255, ${d.alpha})`;
       ctx.beginPath();
       ctx.arc(screen.x, screen.y, d.size, 0, TWO_PI);
       ctx.fill();

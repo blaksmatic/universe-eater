@@ -60,15 +60,39 @@ All weapons fire automatically — your job is positioning, kiting, and dashing 
 - Settings: sound, music, screen shake, damage numbers — all persisted
 - Full English / 中文 localization, switchable in-game
 
+## Docs
+
+- [Build & Run](docs/BUILD.md) — install → dev → typecheck → bundle → WeChat.
+- [Architecture](docs/ARCHITECTURE.md) — layers, game loop, data flow, toroidal map.
+- [Components](docs/COMPONENTS.md) — file management, per-module responsibilities, adding new weapons/enemies.
+- [Game Design](docs/GAME_DESIGN.md) — loop, weapons, enemies, boss phases, progression.
+
 ## Development
 
 ```bash
 npm install && npm run dev     # build + watch + serve at :3000
-npm run typecheck              # tsc --noEmit
+npm run typecheck              # tsc --noEmit (now passes — design-system exports fixed)
 npm test                       # automated Playwright playthrough (needs `npx playwright install chromium` and a server on :3456)
 npm run build                  # production bundle + standalone HTML
 npm run build:wx               # WeChat mini-game adapter build
 ```
+
+Managed source layout:
+
+```
+src/
+  main.ts            entry + debug hook
+  core/              game, ids, mutators, storage, upgrades, runtime (barrel)
+  entities/          player, enemies, weapons (barrel)
+  weapons/shared.ts  Weapon interface + hitEnemy helpers (extracted)
+  ui/icons.ts        WEAPON_SHAPES (extracted)
+  ui/theme.ts        UI_COLORS + glassPanel/glowText (extracted, fixes noUnusedLocals)
+  systems/           world, world-combat/motion, audio, input (barrel)
+  render/            camera, background, geometry, particles, three-view, world-renderer (barrel)
+  utils.ts / i18n.ts / etc
+```
+
+See `docs/COMPONENTS.md` for the full split plan and “how to add a new component/weapon”.
 
 The automated test harness (`scripts/playtest.mjs`) drives real gameplay via a debug hook: smoke flow, heavy combat, the full boss fight (all 3 phases → victory → next stage), and mobile emulation with touch controls.
 
