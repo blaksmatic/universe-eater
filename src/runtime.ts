@@ -1,9 +1,11 @@
 import { Game, GameState } from './game';
-import { getUiText, setLanguage, uiFont } from './i18n';
+import { setLanguage, syncDocumentLanguage } from './i18n';
 import { UI } from './ui';
-import { consumeAnyTap, consumePauseTap } from './input';
+import { consumeAnyTap, consumePauseTap, clearTransientInput, triggerHaptic } from './input';
 import { GameWorld } from './world';
 import { ThreeEntityRenderer } from './three-view';
+import { audio } from './audio';
+import { loadRecords, submitRun, RecordUpdateResult } from './storage';
 
 const CLEAR_COLOR = '#0a0a1a';
 const GAME_OVER_RESTART_DELAY_MS = 2500;
@@ -17,6 +19,9 @@ export class GameRuntime {
   private viewportHeight = window.innerHeight;
   private renderScale = 1;
   private restartAllowedAt = 0;
+  private audioUnlocked = false;
+  private lastRecordResult: RecordUpdateResult | null = null;
+  private lastMilestoneSeen = 0;
   private readonly entityRenderer?: ThreeEntityRenderer;
 
   constructor(
@@ -49,6 +54,12 @@ export class GameRuntime {
     this.canvas.addEventListener('pointerdown', this.handlePointerDown);
   }
 
+  private unlockAudioOnce(): void {
+    if (this.audioUnlocked) return;
+    this.audioUnlocked = true;
+    audio.unlock();
+  }
+
   private handleResize = (): void => {
     this.resize();
     this.world.resize(this.viewportWidth, this.viewportHeight);
@@ -62,6 +73,8 @@ export class GameRuntime {
   };
 
   private handleKeyDown = (event: KeyboardEvent): void => {
+    this.unlockAudioOnce();
+
     if (this.game.state === GameState.LEVEL_UP) {
       if (event.key === '1' || event.key === '2' || event.key === '3') {
         this.game.setDraftSelection(Number(event.key) - 1);
@@ -80,13 +93,30 @@ export class GameRuntime {
       return;
     }
 
-    if (event.key === 'Escape') {
-      if (this.game.state === GameState.PLAYING) {
-        this.game.state = GameState.PAUSED;
+    if (this.game.state === GameState.PAUSED) {
+      if (event.key === 'Escape') {
+        this.game.state = GameState.PLAYING;
         return;
       }
-      if (this.game.state === GameState.PAUSED) {
-        this.game.state = GameState.PLAYING;
+      if (event.key >= '1' && event.key <= '4') {
+        const keys = ['soundEnabled', 'musicEnabled', 'shakeEnabled', 'damageNumbersEnabled'] as const;
+        this.ui.applySettingToggle(keys[Number(event.key) - 1]);
+        return;
+      }
+      if (event.key.toLowerCase() === 'r') {
+        this.resetRun(GameState.PLAYING);
+        return;
+      }
+      if (event.key.toLowerCase() === 'q') {
+        this.quitToTitle();
+        return;
+      }
+      return;
+    }
+
+    if (event.key === 'Escape' || event.key.toLowerCase() === 'p') {
+      if (this.game.state === GameState.PLAYING) {
+        this.game.state = GameState.PAUSED;
         return;
       }
     }
@@ -102,6 +132,7 @@ export class GameRuntime {
   };
 
   private handlePointerDown = (event: PointerEvent): void => {
+    this.unlockAudioOnce();
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -122,6 +153,30 @@ export class GameRuntime {
         this.game.chooseDraft(action.index, this.world.weaponManager, this.world.player);
       } else {
         this.game.rerollDraft(this.world.weaponManager);
+      }
+      return;
+    }
+
+    if (this.game.state === GameState.PAUSED) {
+      const action = this.ui.getPauseActionAt(this.canvas, x, y);
+      if (!action) {
+        // Click outside the panel resumes.
+        this.game.state = GameState.PLAYING;
+        return;
+      }
+      switch (action.type) {
+        case 'resume':
+          this.game.state = GameState.PLAYING;
+          break;
+        case 'restart':
+          this.resetRun(GameState.PLAYING);
+          break;
+        case 'quit':
+          this.quitToTitle();
+          break;
+        case 'toggle':
+          this.ui.applySettingToggle(action.key);
+          break;
       }
       return;
     }
@@ -148,6 +203,7 @@ export class GameRuntime {
       this.ctx.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
     }
 
+    this.audioTick();
     this.handleTapTransitions();
     this.world.camera.updateShake(dt);
     this.ui.trackState(this.game.state, dt);
@@ -173,21 +229,22 @@ export class GameRuntime {
             this.game,
             this.canRestartGameOver(),
             this.getGameOverRestartCountdown(),
+            this.lastRecordResult ?? undefined,
+            this.world.combatSystem.comboBest,
           );
         } else if (this.game.state === GameState.VICTORY) {
           this.entityRenderer?.render(null, timestamp / 1000);
           this.world.drawEndBackdrop(this.ctx, timestamp / 1000);
-          this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game);
+          this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game, this.lastRecordResult ?? undefined);
         }
         break;
       case GameState.PAUSED:
         this.entityRenderer?.render(this.world, timestamp / 1000);
         this.world.drawPausedScene(this.ctx, timestamp / 1000, !this.entityRenderer);
-        this.ui.drawHUD(this.ctx, this.canvas, this.game, this.world.player, this.world.weaponManager);
-        this.drawPauseOverlay();
+        this.ui.drawPauseMenu(this.ctx, this.canvas, this.game, this.world.player, this.world.weaponManager);
         break;
       case GameState.LEVEL_UP:
-        this.renderActiveRun(timestamp / 1000);
+        this.renderActiveRun(timestamp / 1000, true);
         this.ui.drawLevelUpDraft(this.ctx, this.canvas, this.game);
         break;
       case GameState.GAME_OVER:
@@ -200,36 +257,72 @@ export class GameRuntime {
           this.game,
           this.canRestartGameOver(),
           this.getGameOverRestartCountdown(),
+          this.lastRecordResult ?? undefined,
+          this.world.combatSystem.comboBest,
         );
         break;
       case GameState.VICTORY:
         this.entityRenderer?.render(null, timestamp / 1000);
         this.world.drawEndBackdrop(this.ctx, timestamp / 1000);
-        this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game);
+        this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game, this.lastRecordResult ?? undefined);
         break;
     }
 
     requestAnimationFrame(this.frame);
   };
 
+  private audioTick(): void {
+    audio.updateMusic();
+  }
+
   private updatePlaying(dt: number): void {
     this.game.elapsedTime += dt;
     this.game.totalElapsedTime += dt;
-    if (this.game.timeRemaining <= 0) {
+
+    // Boss encounter begins when the survival timer runs out.
+    if (!this.game.bossEngaged && this.game.timeRemaining <= 0) {
+      this.game.beginBossEncounter();
+      this.world.spawnBoss();
+      audio.playBossWarning();
+    }
+
+    const result = this.world.updatePlaying(dt, this.game.elapsedTime);
+
+    if (result.bossPhaseEvents > 0) {
+      audio.playBossPhase();
+      this.world.camera.shake(6, 0.3);
+      this.world.particles.addScreenFlash(255, 90, 110, 0.1, 0.3);
+    }
+    if (result.bossKilled) {
+      this.game.notifyBossDefeated();
+      audio.playBossDeath();
+      audio.playVictoryFanfare();
+      this.finishRun();
       this.game.state = GameState.VICTORY;
       return;
     }
 
-    const result = this.world.updatePlaying(dt, this.game.elapsedTime);
+    if (result.kills > 0) {
+      audio.playPickup();
+    }
+    if (this.world.combatSystem.milestoneEvents > this.lastMilestoneSeen) {
+      this.lastMilestoneSeen = this.world.combatSystem.milestoneEvents;
+      this.ui.notifyComboMilestone();
+    }
+
     if (this.world.player.isDead()) {
+      this.finishRun();
       this.game.state = GameState.GAME_OVER;
       this.restartAllowedAt = performance.now() + GAME_OVER_RESTART_DELAY_MS;
+      audio.playGameOverSting();
+      triggerHaptic([60, 40, 60]);
       this.game.updateNotifications(dt);
       return;
     }
 
     if (result.levelUps > 0) {
       this.world.triggerLevelUpBlast(result.levelUps);
+      audio.playLevelUp();
       if (!this.world.weaponManager.allMaxed()) {
         this.game.queueLevelUps(result.levelUps, this.world.weaponManager);
       }
@@ -238,27 +331,34 @@ export class GameRuntime {
     this.game.updateNotifications(dt);
   }
 
-  private renderActiveRun(time: number): void {
+  private finishRun(): void {
+    const player = this.world.player;
+    this.lastRecordResult = submitRun({
+      stage: this.game.stage,
+      kills: player.kills,
+      level: player.level,
+      timeSeconds: this.game.totalElapsedTime,
+      combo: this.world.combatSystem.comboBest,
+    });
+  }
+
+  private renderActiveRun(time: number, suppressNotifications = false): void {
     this.entityRenderer?.render(this.world, time);
     this.world.drawPlayfield(this.ctx, time, !this.entityRenderer);
     this.ui.drawVignette(this.ctx, this.viewportWidth, this.viewportHeight, this.world.player.hp / this.world.player.maxHp);
     this.world.particles.drawScreenEffects(this.ctx, this.viewportWidth, this.viewportHeight);
-    this.ui.drawHUD(this.ctx, this.canvas, this.game, this.world.player, this.world.weaponManager);
-    this.ui.drawNotifications(this.ctx, this.canvas, this.game);
-  }
-
-  private drawPauseOverlay(): void {
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    this.ctx.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
-
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.font = uiFont(48, 'bold');
-    this.ctx.textAlign = 'center';
-    this.ctx.fillText(getUiText('paused'), this.viewportWidth / 2, this.viewportHeight / 2 - 10);
-    this.ctx.font = uiFont(18);
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    this.ctx.fillText(getUiText('resumePrompt'), this.viewportWidth / 2, this.viewportHeight / 2 + 30);
-    this.ui.drawLanguageSelector(this.ctx, this.canvas);
+    this.ui.drawHUD(
+      this.ctx,
+      this.canvas,
+      this.game,
+      this.world.player,
+      this.world.weaponManager,
+      this.world.spawner.enemies,
+      this.world.combatSystem.comboCount,
+    );
+    if (!suppressNotifications) {
+      this.ui.drawNotifications(this.ctx, this.canvas, this.game);
+    }
   }
 
   private handleTapTransitions(): void {
@@ -284,12 +384,26 @@ export class GameRuntime {
     this.game = new Game();
     this.game.state = state;
     this.restartAllowedAt = 0;
+    this.lastRecordResult = null;
+    this.lastMilestoneSeen = 0;
+    clearTransientInput();
+  }
+
+  private quitToTitle(): void {
+    this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
+    this.game = new Game();
+    this.game.state = GameState.TITLE;
+    this.restartAllowedAt = 0;
+    this.lastRecordResult = null;
+    clearTransientInput();
+    syncDocumentLanguage();
   }
 
   private advanceStage(): void {
     this.game.advanceStage();
-    this.world.prepareNextStage(this.game.stage);
+    this.world.prepareNextStage(this.game.stage, this.game.gameDuration);
     this.restartAllowedAt = 0;
+    this.lastRecordResult = null;
   }
 
   private canRestartGameOver(): boolean {
@@ -310,5 +424,10 @@ export class GameRuntime {
     this.canvas.style.width = `${this.viewportWidth}px`;
     this.canvas.style.height = `${this.viewportHeight}px`;
     this.ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
+  }
+
+  /** Exposed for debugging/tools that want the current best records. */
+  getRecords() {
+    return loadRecords();
   }
 }

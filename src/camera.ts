@@ -1,4 +1,5 @@
 import { Point } from './utils';
+import { loadSettings } from './storage';
 
 export class Camera {
   x = 0;
@@ -29,6 +30,7 @@ export class Camera {
   }
 
   shake(intensity: number, duration: number): void {
+    if (!loadSettings().shakeEnabled) return;
     // Only override if stronger than current shake
     if (intensity > this.shakeIntensity) {
       this.shakeIntensity = intensity;

@@ -1,6 +1,6 @@
 # Universe Eater
 
-A fast-paced survival browser game rendered on HTML5 Canvas. Survive 5 minutes against escalating enemy waves with 3 auto-firing weapons.
+A fast-paced survival browser game rendered on HTML5 Canvas with an optional three.js 3D entity overlay. Survive the countdown against escalating enemy waves, draft mutations on level-up, then slay the multi-phase Void Warden to advance stages. Bilingual (EN / zh-CN), desktop + mobile.
 
 ## Quick Start
 
@@ -8,109 +8,101 @@ A fast-paced survival browser game rendered on HTML5 Canvas. Survive 5 minutes a
 npm install && npm run dev
 ```
 
-Opens at http://localhost:3000. Build check: `npx tsc --noEmit`
+Opens at http://localhost:3000. Type-check: `npm run typecheck`. Automated tests: `npm test` (requires `npx playwright install chromium` and a server on :3456).
 
 ## Tech Stack
 
 - **TypeScript** (strict mode, `noUnusedLocals`, `noUnusedParameters`)
-- **HTML5 Canvas 2D** — all rendering, no DOM elements in gameplay
+- **HTML5 Canvas 2D** — gameplay rendering, HUD, effects (2D layer sits above the 3D overlay)
+- **three.js** — `three-view.ts` renders 3D entity bodies with adaptive quality/pixel-ratio; falls back to pure 2D bodies if WebGL fails
+- **WebAudio** — procedural ambient music + synthesized SFX (`audio.ts`, no audio assets)
 - **esbuild** — bundler with watch mode (`dist/bundle.js`)
-- No frameworks, no runtime dependencies
+- **Playwright** — automated playtest harness (`scripts/playtest.mjs`, `scripts/qa-edge.mjs`)
 
 ## Project Structure
 
 ```
 src/
-  main.ts        — Game loop, init, input handlers, draw orchestration
-  game.ts        — Game state machine, auto-upgrade system, notifications
-  player.ts      — Player movement (WASD/arrows), HP, XP/leveling
-  enemies.ts     — 4 enemy types with distinct shapes, spawner with escalation
-  weapons.ts     — 3 weapon classes (Laser, Orbit, Nova), WeaponManager
-  camera.ts      — Camera follow, world-to-screen projection, screen shake
-  background.ts  — Parallax starfield, nebulae, cosmic dust, idle drift
-  geometry.ts    — Neon background geometry (grid, radials, rings, floating shapes)
-  particles.ts   — Death effects, spark trails, debris, glow pools, XP orbs, screen effects
-  input.ts       — Keyboard state tracker, mobile touch joystick
-  ui.ts          — HUD, title/game-over/victory screens, vignette, notifications
-  utils.ts       — Map constants, wrapping math, shared rendering helpers
+  main.ts        — entry; creates GameRuntime; exposes window.__universeEater debug hook
+  runtime.ts     — game loop, state transitions, input routing, audio unlock, records
+  game.ts        — Game state machine, draft/level-up flow, notifications, scheduled hints
+  world.ts       — GameWorld composition root; wires combat/weapons/motion/renderer
+  world-combat.ts— collisions, combo chain, kill rewards, level-up blast, boss events
+  world-motion.ts— player velocity sampling for background parallax
+  world-renderer.ts— draw order + boss/elite threat auras
+  player.ts      — movement, dash (i-frames, ghosts, cooldown), crit/vamp/xp stats
+  enemies.ts     — 8 enemy types incl. elites + 3-phase boss; spawner with escalation
+  weapons.ts     — 7 weapons (laser/orbit/nova/escort/seeker/arc/singularity) + manager
+  upgrades.ts    — draft builder, passives with stack caps, doctrines, tag system
+  particles.ts   — death FX, sparks, debris, XP orbs, damage numbers, screen effects
+  camera.ts      — follow + shake (respects shakeEnabled setting)
+  background.ts  — parallax starfield, wrap zone
+  geometry.ts    — neon background geometry (grid, radials, rings, shapes)
+  input.ts       — keyboard, floating touch joystick, dash/pause buttons, haptics
+  ui.ts          — HUD, boss bar, combo meter, draft cards, pause menu, settings, records
+  audio.ts       — WebAudio engine: throttled SFX + generative music, persisted toggles
+  storage.ts     — settings + records persistence (localStorage)
+  i18n.ts        — EN/zh-CN string tables and formatters
+  ids.ts         — union types + passive stack caps
+  three-view.ts  — three.js entity renderer (pooled visuals per enemy type)
 ```
 
 ## Architecture
 
-### Game Loop (`main.ts`)
-Standard `requestAnimationFrame` loop with delta-time capping (`Math.min(dt, 0.05)`). The loop handles state transitions, updates all systems, then draws in back-to-front order: background -> geometry -> enemies -> particles -> weapons -> player -> wrap zone -> vignette -> screen effects -> HUD -> notifications.
-
-Gameplay tuning constants (`CONTACT_DPS`, `PROJECTILE_DAMAGE`, `SHARP_HIT_THRESHOLD`, etc.) are named at the top of the file.
+### Game Loop (`runtime.ts`)
+`requestAnimationFrame` loop with delta capping (`Math.min(dt, 0.05)`). States: `TITLE → PLAYING → LEVEL_UP/PAUSED → GAME_OVER/VICTORY`. When the stage countdown hits zero the runtime spawns the boss (`world.spawnBoss()`), plays the warning sting, and switches the HUD timer into "SLAY THE WARDEN" mode; victory fires only when the boss dies (`CombatFrameResult.bossKilled`).
 
 ### Map & Wrapping
-The world is a 50000x50000 toroidal map. Objects wrap at edges using `wrapPosition()`. Distance/angle calculations use `wrappedDistance()`/`wrappedAngle()` to handle cross-boundary interactions correctly. The camera does NOT wrap — it follows the player directly.
+The world is a 50000×50000 toroidal map. `wrapPosition()` / `wrappedDelta()` / `wrappedDistance()` / `wrappedAngle()` in `utils.ts` are the single source of truth for boundary math. The camera does NOT wrap.
 
-### Game States (`game.ts`)
-Five states: `TITLE` -> `PLAYING` -> `GAME_OVER` or `VICTORY`, plus `PAUSED`. Level-ups do NOT pause the game — a random upgrade is applied instantly with a fade-out notification.
+### Enemies (`enemies.ts`)
+Types: swarmer, drifter, titan, overlord, spitter (ranged kiter), splitter (death-shards), bomber (fuse + bullet ring), boss. Any spawn can be **elite** (chance scales with stage): bigger, tougher, +XP, violet aura. The **Void Warden** has 3 HP phases: P1 radial rings; P2 adds spiral barrages + summons; P3 adds telegraphed charge dashes and denser patterns. Phase transitions emit events drained by the world (`drainBossPhaseEvents`) for audio/shake.
 
-### Enemy System (`enemies.ts`)
-- **Swarmer** — small, fast, jagged spiky star shape with pulsing red core, spawn in groups of 3-5
-- **Drifter** — medium, hexagonal outline with inner rotating hexagon, charge glow buildup, sometimes spawn in pairs
-- **Titan** — large, slow, concentric rotating rings with gravitational distortion lines and pulsing central eye
-- **Overlord** — large crimson rotating square with inner diamond, summons swarmers every 3s, shoots white projectile spreads at player every 1.5s
+### Weapons (`weapons.ts`)
+All weapons auto-fire and implement `update(dt, px, py, enemies, modifiers)` + `draw(...)`. Damage goes through `hitEnemy()` (rolls crit via `modifiers.critChance`, reports through `modifiers.onHit` → floating damage numbers) or `hitEnemySilent()` for continuous ticks (orbit grind, singularity pull). Stats are cached per level.
 
-All enemies have spawn-in animation (scale from 0 with overshoot easing) and white hit flash on damage. Difficulty escalates over 5 minutes by adjusting spawn interval and enemy type weights. HP is visualized as a liquid fill level clipped inside each enemy shape.
+### Combo (`world-combat.ts`)
+Kills within 3.2s chain a combo; every 10th milestone pops the UI meter, plays a sting, and bursts bonus XP orbs. `comboBest` feeds end-of-run records.
 
-### Weapon System (`weapons.ts`)
-All weapons auto-fire. Each has 10 upgrade levels with progressive visual and stat improvements. Stats are cached per level (recomputed only on level-up, not per frame).
-- **LaserBeam** — targets nearest enemy, wavy beam with tapered segments, impact flash, energy orb at Lv.5+
-- **OrbitShield** — rotating projectiles with separate hit/draw radii, trails at higher levels
-- **NovaBlast** — expanding AoE ring with debris, inner glow at Lv.4+, shockwave at Lv.7+
+### Drafts & Doctrines (`upgrades.ts`, `game.ts`)
+Drafts offer 3 of: weapon unlocks / weapon level-ups / passives (8 passives, several stack-capped via `PASSIVE_CAPS`). Tag counts (force/ward/surge/forge) unlock **Doctrines** (bulwark, slipstream, nanite-lattice, annihilation). Rerolls refresh +1 per stage (cap 3).
 
-### Particle System (`particles.ts`)
-Death effects include: hollow bubble-up rings, explosion bursts, spark trails with velocity, rotating debris chunks, ground glow pools, and screen flash for large enemies. XP orbs fly from dead enemies toward the player with homing. Screen effects (damage vignette, level-up flash) are managed here. Particle count is capped at `MAX_PARTICLES` (500).
+### Persistence (`storage.ts`)
+Settings (sound/music/shake/damage numbers) and records (best stage/kills/level/time/combo, runs) in localStorage; `submitRun()` returns which fields set new bests for the end-screen NEW RECORD badges.
 
-### Background Geometry (`geometry.ts`)
-Radiangames-style neon background with: wavy grid lines, concentric rotating polygon rings around the player, floating wireframe shapes with parallax, and radial light rays. All elements use a double-draw glow technique (thick dim + thin bright) with a neon color palette.
-
-### Camera (`camera.ts`)
-Follows the player. Supports screen shake with intensity decay — triggered by damage, big kills, and level-ups. Shake offsets are baked into `worldToScreen()`.
-
-### UI (`ui.ts`)
-- **Title** — glowing text, animated subtitle, breathing start prompt
-- **HUD** — rounded gradient XP bar, weapon icons, timer with glow
-- **End screens** — shared `drawEndScreen` helper with scale-in titles, staggered stat reveals
-- **Vignette** — permanent subtle dark edges, intensifies + red tint below 35% HP
-
-### Rendering Conventions
-- All drawing uses `camera.worldToScreen()` for world-space objects
-- Background uses parallax factors (0.2, 0.5, 0.8) per star layer
-- Enemy/player HP shown as "liquid fill" clipped inside their shape outline
-- Colors use `rgba()` strings — no named colors in gameplay rendering
-- Glow effects use double-draw: thick dim line + thin bright line
+### Rendering Order (`world-renderer.ts`)
+background → geometry → enemies (2D fallback) or 3D overlay → **threat auras (2D, above 3D)** → particles → weapons → player → wrap zone → vignette → screen effects → HUD → notifications.
 
 ## Key Patterns
 
-- **Weapon interface**: `update(dt, playerX, playerY, enemies[])` and `draw(ctx, camera, playerX, playerY)` — all weapons implement this
-- **Entity lifecycle**: enemies have a `dead` boolean; main loop collects XP from dead enemies, then `spawner.removeDead()` filters them out. Dead enemies are skipped in collision checks.
-- **Particle spawning**: `particles.spawnDeath()` creates spark trails, debris, glow pools, explosion burst, and bubble-up ring. `spawnXpOrbs()` creates homing golden orbs.
-- **Stats caching**: each weapon caches `getStats()` result and only recomputes when `level` changes
-- **Shared utils**: `TWO_PI`, `tracePoly()`, `easeOutBack()`, `easeOutCubic()` are exported from `utils.ts` — do not redeclare locally
-- **Screen effects**: `particles.addScreenFlash()` and `particles.addDamageVignette()` for overlay effects; drawn via `particles.drawScreenEffects()` after gameplay but before HUD
+- **Entity lifecycle**: enemies carry `dead`; combat snapshots dead enemies, awards XP/combo/vamp, requests splitter remains via `spawner.handleDeathEffects()`, then `spawner.removeDead()` filters.
+- **Enemy damage**: always `enemy.takeDamage(amount)`; weapon crits route through `hitEnemy()`.
+- **Stats caching**: weapons recompute stats only on level change.
+- **Shared utils**: `TWO_PI`, `tracePoly()`, `roundedRect()`, easing — import from `utils.ts`, never redeclare. NOTE: `roundedRect()` does NOT call `beginPath()` — callers must.
+- **Screen effects**: `particles.addScreenFlash()` / `addDamageVignette()`.
+- **Audio**: call through the `audio` singleton; SFX self-throttle. Unlock on first user gesture (`runtime.unlockAudioOnce`).
+- **i18n**: all user-facing strings via `i18n.ts` (both languages, always add both).
+- **Debug hook**: `window.__universeEater` (GameRuntime) — used by the Playwright harness.
 
 ## Build & Validation
 
 ```bash
-npm run build      # One-shot build with sourcemaps
-npm run watch      # Rebuild on file changes
-npx tsc --noEmit   # Type-check without emitting (run before committing)
+npm run build      # bundle + standalone HTML
+npm run typecheck  # tsc --noEmit (run before committing)
+npm test           # full Playwright playthrough vs http://localhost:3456
+npm run build:wx   # WeChat mini-game target (window/localStorage guarded in src)
 ```
 
-No test framework is set up. Validate changes by running `npx tsc --noEmit` and playing the game in browser.
+No unit test framework; the Playwright harness is the regression suite:
+- `scripts/playtest.mjs` — 18 functional checks (smoke, heavy combat, full 3-phase boss fight → victory → next stage, mobile emulation) + FPS warnings
+- `scripts/qa-edge.mjs` — 25 edge-case checks (rapid restart, pause-during-boss, language switching, settings persistence, maxed-build gating, splitter/bomber behaviors)
+- `scripts/mobile-audit.mjs` — portrait/landscape phone screenshots + touch interactions (draft taps, dash button, joystick)
+- `scripts/balance-boss.mjs` — boss-fight DPS/TTK simulation with a realistic mid-tier build
 
 ## Conventions
 
-- All source files are in `src/` — one class/system per file
-- TypeScript strict mode — no `any`, no unused locals/params
-- No external runtime dependencies — pure Canvas 2D
-- Coordinates are world-space unless variable is named `screen*` or `sx`/`sy`
-- Enemy damage uses `enemy.takeDamage(amount)` — never set `hp` directly
-- Map constants (`MAP_WIDTH`, `MAP_HEIGHT`) and shared helpers live in `utils.ts`
-- Shared rendering helpers: `drawSphereShading()`, `parseHexColor()`, `formatTime()`, `tracePoly()`
-- Wrapped-distance math uses `wrappedDelta()` as the single source of truth
-- Mobile touch joystick starts wherever the player touches (floating joystick)
+- All source in `src/`, one system per file; coordinates are world-space unless named `screen*`/`sx`/`sy`
+- Strict TS: no `any`, no unused locals/params
+- Colors as `rgba()` strings; glow = thick dim stroke + thin bright stroke
+- New user-facing copy must be added to BOTH locales in `i18n.ts`
+- Guard `window`/`localStorage`/`navigator` access for the WeChat adapter

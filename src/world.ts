@@ -5,12 +5,13 @@ import { BackgroundGeometry } from './geometry';
 import { EnemySpawner } from './enemies';
 import { ParticleSystem } from './particles';
 import { WeaponManager } from './weapons';
-import { WorldCombatSystem } from './world-combat';
+import { WorldCombatSystem, CombatFrameResult } from './world-combat';
 import { WorldMotionTracker } from './world-motion';
 import { WorldRenderer } from './world-renderer';
 
-export interface WorldUpdateResult {
+export interface WorldUpdateResult extends CombatFrameResult {
   levelUps: number;
+  bossPhaseEvents: number;
 }
 
 export class GameWorld {
@@ -31,7 +32,7 @@ export class GameWorld {
     this.background = new Background();
     this.geometry = new BackgroundGeometry();
     this.spawner = new EnemySpawner();
-    this.spawner.setStage(1);
+    this.spawner.setStage(1, 300);
     this.particles = new ParticleSystem();
     this.weaponManager = new WeaponManager();
     this.weaponManager.setOnLaserFire((angle) => this.player.addRipple(angle));
@@ -46,6 +47,17 @@ export class GameWorld {
       spawner: this.spawner,
       weaponManager: this.weaponManager,
     });
+
+    // Route weapon hits into floating damage numbers.
+    this.weaponManager.modifiers.onHit = (enemy, amount, crit) => {
+      if (crit || amount >= 1) {
+        this.combat.reportWeaponHit(enemy.x, enemy.y, amount, crit);
+      }
+    };
+  }
+
+  get combatSystem(): WorldCombatSystem {
+    return this.combat;
   }
 
   resize(width: number, height: number): void {
@@ -61,21 +73,27 @@ export class GameWorld {
   updatePlaying(dt: number, elapsedTime: number): WorldUpdateResult {
     this.player.update(dt);
     this.player.regenerate(dt);
+    this.player.updateRipples(dt);
     this.motion.sample(this.player, dt);
     this.camera.follow(this.player.x, this.player.y);
     this.background.update(dt, this.motion.speed, this.motion.vx, this.motion.vy);
     this.geometry.update(dt);
     this.spawner.update(dt, elapsedTime, this.player.x, this.player.y, this.camera);
 
-    this.combat.applyCollisions();
-    this.weaponManager.update(dt, this.player.x, this.player.y, this.spawner.enemies);
-    this.player.updateRipples(dt);
+    // Sync player-derived weapon stats.
+    this.weaponManager.modifiers.critChance = this.player.critChance;
+    this.weaponManager.modifiers.critMultiplier = this.player.critMultiplier;
 
-    const levelUps = this.combat.consumeDefeatedEnemies();
+    this.combat.applyCollisions();
+    this.combat.updateCombo(dt);
+    this.weaponManager.update(dt, this.player.x, this.player.y, this.spawner.enemies);
+
+    const result = this.combat.consumeDefeatedEnemies();
     this.spawner.removeDead();
+    const bossPhaseEvents = this.spawner.drainBossPhaseEvents();
     this.particles.update(dt);
 
-    return { levelUps };
+    return { ...result, levelUps: result.levelUps, bossPhaseEvents };
   }
 
   drawTitle(ctx: CanvasRenderingContext2D, time: number): void {
@@ -94,12 +112,19 @@ export class GameWorld {
     this.renderer.drawEndBackdrop(ctx, time);
   }
 
-  prepareNextStage(stage: number): void {
-    this.spawner.setStage(stage);
+  prepareNextStage(stage: number, stageDuration: number): void {
+    this.spawner.setStage(stage, stageDuration);
     this.spawner.clear();
     this.particles.clear();
     this.camera.follow(this.player.x, this.player.y);
     this.motion.reset(this.player);
+  }
+
+  spawnBoss(): void {
+    const boss = this.spawner.spawnBoss(this.player.x, this.player.y);
+    this.camera.shake(7, 0.6);
+    this.particles.addScreenFlash(255, 60, 90, 0.14, 0.6);
+    void boss;
   }
 
   triggerLevelUpBlast(levelUps: number): void {

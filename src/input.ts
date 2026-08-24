@@ -1,7 +1,15 @@
 const keys: Record<string, boolean> = {};
 
+let dashKeyQueued = false;
+
 window.addEventListener('keydown', (e) => {
-  keys[e.key.toLowerCase()] = true;
+  const key = e.key.toLowerCase();
+  if (!keys[key]) {
+    if (key === ' ' || key === 'shift') {
+      dashKeyQueued = true;
+    }
+  }
+  keys[key] = true;
 });
 
 window.addEventListener('keyup', (e) => {
@@ -25,13 +33,17 @@ export const touch = {
   pauseTapped: false,
   // Any tap (for starting/restarting)
   anyTap: false,
+  // Dash button tap
+  dashTapped: false,
 };
 
 const JOYSTICK_RADIUS = 60;
 const DEAD_ZONE = 10;
 const TOUCH_UI_MARGIN = 16;
 const PAUSE_BUTTON_RADIUS = 25;
-const PAUSE_BUTTON_HIT_RADIUS = 30;
+const PAUSE_BUTTON_HIT_RADIUS = 34;
+const DASH_BUTTON_RADIUS = 32;
+const DASH_BUTTON_HIT_RADIUS = 44;
 
 export interface SafeAreaInsets {
   top: number;
@@ -82,11 +94,44 @@ export function getPauseButtonLayout(viewportWidth = window.innerWidth): {
   };
 }
 
+/** Dash button sits above the bottom edge on the right side, thumb-friendly. */
+export function getDashButtonLayout(viewportWidth = window.innerWidth, viewportHeight = window.innerHeight): {
+  x: number;
+  y: number;
+  radius: number;
+  hitRadius: number;
+} {
+  const insets = getSafeAreaInsets();
+  return {
+    x: viewportWidth - insets.right - TOUCH_UI_MARGIN - DASH_BUTTON_RADIUS,
+    y: viewportHeight - insets.bottom - TOUCH_UI_MARGIN - DASH_BUTTON_RADIUS,
+    radius: DASH_BUTTON_RADIUS,
+    hitRadius: DASH_BUTTON_HIT_RADIUS,
+  };
+}
+
 function isPauseButton(x: number, y: number): boolean {
   const layout = getPauseButtonLayout();
   const dx = x - layout.x;
   const dy = y - layout.y;
   return Math.sqrt(dx * dx + dy * dy) <= layout.hitRadius;
+}
+
+function isDashButton(x: number, y: number): boolean {
+  const layout = getDashButtonLayout();
+  const dx = x - layout.x;
+  const dy = y - layout.y;
+  return Math.sqrt(dx * dx + dy * dy) <= layout.hitRadius;
+}
+
+function vibrate(pattern: number | number[]): void {
+  if (typeof navigator === 'undefined') return;
+  const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
+  try {
+    nav.vibrate?.(pattern);
+  } catch {
+    // Vibration API unavailable.
+  }
 }
 
 function handleTouchStart(e: TouchEvent): void {
@@ -99,7 +144,13 @@ function handleTouchStart(e: TouchEvent): void {
       continue;
     }
 
-    // Start joystick anywhere (except pause button)
+    if (isDashButton(t.clientX, t.clientY)) {
+      touch.dashTapped = true;
+      vibrate(12);
+      continue;
+    }
+
+    // Start joystick anywhere (except buttons)
     if (touch.touchId === -1) {
       touch.touchId = t.identifier;
       touch.centerX = t.clientX;
@@ -168,6 +219,33 @@ export function consumeAnyTap(): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Consume a pending dash request from any source (keyboard or touch).
+ * Returns true at most once per physical press.
+ */
+export function consumeDashRequest(): boolean {
+  if (dashKeyQueued) {
+    dashKeyQueued = false;
+    return true;
+  }
+  if (touch.dashTapped) {
+    touch.dashTapped = false;
+    return true;
+  }
+  return false;
+}
+
+export function clearTransientInput(): void {
+  dashKeyQueued = false;
+  touch.pauseTapped = false;
+  touch.anyTap = false;
+  touch.dashTapped = false;
+}
+
+export function triggerHaptic(pattern: number | number[]): void {
+  vibrate(pattern);
 }
 
 export const JOYSTICK_DISPLAY_RADIUS = JOYSTICK_RADIUS;

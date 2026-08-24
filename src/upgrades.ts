@@ -1,6 +1,6 @@
 import { Player } from './player';
 import { WeaponManager } from './weapons';
-import { DoctrineId, PassiveId, PassiveName, UpgradeTag, WeaponName } from './ids';
+import { DoctrineId, PASSIVE_CAPS, PassiveId, PassiveName, UpgradeTag, WeaponId, WeaponName } from './ids';
 import {
   TextResolver,
   getDoctrineDescription,
@@ -28,16 +28,21 @@ export interface Doctrine {
 
 export type TraitCounts = Record<UpgradeTag, number>;
 
+export type PassiveStacks = Record<PassiveId, number>;
+
+export type UnlockableWeaponId = Exclude<WeaponId, 'laser'>;
+export type UnlockableWeaponName = Exclude<WeaponName, 'Laser Beam'>;
+
 export type UpgradeChoice =
   | {
       id: string;
       kind: 'unlock';
-      weaponType: 'orbit' | 'nova' | 'escort';
-      weaponName: Exclude<WeaponName, 'Laser Beam'>;
+      weaponType: UnlockableWeaponId;
+      weaponName: UnlockableWeaponName;
       title: TextResolver;
       description: TextResolver;
       label: TextResolver;
-      iconName: Exclude<WeaponName, 'Laser Beam'>;
+      iconName: WeaponName;
       tags: UpgradeTag[];
     }
   | {
@@ -96,6 +101,42 @@ const DOCTRINES: Doctrine[] = [
   },
 ];
 
+const WEAPON_TAGS: Record<WeaponName, UpgradeTag[]> = {
+  'Laser Beam': ['force', 'forge'],
+  'Orbit Shield': ['ward'],
+  'Nova Blast': ['force', 'surge'],
+  'Escort Wing': ['force', 'surge'],
+  'Seeker Swarm': ['force', 'forge'],
+  'Arc Reactor': ['force', 'surge'],
+  'Singularity': ['force', 'ward'],
+};
+
+interface PassiveDef {
+  id: PassiveId;
+  name: PassiveName;
+  tags: UpgradeTag[];
+}
+
+const PASSIVE_DEFS: PassiveDef[] = [
+  { id: 'hull', name: 'Reinforced Hull', tags: ['ward'] },
+  { id: 'thrusters', name: 'Overdrive Thrusters', tags: ['surge'] },
+  { id: 'nanoforge', name: 'Nanoforge', tags: ['forge'] },
+  { id: 'plating', name: 'Phase Plating', tags: ['ward', 'forge'] },
+  { id: 'targeting', name: 'Targeting CPU', tags: ['force'] },
+  { id: 'overclock', name: 'Overclock Core', tags: ['surge', 'forge'] },
+  { id: 'vampiric', name: 'Vampiric Nanites', tags: ['ward', 'forge'] },
+  { id: 'amplifier', name: 'XP Amplifier', tags: ['forge'] },
+];
+
+const UNLOCK_DEFS: { id: UnlockableWeaponId; name: UnlockableWeaponName }[] = [
+  { id: 'orbit', name: 'Orbit Shield' },
+  { id: 'nova', name: 'Nova Blast' },
+  { id: 'escort', name: 'Escort Wing' },
+  { id: 'seeker', name: 'Seeker Swarm' },
+  { id: 'arc', name: 'Arc Reactor' },
+  { id: 'singularity', name: 'Singularity' },
+];
+
 export function createEmptyTraitCounts(): TraitCounts {
   return {
     force: 0,
@@ -103,6 +144,14 @@ export function createEmptyTraitCounts(): TraitCounts {
     surge: 0,
     forge: 0,
   };
+}
+
+export function createEmptyPassiveStacks(): PassiveStacks {
+  const stacks = {} as PassiveStacks;
+  for (const def of PASSIVE_DEFS) {
+    stacks[def.id] = 0;
+  }
+  return stacks;
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -118,147 +167,54 @@ function sampleWithoutReplacement<T>(items: T[], count: number): T[] {
   return shuffle(items).slice(0, count);
 }
 
-function buildPassiveChoices(): UpgradeChoice[] {
-  return [
-    {
-      id: 'passive-hull',
-      kind: 'passive',
-      passiveId: 'hull',
-      title: () => getPassiveTitle('hull'),
-      description: () => getPassiveDescription('hull'),
-      label: () => getPassiveLabel('hull'),
-      iconName: 'Reinforced Hull',
-      tags: ['ward'],
-    },
-    {
-      id: 'passive-thrusters',
-      kind: 'passive',
-      passiveId: 'thrusters',
-      title: () => getPassiveTitle('thrusters'),
-      description: () => getPassiveDescription('thrusters'),
-      label: () => getPassiveLabel('thrusters'),
-      iconName: 'Overdrive Thrusters',
-      tags: ['surge'],
-    },
-    {
-      id: 'passive-nanoforge',
-      kind: 'passive',
-      passiveId: 'nanoforge',
-      title: () => getPassiveTitle('nanoforge'),
-      description: () => getPassiveDescription('nanoforge'),
-      label: () => getPassiveLabel('nanoforge'),
-      iconName: 'Nanoforge',
-      tags: ['forge'],
-    },
-    {
-      id: 'passive-plating',
-      kind: 'passive',
-      passiveId: 'plating',
-      title: () => getPassiveTitle('plating'),
-      description: () => getPassiveDescription('plating'),
-      label: () => getPassiveLabel('plating'),
-      iconName: 'Phase Plating',
-      tags: ['ward', 'forge'],
-    },
-  ];
-}
-
-export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): UpgradeChoice[] {
+export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number, stacks: PassiveStacks): UpgradeChoice[] {
   const unlocks: UpgradeChoice[] = [];
   const upgrades: UpgradeChoice[] = [];
-  const passives = buildPassiveChoices();
 
-  if (!wm.hasWeapon('Orbit Shield')) {
-    unlocks.push({
-      id: 'unlock-orbit',
-      kind: 'unlock',
-      weaponType: 'orbit',
-      weaponName: 'Orbit Shield',
-      title: () => getUnlockTitle('Orbit Shield'),
-      description: () => getUnlockDescription('Orbit Shield'),
-      label: () => getUnlockLabel('Orbit Shield'),
-      iconName: 'Orbit Shield',
-      tags: ['ward'],
-    });
-  }
-
-  if (!wm.hasWeapon('Nova Blast')) {
-    unlocks.push({
-      id: 'unlock-nova',
-      kind: 'unlock',
-      weaponType: 'nova',
-      weaponName: 'Nova Blast',
-      title: () => getUnlockTitle('Nova Blast'),
-      description: () => getUnlockDescription('Nova Blast'),
-      label: () => getUnlockLabel('Nova Blast'),
-      iconName: 'Nova Blast',
-      tags: ['force', 'surge'],
-    });
-  }
-
-  if (!wm.hasWeapon('Escort Wing')) {
-    unlocks.push({
-      id: 'unlock-escort',
-      kind: 'unlock',
-      weaponType: 'escort',
-      weaponName: 'Escort Wing',
-      title: () => getUnlockTitle('Escort Wing'),
-      description: () => getUnlockDescription('Escort Wing'),
-      label: () => getUnlockLabel('Escort Wing'),
-      iconName: 'Escort Wing',
-      tags: ['force', 'surge'],
-    });
+  for (const def of UNLOCK_DEFS) {
+    if (!wm.hasWeapon(def.name)) {
+      const weaponName = def.name;
+      unlocks.push({
+        id: `unlock-${def.id}`,
+        kind: 'unlock',
+        weaponType: def.id,
+        weaponName,
+        title: () => getUnlockTitle(weaponName),
+        description: () => getUnlockDescription(weaponName),
+        label: () => getUnlockLabel(weaponName),
+        iconName: weaponName,
+        tags: [...WEAPON_TAGS[weaponName]],
+      });
+    }
   }
 
   for (const weapon of wm.weapons) {
     if (weapon.level >= weapon.maxLevel) continue;
-
-    if (weapon.name === 'Laser Beam') {
-      upgrades.push({
-        id: `upgrade-laser-${weapon.level + 1}`,
-        kind: 'upgrade',
-        weaponName: 'Laser Beam',
-        title: () => getWeaponUpgradeTitle('Laser Beam', weapon.level + 1),
-        description: () => getWeaponUpgradeDescription('Laser Beam'),
-        label: () => getWeaponUpgradeLabel('Laser Beam', weapon.level + 1),
-        iconName: 'Laser Beam',
-        tags: ['force', 'forge'],
-      });
-    } else if (weapon.name === 'Orbit Shield') {
-      upgrades.push({
-        id: `upgrade-orbit-${weapon.level + 1}`,
-        kind: 'upgrade',
-        weaponName: 'Orbit Shield',
-        title: () => getWeaponUpgradeTitle('Orbit Shield', weapon.level + 1),
-        description: () => getWeaponUpgradeDescription('Orbit Shield'),
-        label: () => getWeaponUpgradeLabel('Orbit Shield', weapon.level + 1),
-        iconName: 'Orbit Shield',
-        tags: ['ward'],
-      });
-    } else if (weapon.name === 'Nova Blast') {
-      upgrades.push({
-        id: `upgrade-nova-${weapon.level + 1}`,
-        kind: 'upgrade',
-        weaponName: 'Nova Blast',
-        title: () => getWeaponUpgradeTitle('Nova Blast', weapon.level + 1),
-        description: () => getWeaponUpgradeDescription('Nova Blast'),
-        label: () => getWeaponUpgradeLabel('Nova Blast', weapon.level + 1),
-        iconName: 'Nova Blast',
-        tags: ['force', 'surge'],
-      });
-    } else if (weapon.name === 'Escort Wing') {
-      upgrades.push({
-        id: `upgrade-escort-${weapon.level + 1}`,
-        kind: 'upgrade',
-        weaponName: 'Escort Wing',
-        title: () => getWeaponUpgradeTitle('Escort Wing', weapon.level + 1),
-        description: () => getWeaponUpgradeDescription('Escort Wing'),
-        label: () => getWeaponUpgradeLabel('Escort Wing', weapon.level + 1),
-        iconName: 'Escort Wing',
-        tags: ['force', 'surge'],
-      });
-    }
+    const weaponName = weapon.name;
+    upgrades.push({
+      id: `upgrade-${weaponName}-${weapon.level + 1}`,
+      kind: 'upgrade',
+      weaponName,
+      title: () => getWeaponUpgradeTitle(weaponName, weapon.level + 1),
+      description: () => getWeaponUpgradeDescription(weaponName),
+      label: () => getWeaponUpgradeLabel(weaponName, weapon.level + 1),
+      iconName: weaponName,
+      tags: [...WEAPON_TAGS[weaponName]],
+    });
   }
+
+  // Passives that still have headroom.
+  const availablePassives = PASSIVE_DEFS.filter(def => stacks[def.id] < capFor(def.id));
+  const passives: UpgradeChoice[] = availablePassives.map(def => ({
+    id: `passive-${def.id}`,
+    kind: 'passive' as const,
+    passiveId: def.id,
+    title: () => getPassiveTitle(def.id),
+    description: () => getPassiveDescription(def.id),
+    label: () => getPassiveLabel(def.id),
+    iconName: def.name,
+    tags: [...def.tags],
+  }));
 
   const pool = [...unlocks, ...upgrades, ...passives];
   if (pool.length <= 3) return shuffle(pool);
@@ -270,6 +226,10 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number): Upgr
   const remaining = pool.filter((choice) => !forced.some((picked) => picked.id === choice.id));
 
   return [...forced, ...sampleWithoutReplacement(remaining, 3 - forced.length)];
+}
+
+function capFor(id: PassiveId): number {
+  return PASSIVE_CAPS[id];
 }
 
 export function applyUpgradeChoice(choice: UpgradeChoice, wm: WeaponManager, player: Player): void {
@@ -291,6 +251,18 @@ export function applyUpgradeChoice(choice: UpgradeChoice, wm: WeaponManager, pla
         return;
       case 'plating':
         player.upgradePlating();
+        return;
+      case 'targeting':
+        player.upgradeTargeting();
+        return;
+      case 'overclock':
+        wm.multiplyCooldown(0.93);
+        return;
+      case 'vampiric':
+        player.upgradeVampiric();
+        return;
+      case 'amplifier':
+        player.upgradeAmplifier();
         return;
     }
   }

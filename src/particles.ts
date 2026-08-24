@@ -432,11 +432,81 @@ export class DamageVignette implements ScreenEffect {
   }
 }
 
+// ── Floating damage number ──────────────────────────────────────
+
+class DamageNumber implements Particle {
+  private elapsed = 0;
+  private lifetime = 0.8;
+  done = false;
+
+  constructor(
+    private x: number,
+    private y: number,
+    private amount: number,
+    private crit: boolean,
+    private jitterX: number,
+  ) {}
+
+  update(dt: number): void {
+    this.elapsed += dt;
+    if (this.elapsed >= this.lifetime) { this.done = true; }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const t = this.elapsed / this.lifetime;
+    const alpha = t < 0.6 ? 1 : (1 - t) / 0.4;
+    const rise = 30 * (1 - Math.pow(1 - Math.min(1, t * 1.4), 2));
+    const screen = camera.worldToScreen(this.x, this.y);
+
+    ctx.font = `bold ${this.crit ? 17 : 13}px "SFMono-Regular", Menlo, Consolas, monospace`;
+    ctx.textAlign = 'center';
+    if (this.crit) {
+      ctx.fillStyle = `rgba(255, 200, 60, ${alpha * 0.35})`;
+      ctx.fillText(`${Math.round(this.amount)}`, screen.x + this.jitterX, screen.y - rise - 1);
+      ctx.fillText(`${Math.round(this.amount)}`, screen.x + this.jitterX, screen.y - rise + 1);
+    }
+    ctx.fillStyle = this.crit
+      ? `rgba(255, 224, 130, ${alpha})`
+      : `rgba(235, 245, 255, ${alpha * 0.85})`;
+    ctx.fillText(`${Math.round(this.amount)}`, screen.x + this.jitterX, screen.y - rise);
+  }
+}
+
+// ── Dash / phase afterimage ring ────────────────────────────────
+
+class AfterimageRing implements Particle {
+  private elapsed = 0;
+  private lifetime = 0.32;
+  done = false;
+
+  constructor(
+    private x: number,
+    private y: number,
+    private radius: number,
+  ) {}
+
+  update(dt: number): void {
+    this.elapsed += dt;
+    if (this.elapsed >= this.lifetime) { this.done = true; }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const t = this.elapsed / this.lifetime;
+    const screen = camera.worldToScreen(this.x, this.y);
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, this.radius * (1 - t * 0.3), 0, TWO_PI);
+    ctx.strokeStyle = `rgba(120, 200, 255, ${(1 - t) * 0.5})`;
+    ctx.lineWidth = 2.5 * (1 - t);
+    ctx.stroke();
+  }
+}
+
 // ── Main particle system ────────────────────────────────────────
 
 export class ParticleSystem {
   private particles: Particle[] = [];
   private screenEffects: ScreenEffect[] = [];
+  private damageNumberCount = 0;
 
   private getParticleLoadScale(): number {
     const load = this.particles.length / MAX_PARTICLES;
@@ -461,6 +531,7 @@ export class ParticleSystem {
   clear(): void {
     this.particles = [];
     this.screenEffects = [];
+    this.damageNumberCount = 0;
   }
 
   spawnDeath(x: number, y: number, radius: number, outlineColor: string): void {
@@ -501,6 +572,17 @@ export class ParticleSystem {
     this.emitParticle(() => new FlashParticle(x, y, radius));
   }
 
+  spawnDamageNumber(x: number, y: number, amount: number, crit: boolean): void {
+    if (this.damageNumberCount >= 60) return;
+    this.damageNumberCount++;
+    const jitterX = (Math.random() - 0.5) * 22;
+    this.emitParticle(() => new DamageNumber(x, y - 6, amount, crit, jitterX));
+  }
+
+  spawnAfterimage(x: number, y: number, radius: number): void {
+    this.emitParticle(() => new AfterimageRing(x, y, radius));
+  }
+
   addScreenFlash(r: number, g: number, b: number, alpha: number, duration: number): void {
     this.screenEffects.push(new ScreenFlash(r, g, b, alpha, duration));
   }
@@ -511,7 +593,19 @@ export class ParticleSystem {
 
   update(dt: number): void {
     for (const p of this.particles) p.update(dt);
-    this.particles = this.particles.filter(p => !p.done);
+    if (this.particles.length > 0) {
+      this.particles = this.particles.filter(p => !p.done);
+      let numberCount = 0;
+      for (const p of this.particles) {
+        if (p instanceof DamageNumber) {
+          numberCount++;
+          if (numberCount >= 60) break;
+        }
+      }
+      this.damageNumberCount = numberCount;
+    } else {
+      this.damageNumberCount = 0;
+    }
 
     for (const e of this.screenEffects) e.update(dt);
     this.screenEffects = this.screenEffects.filter(e => !e.done);

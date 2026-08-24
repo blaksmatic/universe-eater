@@ -2,16 +2,20 @@ import { WeaponManager } from './weapons';
 import { Player } from './player';
 import {
   Doctrine,
+  PassiveStacks,
   TraitCounts,
   UpgradeChoice,
   applyDoctrine,
   applyUpgradeChoice,
   buildUpgradeDraft,
+  createEmptyPassiveStacks,
   createEmptyTraitCounts,
   getNewDoctrines,
 } from './upgrades';
-import { TextResolver, formatDoctrineOnline, formatStageEngaged, getUiText } from './i18n';
+import { TextResolver, formatDoctrineOnline, formatStageEngaged, formatBossTitle, getUiText } from './i18n';
 import { formatTime } from './utils';
+import { isTouchDevice } from './input';
+import { PASSIVE_CAPS } from './ids';
 
 export enum GameState {
   TITLE = 'title',
@@ -26,7 +30,14 @@ export interface Notification {
   text: TextResolver;
   timer: number;
   alpha: number;
-  kind: 'info' | 'upgrade' | 'unlock';
+  kind: 'info' | 'upgrade' | 'unlock' | 'danger';
+}
+
+interface ScheduledNotification {
+  atElapsed: number;
+  text: TextResolver;
+  kind: Notification['kind'];
+  duration: number;
 }
 
 export class Game {
@@ -34,7 +45,6 @@ export class Game {
   stage = 1;
   elapsedTime = 0;
   totalElapsedTime = 0;
-  gameDuration = 480;
   notifications: Notification[] = [{
     text: () => getUiText('keepMovingTutorial'),
     timer: 4,
@@ -43,11 +53,27 @@ export class Game {
   }];
   upgradeCount = 0;
   pendingLevelUps = 0;
-  rerollsRemaining = 1;
+  rerollsRemaining = 2;
   draftChoices: UpgradeChoice[] = [];
   selectedDraftIndex = 0;
   readonly traitCounts: TraitCounts = createEmptyTraitCounts();
+  readonly passiveStacks: PassiveStacks = createEmptyPassiveStacks();
   activeDoctrines: Doctrine[] = [];
+  /** True once the countdown hit zero and the boss encounter began. */
+  bossEngaged = false;
+  private scheduled: ScheduledNotification[] = [
+    {
+      atElapsed: 6,
+      kind: 'info',
+      duration: 4.5,
+      text: () => getUiText(isTouchDevice() ? 'tutorialDashTouch' : 'tutorialDashKey'),
+    },
+  ];
+
+  /** Survival countdown before the Warden arrives; shrinks on later stages. */
+  get gameDuration(): number {
+    return Math.max(180, 300 - (this.stage - 1) * 20);
+  }
 
   get timeRemaining(): number {
     return Math.max(0, this.gameDuration - this.elapsedTime);
@@ -57,28 +83,65 @@ export class Game {
     return formatTime(this.timeRemaining);
   }
 
+  beginBossEncounter(): void {
+    if (this.bossEngaged) return;
+    this.bossEngaged = true;
+    this.notifications.push({
+      text: () => getUiText('bossIncoming'),
+      timer: 3.2,
+      alpha: 1,
+      kind: 'danger',
+    });
+  }
+
+  notifyBossDefeated(): void {
+    this.notifications.push({
+      text: () => getUiText('bossDefeated'),
+      timer: 2.6,
+      alpha: 1,
+      kind: 'unlock',
+    });
+  }
+
   advanceStage(): void {
     this.stage++;
     this.elapsedTime = 0;
+    this.bossEngaged = false;
     this.state = GameState.PLAYING;
     this.pendingLevelUps = 0;
     this.draftChoices = [];
     this.selectedDraftIndex = 0;
+    this.rerollsRemaining = Math.min(3, this.rerollsRemaining + 1);
     this.notifications.push({
       text: () => formatStageEngaged(this.stage),
       timer: 2.8,
       alpha: 1,
       kind: 'unlock',
     });
+    this.notifications.push({
+      text: () => formatBossTitle(this.stage),
+      timer: 3,
+      alpha: 1,
+      kind: 'danger',
+    });
   }
 
   queueLevelUps(count: number, wm: WeaponManager): void {
     if (count <= 0) return;
+    if (wm.allMaxed() && this.allPassivesCapped()) {
+      this.pendingLevelUps = 0;
+      return;
+    }
     this.pendingLevelUps += count;
 
     if (this.state !== GameState.LEVEL_UP) {
       this.beginNextDraft(wm);
     }
+  }
+
+  private allPassivesCapped(): boolean {
+    return (Object.keys(this.passiveStacks) as (keyof typeof this.passiveStacks)[])
+      .every(id => this.passiveStacks[id] >= PASSIVE_CAPS[id]);
   }
 
   beginNextDraft(wm: WeaponManager): boolean {
@@ -87,7 +150,7 @@ export class Game {
       return false;
     }
 
-    const choices = buildUpgradeDraft(wm, this.upgradeCount);
+    const choices = buildUpgradeDraft(wm, this.upgradeCount, this.passiveStacks);
     if (choices.length === 0) {
       this.pendingLevelUps = 0;
       this.draftChoices = [];
@@ -135,7 +198,7 @@ export class Game {
   rerollDraft(wm: WeaponManager): boolean {
     if (this.state !== GameState.LEVEL_UP || this.rerollsRemaining <= 0) return false;
 
-    const choices = buildUpgradeDraft(wm, this.upgradeCount);
+    const choices = buildUpgradeDraft(wm, this.upgradeCount, this.passiveStacks);
     if (choices.length === 0) return false;
 
     this.rerollsRemaining--;
@@ -163,6 +226,9 @@ export class Game {
     for (const tag of choice.tags) {
       this.traitCounts[tag]++;
     }
+    if (choice.kind === 'passive') {
+      this.passiveStacks[choice.passiveId]++;
+    }
 
     const doctrines = getNewDoctrines(
       this.traitCounts,
@@ -182,6 +248,16 @@ export class Game {
   }
 
   updateNotifications(dt: number): void {
+    while (this.scheduled.length > 0 && this.elapsedTime >= this.scheduled[0].atElapsed) {
+      const item = this.scheduled.shift()!;
+      this.notifications.push({
+        text: item.text,
+        timer: item.duration,
+        alpha: 1,
+        kind: item.kind,
+      });
+    }
+
     for (const n of this.notifications) {
       n.timer -= dt;
       if (n.timer < 0.5) {

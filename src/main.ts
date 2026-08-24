@@ -12,3 +12,6 @@ syncDocumentLanguage();
 
 const runtime = new GameRuntime(canvas, ctx);
 runtime.start();
+
+// Debug/testing hook (also used by the automated playtest harness).
+(window as unknown as { __universeEater?: unknown }).__universeEater = runtime;

@@ -42,6 +42,10 @@ const BASE_RADII: Record<EnemyType, number> = {
   drifter: 20,
   titan: 40,
   overlord: 55,
+  spitter: 16,
+  splitter: 24,
+  bomber: 14,
+  boss: 68,
 };
 
 const GEOMETRY = {
@@ -68,6 +72,17 @@ const GEOMETRY = {
   overlordHorn: new THREE.ConeGeometry(3.5, 12, 4),
   overlordPod: new THREE.DodecahedronGeometry(5.5, 0),
   overlordCore: new THREE.OctahedronGeometry(9, 0),
+  spitterBody: new THREE.IcosahedronGeometry(12, 0),
+  spitterMaw: new THREE.ConeGeometry(4.2, 7.5, 6),
+  spitterWart: new THREE.DodecahedronGeometry(1.7, 0),
+  splitterMembrane: new THREE.SphereGeometry(17, 7, 5),
+  splitterNucleus: new THREE.OctahedronGeometry(4.6, 0),
+  bomberHull: new THREE.OctahedronGeometry(10, 0),
+  bomberFin: new THREE.ConeGeometry(1.8, 5.5, 4),
+  bossShell: new THREE.IcosahedronGeometry(34, 0),
+  bossPlate: new THREE.BoxGeometry(16, 3.2, 5.5),
+  bossEye: new THREE.SphereGeometry(9.5, 8, 6),
+  bossSatellite: new THREE.OctahedronGeometry(4.4, 0),
 };
 
 function makeMaterial(color: number, emissive = color): LitMaterial {
@@ -103,6 +118,10 @@ function createEnemyPool(): Record<EnemyType, EnemyVisual[]> {
     drifter: [],
     titan: [],
     overlord: [],
+    spitter: [],
+    splitter: [],
+    bomber: [],
+    boss: [],
   };
 }
 
@@ -286,8 +305,15 @@ export class ThreeEntityRenderer {
     visual.group.rotation.y = enemy.type === 'titan' ? 0.12 + wobble * 0.18 : wobble * 0.14;
 
     const lowHealth = 1 - enemy.hp / enemy.maxHp;
+    let emissiveBoost = 0;
+    if (enemy.type === 'bomber' && enemy.fuseRatio > 0) {
+      emissiveBoost = enemy.fuseRatio * (Math.sin(time * 30) > 0 ? 0.9 : 0.1);
+    }
+    if (enemy.isBoss) {
+      emissiveBoost = 0.55 + (enemy.bossPhase - 1) * 0.25 + lowHealth * 0.2;
+    }
     for (const material of visual.materials) {
-      material.emissiveIntensity = 0.14 + lowHealth * 0.32;
+      material.emissiveIntensity = 0.14 + lowHealth * 0.32 + emissiveBoost;
     }
 
     const parts = visual.group.userData as EnemyParts;
@@ -396,7 +422,191 @@ export class ThreeEntityRenderer {
         return detail === 'lite' ? this.createLiteTitanVisual(seed) : this.createTitanVisual(seed);
       case 'overlord':
         return detail === 'lite' ? this.createLiteOverlordVisual(seed) : this.createOverlordVisual(seed);
+      case 'spitter':
+        return detail === 'lite' ? this.createLiteSpitterVisual(seed) : this.createSpitterVisual(seed);
+      case 'splitter':
+        return detail === 'lite' ? this.createLiteSplitterVisual(seed) : this.createSplitterVisual(seed);
+      case 'bomber':
+        return this.createBomberVisual(seed);
+      case 'boss':
+        return this.createBossVisual(seed);
     }
+  }
+
+  private createSpitterVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const bodyMat = makeMaterial(0x2f7a4c, 0x54ff96);
+    varyMaterial(bodyMat, (seed - 0.5) * 0.05, 0.02);
+    const body = createMesh(GEOMETRY.spitterBody, bodyMat);
+    body.scale.set(1.1, 0.9, 0.85);
+    root.add(body);
+    materials.push(bodyMat);
+
+    const mawMat = makeMaterial(0xd8ffe8, 0xbaffd6);
+    const maw = createMesh(GEOMETRY.spitterMaw, mawMat);
+    maw.position.set(0, -10, 3);
+    maw.rotation.x = Math.PI / 2.4;
+    root.add(maw);
+    materials.push(mawMat);
+
+    const wartMat = makeMaterial(0x1f5236, 0x3fd97e);
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2 + seed;
+      const wart = createMesh(GEOMETRY.spitterWart, wartMat);
+      wart.position.set(Math.cos(angle) * 10, Math.sin(angle) * 7, -4);
+      root.add(wart);
+    }
+    materials.push(wartMat);
+
+    root.userData = { core: maw };
+    return { type: 'spitter', detail: 'full', group: root, materials, seed };
+  }
+
+  private createLiteSpitterVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const bodyMat = makeMaterial(0x2f7a4c, 0x54ff96);
+    const body = createMesh(GEOMETRY.spitterBody, bodyMat);
+    body.scale.set(1.12, 0.92, 0.86);
+    root.add(body);
+    materials.push(bodyMat);
+
+    const mawMat = makeMaterial(0xd8ffe8, 0xbaffd6);
+    const maw = createMesh(GEOMETRY.spitterMaw, mawMat);
+    maw.position.set(0, -10, 3);
+    maw.rotation.x = Math.PI / 2.4;
+    root.add(maw);
+    materials.push(mawMat);
+
+    root.userData = {};
+    return { type: 'spitter', detail: 'lite', group: root, materials, seed };
+  }
+
+  private createSplitterVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const membraneMat = makeMaterial(0x7a2f66, 0xff5fdc);
+    membraneMat.transparent = true;
+    membraneMat.opacity = 0.82;
+    varyMaterial(membraneMat, (seed - 0.5) * 0.04, 0.02);
+    const membrane = createMesh(GEOMETRY.splitterMembrane, membraneMat);
+    membrane.scale.set(1.15, 0.95, 0.9);
+    root.add(membrane);
+    materials.push(membraneMat);
+
+    const nucleusMat = makeMaterial(0xffc2ec, 0xffa0e2);
+    const nuclei: THREE.Object3D[] = [];
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2;
+      const nucleus = createMesh(GEOMETRY.splitterNucleus, nucleusMat);
+      nucleus.position.set(Math.cos(angle) * 4.5, Math.sin(angle) * 4.5, 4);
+      nucleus.userData.baseX = nucleus.position.x;
+      nucleus.userData.baseY = nucleus.position.y;
+      root.add(nucleus);
+      nuclei.push(nucleus);
+    }
+    materials.push(nucleusMat);
+
+    root.userData = { pods: nuclei };
+    return { type: 'splitter', detail: 'full', group: root, materials, seed };
+  }
+
+  private createLiteSplitterVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const membraneMat = makeMaterial(0x7a2f66, 0xff5fdc);
+    membraneMat.transparent = true;
+    membraneMat.opacity = 0.82;
+    const membrane = createMesh(GEOMETRY.splitterMembrane, membraneMat);
+    membrane.scale.set(1.18, 0.96, 0.9);
+    root.add(membrane);
+    materials.push(membraneMat);
+
+    const nucleusMat = makeMaterial(0xffc2ec, 0xffa0e2);
+    const nucleus = createMesh(GEOMETRY.splitterNucleus, nucleusMat);
+    nucleus.position.z = 4;
+    root.add(nucleus);
+    materials.push(nucleusMat);
+
+    root.userData = {};
+    return { type: 'splitter', detail: 'lite', group: root, materials, seed };
+  }
+
+  private createBomberVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const hullMat = makeMaterial(0x767d26, 0xd5ff4f);
+    varyMaterial(hullMat, (seed - 0.5) * 0.04, 0.02);
+    const hull = createMesh(GEOMETRY.bomberHull, hullMat);
+    hull.scale.set(0.95, 1.25, 0.85);
+    root.add(hull);
+    materials.push(hullMat);
+
+    const finMat = makeMaterial(0x4c521a, 0x9fbf35);
+    const fins: THREE.Object3D[] = [];
+    for (const side of [-1, 1] as const) {
+      const fin = createMesh(GEOMETRY.bomberFin, finMat);
+      fin.position.set(side * 7, 4, -2);
+      fin.rotation.z = side * 0.7;
+      root.add(fin);
+      fins.push(fin);
+    }
+    materials.push(finMat);
+
+    root.userData = { wings: fins };
+    return { type: 'bomber', detail: 'full', group: root, materials, seed };
+  }
+
+  private createBossVisual(seed: number): EnemyVisual {
+    const root = new THREE.Group();
+    const materials: LitMaterial[] = [];
+
+    const shellMat = makeMaterial(0x5c1030, 0xff285a);
+    varyMaterial(shellMat, (seed - 0.5) * 0.03, 0.01);
+    const shell = createMesh(GEOMETRY.bossShell, shellMat);
+    shell.scale.set(1.25, 1.05, 0.72);
+    root.add(shell);
+    materials.push(shellMat);
+
+    const plateMat = makeMaterial(0x7e1a3e, 0xff5c80);
+    const plates: THREE.Object3D[] = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const plate = createMesh(GEOMETRY.bossPlate, plateMat);
+      plate.position.set(Math.cos(angle) * 42, Math.sin(angle) * 42, 0);
+      plate.rotation.z = angle + Math.PI / 2;
+      plate.userData.baseRotation = plate.rotation.z;
+      root.add(plate);
+      plates.push(plate);
+    }
+    materials.push(plateMat);
+
+    const eyeMat = makeMaterial(0xfff0f4, 0xffb9cc);
+    const eye = createMesh(GEOMETRY.bossEye, eyeMat);
+    eye.position.z = 14;
+    root.add(eye);
+    materials.push(eyeMat);
+
+    const satMat = makeMaterial(0xffdce5, 0xff8fae);
+    const satellites: THREE.Object3D[] = [];
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const satellite = createMesh(GEOMETRY.bossSatellite, satMat);
+      satellite.position.set(Math.cos(angle) * 52, Math.sin(angle) * 52, 6);
+      satellite.userData.baseRotation = angle;
+      root.add(satellite);
+      satellites.push(satellite);
+    }
+    materials.push(satMat);
+
+    root.userData = { crown: plates, pods: satellites, core: eye };
+    return { type: 'boss', detail: 'full', group: root, materials, seed };
   }
 
   private createSwarmerVisual(seed: number): EnemyVisual {

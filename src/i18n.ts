@@ -14,12 +14,12 @@ const UI_TEXT = {
     critical: '危险',
     doctrines: '学说',
     locked: '未解锁',
-    titleSubtitle: '生存 8 分钟',
+    titleSubtitle: '在虚空中生存，猎杀看守者',
     tapToStart: '点击开始',
     pressAnyKeyToStart: '按任意键开始',
-    titleHintPrimary: '移动求生  •  武器自动开火',
-    titleHintSecondaryCompact: '阶段越来越难  •  构筑会延续',
-    titleHintSecondaryWide: '阶段难度会叠加  •  构筑会延续到下一阶段',
+    titleHintPrimary: '移动求生  •  武器自动开火  •  空格冲刺',
+    titleHintSecondaryCompact: '击败虚空看守者进入下一阶段',
+    titleHintSecondaryWide: '计时结束后看守者降临  •  构筑会延续到下一阶段',
     levelUpTitle: '升级',
     levelUpSubtitle: '选择下一项变异',
     tapCardToMutate: '点击卡牌进行变异',
@@ -33,7 +33,31 @@ const UI_TEXT = {
     pressAnyKeyToNextStage: '按任意键进入下一阶段',
     gameOver: '游戏结束',
     keepMovingTutorial: '持续移动，首次升级会解锁新武器。',
+    tutorialDashKey: '按空格键冲刺 — 无敌帧可以穿过弹幕',
+    tutorialDashTouch: '点击右下角闪电按钮进行冲刺',
     draftRerolled: '升级选项已重抽',
+    bossIncoming: '警告：虚空看守者逼近',
+    slayPrompt: '击杀看守者！',
+    bossDefeated: '看守者已被消灭',
+    settingsSection: '设置',
+    settingSound: '音效',
+    settingMusic: '音乐',
+    settingShake: '屏幕震动',
+    settingNumbers: '伤害数字',
+    toggleOn: '开',
+    toggleOff: '关',
+    resumeBtn: '继续战斗',
+    restartBtn: '重新开始',
+    quitBtn: '回到标题',
+    currentBuild: '当前构筑',
+    newRecord: '新纪录！',
+    comboLabel: '连击',
+    bestComboStat: '最高连击',
+    runsStat: '总场次',
+    bestStageStat: '最佳阶段',
+    recordsTitle: '战绩档案',
+    dashReadyHint: '冲刺就绪',
+    versionTag: 'v0.2 ASCENSION',
   },
   en: {
     gameTitle: 'Universe Eater',
@@ -42,12 +66,12 @@ const UI_TEXT = {
     critical: 'CRITICAL',
     doctrines: 'DOCTRINES',
     locked: 'LOCKED',
-    titleSubtitle: 'SURVIVE 8 MINUTES',
+    titleSubtitle: 'SURVIVE THE VOID • SLAY THE WARDEN',
     tapToStart: 'Tap to start',
     pressAnyKeyToStart: 'Press any key to start',
-    titleHintPrimary: 'MOVE TO SURVIVE  •  WEAPONS AUTO-FIRE',
-    titleHintSecondaryCompact: 'STAGES GET HARDER  •  BUILD CARRIES FORWARD',
-    titleHintSecondaryWide: 'STAGES STACK DIFFICULTY  •  YOUR BUILD CARRIES FORWARD',
+    titleHintPrimary: 'MOVE TO SURVIVE  •  WEAPONS AUTO-FIRE  •  SPACE TO DASH',
+    titleHintSecondaryCompact: 'DEFEAT THE VOID WARDEN TO ADVANCE',
+    titleHintSecondaryWide: 'WHEN THE TIMER ENDS THE WARDEN ARRIVES  •  YOUR BUILD CARRIES FORWARD',
     levelUpTitle: 'LEVEL UP',
     levelUpSubtitle: 'Choose your next mutation',
     tapCardToMutate: 'Tap a card to mutate',
@@ -61,7 +85,31 @@ const UI_TEXT = {
     pressAnyKeyToNextStage: 'Press any key to enter the next stage',
     gameOver: 'GAME OVER',
     keepMovingTutorial: 'Keep moving. First level-ups unlock new weapons.',
+    tutorialDashKey: 'Press SPACE to dash — i-frames phase through bullets',
+    tutorialDashTouch: 'Tap the bolt button (bottom-right) to dash',
     draftRerolled: 'Draft rerolled',
+    bossIncoming: 'WARNING: Void Warden approaching',
+    slayPrompt: 'SLAY THE WARDEN!',
+    bossDefeated: 'WARDEN DESTROYED',
+    settingsSection: 'SETTINGS',
+    settingSound: 'Sound FX',
+    settingMusic: 'Music',
+    settingShake: 'Screen shake',
+    settingNumbers: 'Damage numbers',
+    toggleOn: 'ON',
+    toggleOff: 'OFF',
+    resumeBtn: 'RESUME',
+    restartBtn: 'RESTART RUN',
+    quitBtn: 'QUIT TO TITLE',
+    currentBuild: 'CURRENT BUILD',
+    newRecord: 'NEW RECORD!',
+    comboLabel: 'COMBO',
+    bestComboStat: 'Best Combo',
+    runsStat: 'Runs',
+    bestStageStat: 'Best Stage',
+    recordsTitle: 'SERVICE RECORD',
+    dashReadyHint: 'Dash ready',
+    versionTag: 'v0.2 ASCENSION',
   },
 } as const;
 
@@ -71,12 +119,18 @@ const WEAPON_NAMES: Record<Language, Record<WeaponName, string>> = {
     'Orbit Shield': '环轨护盾',
     'Nova Blast': '新星爆发',
     'Escort Wing': '护航僚机',
+    'Seeker Swarm': '寻的飞弹',
+    'Arc Reactor': '电弧核心',
+    'Singularity': '奇点发生器',
   },
   en: {
     'Laser Beam': 'Laser Beam',
     'Orbit Shield': 'Orbit Shield',
     'Nova Blast': 'Nova Blast',
     'Escort Wing': 'Escort Wing',
+    'Seeker Swarm': 'Seeker Swarm',
+    'Arc Reactor': 'Arc Reactor',
+    'Singularity': 'Singularity',
   },
 };
 
@@ -86,12 +140,20 @@ const PASSIVE_NAMES: Record<Language, Record<PassiveName, string>> = {
     'Overdrive Thrusters': '超载推进器',
     'Nanoforge': '纳米工坊',
     'Phase Plating': '相位装甲',
+    'Targeting CPU': '瞄准核心',
+    'Overclock Core': '超频核心',
+    'Vampiric Nanites': '吸血纳米体',
+    'XP Amplifier': '经验放大器',
   },
   en: {
     'Reinforced Hull': 'Reinforced Hull',
     'Overdrive Thrusters': 'Overdrive Thrusters',
     'Nanoforge': 'Nanoforge',
     'Phase Plating': 'Phase Plating',
+    'Targeting CPU': 'Targeting CPU',
+    'Overclock Core': 'Overclock Core',
+    'Vampiric Nanites': 'Vampiric Nanites',
+    'XP Amplifier': 'XP Amplifier',
   },
 };
 
@@ -117,6 +179,26 @@ const PASSIVE_TEXT: Record<Language, Record<PassiveId, { title: string; descript
       description: '降低受到的伤害，让失误代价更低，也更容易扛住首领压力。',
       label: '相位装甲强化',
     },
+    targeting: {
+      title: '瞄准核心',
+      description: '所有武器获得 +8% 暴击几率，暴击造成两倍伤害。',
+      label: '瞄准核心 +8% 暴击',
+    },
+    overclock: {
+      title: '超频核心',
+      description: '所有武器的冷却缩短 7%，火力循环更加疯狂。',
+      label: '全武器冷却 -7%',
+    },
+    vampiric: {
+      title: '吸血纳米体',
+      description: '每次击杀修复 0.8 点船体。杀戮即是治疗。',
+      label: '击杀回复 +0.8',
+    },
+    amplifier: {
+      title: '经验放大器',
+      description: '获得的经验提高 12%，加速你的进化。',
+      label: '经验获取 +12%',
+    },
   },
   en: {
     hull: {
@@ -139,6 +221,26 @@ const PASSIVE_TEXT: Record<Language, Record<PassiveId, { title: string; descript
       description: 'Reduce incoming damage so mistakes cost less and boss pressure lands cleaner.',
       label: 'Phase Plating hardened',
     },
+    targeting: {
+      title: 'Targeting CPU',
+      description: 'All weapons gain +8% crit chance. Crits deal double damage.',
+      label: 'Targeting CPU +8% crit',
+    },
+    overclock: {
+      title: 'Overclock Core',
+      description: 'Shorten every weapon cooldown by 7%. The fire loop gets unhinged.',
+      label: 'All cooldowns -7%',
+    },
+    vampiric: {
+      title: 'Vampiric Nanites',
+      description: 'Repair 0.8 hull on every kill. Murder is medicine.',
+      label: 'Heal on kill +0.8',
+    },
+    amplifier: {
+      title: 'XP Amplifier',
+      description: 'Gain +12% experience from every kill. Evolve faster.',
+      label: 'XP gain +12%',
+    },
   },
 };
 
@@ -159,6 +261,21 @@ const UNLOCK_TEXT: Record<Language, Record<Exclude<WeaponName, 'Laser Beam'>, { 
       description: '部署护航僚机，它会伴飞并以同样节奏发射支援激光。',
       label: '新武器：护航僚机',
     },
+    'Seeker Swarm': {
+      title: '解锁 寻的飞弹',
+      description: '周期性发射自动追踪的飞弹群，撞击后产生范围爆炸。',
+      label: '新武器：寻的飞弹',
+    },
+    'Arc Reactor': {
+      title: '解锁 电弧核心',
+      description: '释放链式闪电，在多个敌人之间跳跃传导。',
+      label: '新武器：电弧核心',
+    },
+    Singularity: {
+      title: '解锁 奇点发生器',
+      description: '投掷奇点，将周围敌人吸入引力漩涡中持续绞碎。',
+      label: '新武器：奇点发生器',
+    },
   },
   en: {
     'Orbit Shield': {
@@ -176,6 +293,21 @@ const UNLOCK_TEXT: Record<Language, Record<Exclude<WeaponName, 'Laser Beam'>, { 
       description: 'Deploy a wingmate that tracks beside you and fires a support laser at the same cadence.',
       label: 'New weapon: Escort Wing',
     },
+    'Seeker Swarm': {
+      title: 'Unlock Seeker Swarm',
+      description: 'Launch volleys of homing missiles that chase targets down and detonate in a blast.',
+      label: 'New weapon: Seeker Swarm',
+    },
+    'Arc Reactor': {
+      title: 'Unlock Arc Reactor',
+      description: 'Discharge chain lightning that leaps between clustered enemies.',
+      label: 'New weapon: Arc Reactor',
+    },
+    Singularity: {
+      title: 'Unlock Singularity',
+      description: 'Hurl a singularity that drags enemies into a grinding gravity well.',
+      label: 'New weapon: Singularity',
+    },
   },
 };
 
@@ -185,12 +317,18 @@ const UPGRADE_DESCRIPTIONS: Record<Language, Record<WeaponName, string>> = {
     'Orbit Shield': '提高伤害与压制范围，并在关键等级追加卫星。',
     'Nova Blast': '扩大爆炸半径，并强化爆发伤害以重置危险局面。',
     'Escort Wing': '强化僚机激光，让支援火力更猛，同时保持与你主武器同步。',
+    'Seeker Swarm': '更多飞弹、更快装填、更大爆炸范围。',
+    'Arc Reactor': '更高的跳跃次数与伤害，电弧会撕开更密集的敌群。',
+    Singularity: '更强的引力与持续时间，湮灭爆发也会更致命。',
   },
   en: {
     'Laser Beam': 'Higher damage, longer reach, and faster beam cadence.',
     'Orbit Shield': 'More damage and wider orbit pressure, with extra satellites at key levels.',
     'Nova Blast': 'Bigger detonation radius with a stronger burst to reset dangerous screens.',
     'Escort Wing': 'Boost the wingmate beam so its support laser hits harder while keeping pace with your main emitter.',
+    'Seeker Swarm': 'More missiles, faster reloads, and bigger detonations.',
+    'Arc Reactor': 'More jumps and higher damage — the arc chews through denser packs.',
+    Singularity: 'Stronger pull, longer duration, and a deadlier collapse burst.',
   },
 };
 
@@ -442,6 +580,18 @@ export function formatDoctrineOnline(id: DoctrineId): string {
   return currentLanguage === 'zh-CN'
     ? `${getDoctrineTitle(id)} 已激活`
     : `${getDoctrineTitle(id)} online`;
+}
+
+export function formatBossTitle(stage: number): string {
+  return currentLanguage === 'zh-CN' ? `虚空看守者 Mk.${stage}` : `VOID WARDEN Mk.${stage}`;
+}
+
+export function formatCombo(combo: number): string {
+  return currentLanguage === 'zh-CN' ? `${combo} 连击` : `${combo} COMBO`;
+}
+
+export function formatLockedCount(count: number): string {
+  return currentLanguage === 'zh-CN' ? `未解锁武器 ×${count}` : `${count} LOCKED`;
 }
 
 export function uiFont(size: number, weight: 'normal' | 'bold' = 'normal'): string {

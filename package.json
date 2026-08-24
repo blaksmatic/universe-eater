@@ -1,6 +1,6 @@
 {
   "name": "universe-eater",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "build": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --sourcemap && node build-standalone.js",
@@ -8,15 +8,21 @@
     "build:wx": "esbuild src/main.ts --bundle --format=cjs --target=es2017 --alias:three=./wx/empty-three.js --define:document=__doc --define:window=__win --define:navigator=__nav --define:getComputedStyle=__getComputedStyle --outfile=wx/bundle.js",
     "watch:wx": "esbuild src/main.ts --bundle --format=cjs --target=es2017 --alias:three=./wx/empty-three.js --define:document=__doc --define:window=__win --define:navigator=__nav --define:getComputedStyle=__getComputedStyle --outfile=wx/bundle.js --watch",
     "serve": "npx serve . -p 3000",
-    "dev": "npm run build && concurrently \"npm run watch\" \"npm run serve\""
+    "dev": "npm run build && concurrently \"npm run watch\" \"npm run serve\"",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/playtest.mjs all",
+    "test:smoke": "node scripts/playtest.mjs smoke",
+    "test:qa": "node scripts/qa-edge.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.180.0",
     "concurrently": "^9.0.0",
     "esbuild": "^0.25.0",
+    "playwright": "^1.56.1",
     "typescript": "^6.0.2"
   },
   "dependencies": {
     "three": "^0.180.0"
   }
+
 }
