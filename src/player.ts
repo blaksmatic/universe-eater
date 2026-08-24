@@ -382,12 +382,162 @@ export class Player {
 
   private drawBody(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const hpRatio = this.hp / this.maxHp;
+    const facing = Math.atan2(this.lastMoveY, this.lastMoveX);
+    const isMoving = Math.hypot(this.lastMoveX, this.lastMoveY) > 0.01;
+    const bank = isMoving ? Math.sin(this.shimmerPhase * 0.02) * 0.08 : 0;
+    const flameFlicker = 0.75 + 0.25 * Math.sin(this.shimmerPhase * 0.3);
+    const hurt = this.hurtRatio;
 
+    // Hull palette shifts with HP: healthy cyan -> amber -> red
+    const hullBase: [number, number, number] = hpRatio > 0.5
+      ? [210, 235, 255]
+      : hpRatio > 0.25 ? [255, 210, 120] : [255, 95, 95];
+    const hullDark: [number, number, number] = hpRatio > 0.5
+      ? [30, 70, 160]
+      : hpRatio > 0.25 ? [90, 55, 20] : [90, 20, 30];
+    const accent: [number, number, number] = hpRatio > 0.5 ? [90, 200, 255] : [255, 170, 80];
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(facing + bank);
+
+    const r = this.radius;
+
+    // — Engine exhaust — (behind hull, additive)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const exhaustLen = (r * 0.95 + (this.isDashing ? 8 : 0)) * flameFlicker;
+    const exhaustW = r * 0.55;
+    // outer flame
     ctx.beginPath();
-    ctx.arc(x, y, this.radius - 1, 0, TWO_PI);
-    ctx.fillStyle = `rgba(20, 50, 100, ${0.3 + hpRatio * 0.4})`;
+    ctx.moveTo(-r * 0.85, 0);
+    ctx.lineTo(-r * 0.85 - exhaustLen, -exhaustW);
+    ctx.lineTo(-r * 0.85 - exhaustLen * 0.72, 0);
+    ctx.lineTo(-r * 0.85 - exhaustLen, exhaustW);
+    ctx.closePath();
+    const flameGrad = ctx.createLinearGradient(-r * 0.85, 0, -r * 0.85 - exhaustLen, 0);
+    flameGrad.addColorStop(0, `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.95)`);
+    flameGrad.addColorStop(0.45, `rgba(255, 240, 200, 0.55)`);
+    flameGrad.addColorStop(1, 'rgba(255, 200, 80, 0)');
+    ctx.fillStyle = flameGrad;
+    ctx.fill();
+    // inner hot core
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.82, 0);
+    ctx.lineTo(-r * 0.82 - exhaustLen * 0.62, -exhaustW * 0.42);
+    ctx.lineTo(-r * 0.82 - exhaustLen * 0.48, 0);
+    ctx.lineTo(-r * 0.82 - exhaustLen * 0.62, exhaustW * 0.42);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.85 * flameFlicker})`;
+    ctx.fill();
+    // side nozzle glow
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.78, 0, 2.2, 4.5, 0, 0, TWO_PI);
+    ctx.fillStyle = `rgba(255, 220, 160, ${0.7 + hurt * 0.3})`;
+    ctx.fill();
+    ctx.restore();
+
+    // — CRT phosphor bloom behind hull —
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.18, r * 0.92, 0, 0, TWO_PI);
+    ctx.fillStyle = `rgba(${hullDark[0]}, ${hullDark[1]}, ${hullDark[2]}, 0.14)`;
     ctx.fill();
 
-    drawSphereShading(ctx, x, y, this.radius, 60, 120, 255);
+    // — Main hull — pointed vector shape
+    // Shadow / deep stroke first (glow)
+    ctx.beginPath();
+    ctx.moveTo(r * 1.05, 0); // nose
+    ctx.lineTo(r * 0.15, -r * 0.62); // starboard bow
+    ctx.lineTo(-r * 0.55, -r * 0.78); // starboard wing tip
+    ctx.lineTo(-r * 0.35, -r * 0.32); // wing root
+    ctx.lineTo(-r * 0.88, -r * 0.22); // engine starboard
+    ctx.lineTo(-r * 0.88, r * 0.22);  // engine port
+    ctx.lineTo(-r * 0.35, r * 0.32);
+    ctx.lineTo(-r * 0.55, r * 0.78);
+    ctx.lineTo(r * 0.15, r * 0.62);
+    ctx.closePath();
+    ctx.strokeStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.22)`;
+    ctx.lineWidth = 7;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Hull fill — faceted gradient
+    const hullGrad = ctx.createLinearGradient(-r * 0.9, -r * 0.6, r * 0.9, r * 0.4);
+    hullGrad.addColorStop(0, `rgba(${hullDark[0]}, ${hullDark[1]}, ${hullDark[2]}, 0.96)`);
+    hullGrad.addColorStop(0.5, `rgba(${hullBase[0]}, ${hullBase[1]}, ${hullBase[2]}, 0.96)`);
+    hullGrad.addColorStop(1, `rgba(${Math.min(255, hullBase[0] + 20)}, ${Math.min(255, hullBase[1] + 20)}, 255, 0.96)`);
+    ctx.fillStyle = hullGrad;
+    ctx.fill();
+
+    // Hull hard outline — crisp vector
+    ctx.strokeStyle = `rgba(235, 245, 255, 0.96)`;
+    ctx.lineWidth = 1.7;
+    ctx.stroke();
+    // inner bevel
+    ctx.strokeStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.55)`;
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+
+    // — Cockpit canopy —
+    ctx.beginPath();
+    ctx.ellipse(r * 0.18, 0, r * 0.32, r * 0.22, 0, 0, TWO_PI);
+    const canopyGrad = ctx.createLinearGradient(r * 0.05, -r * 0.2, r * 0.35, r * 0.2);
+    canopyGrad.addColorStop(0, 'rgba(90, 200, 255, 0.95)');
+    canopyGrad.addColorStop(0.5, 'rgba(180, 230, 255, 0.85)');
+    canopyGrad.addColorStop(1, 'rgba(90, 160, 255, 0.35)');
+    ctx.fillStyle = canopyGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    // canopy highlight
+    ctx.beginPath();
+    ctx.ellipse(r * 0.14, -r * 0.08, r * 0.13, r * 0.07, -0.3, 0, TWO_PI);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
+
+    // — Wing panel lines —
+    ctx.strokeStyle = `rgba(${hullDark[0]}, ${hullDark[1]}, ${hullDark[2]}, 0.55)`;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.1, -r * 0.42); ctx.lineTo(-r * 0.48, -r * 0.58);
+    ctx.moveTo(-r * 0.1, r * 0.42); ctx.lineTo(-r * 0.48, r * 0.58);
+    ctx.stroke();
+    // rivets
+    ctx.fillStyle = `rgba(255, 255, 255, 0.55)`;
+    for (const [wx, wy] of [[-0.22, -0.38], [-0.22, 0.38], [0.08, -0.28], [0.08, 0.28]] as const) {
+      ctx.beginPath(); ctx.arc(r * wx, r * wy, 0.9, 0, TWO_PI); ctx.fill();
+    }
+
+    // — Nose probe / laser emitter —
+    ctx.beginPath();
+    ctx.arc(r * 1.02, 0, 2.6, 0, TWO_PI);
+    ctx.fillStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 1)`;
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(r * 1.02, 0, 4.8, 0, TWO_PI);
+    ctx.fillStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.22)`;
+    ctx.fill();
+
+    // Hurt flash — additive white on low HP hit
+    if (hurt > 0.01) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = hurt * 0.42;
+      ctx.beginPath();
+      ctx.moveTo(r * 1.05, 0);
+      ctx.lineTo(r * 0.15, -r * 0.62);
+      ctx.lineTo(-r * 0.88, -r * 0.22);
+      ctx.lineTo(-r * 0.88, r * 0.22);
+      ctx.lineTo(r * 0.15, r * 0.62);
+      ctx.closePath();
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    ctx.restore();
+
+    // keep subtle sphere shading for depth on top of vector hull
+    drawSphereShading(ctx, x, y, this.radius * 0.72, hullDark[0], hullDark[1], hullDark[2]);
   }
 }

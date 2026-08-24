@@ -125,14 +125,46 @@ function drawMock(time){
     ctx.fillStyle=`rgba(${mode==='amber'?'255,210,120': mode==='vector'?'120,255,140':'170,210,255'},${0.15+tw*0.35})`;
     ctx.beginPath(); ctx.arc((x+time*6)%w, y, s, 0, Math.PI*2); ctx.fill();
   }
-  // mock ship + enemies
+  // mock ship + enemies — real vector hull (matches src/player.ts:383)
   const cx=w*0.5, cy=h*0.5;
-  // ship
-  ctx.save(); ctx.translate(cx,cy-10);
-  if(mode==='vector'){ ctx.strokeStyle='rgba(120,255,140,0.9)'; ctx.lineWidth=1.6; }
-  else { ctx.fillStyle='rgba(200,235,255,0.95)'; }
-  ctx.beginPath(); ctx.moveTo(0,-14); ctx.lineTo(10,10); ctx.lineTo(0,4); ctx.lineTo(-10,10); ctx.closePath();
-  mode==='vector' ? ctx.stroke() : ctx.fill(); ctx.restore();
+  // ship — retro CRT hull
+  (function drawShip(sx,sy, ang){
+    const r=15, flick=0.75+0.25*Math.sin(time*7);
+    ctx.save(); ctx.translate(sx,sy); ctx.rotate(ang);
+    // exhaust
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    const exLen=(r*0.95+2)*flick, exW=r*0.55;
+    ctx.beginPath(); ctx.moveTo(-r*0.85,0); ctx.lineTo(-r*0.85-exLen,-exW); ctx.lineTo(-r*0.85-exLen*0.72,0); ctx.lineTo(-r*0.85-exLen,exW); ctx.closePath();
+    const fg=ctx.createLinearGradient(-r*0.85,0,-r*0.85-exLen,0);
+    const ac = mode==='amber' ? '255,190,60' : mode==='vector' ? '120,255,140' : '90,200,255';
+    fg.addColorStop(0,`rgba(${ac},0.95)`); fg.addColorStop(0.45,'rgba(255,240,200,0.55)'); fg.addColorStop(1,'rgba(255,200,80,0)');
+    ctx.fillStyle=fg; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-r*0.82,0); ctx.lineTo(-r*0.82-exLen*0.62,-exW*0.42); ctx.lineTo(-r*0.82-exLen*0.48,0); ctx.lineTo(-r*0.82-exLen*0.62,exW*0.42); ctx.closePath();
+    ctx.fillStyle=`rgba(255,255,255,${0.85*flick})`; ctx.fill(); ctx.restore();
+    // bloom
+    ctx.beginPath(); ctx.ellipse(0,0,r*1.18,r*0.92,0,0,Math.PI*2); ctx.fillStyle= mode==='amber'?'rgba(90,55,20,0.14)': mode==='vector'?'rgba(20,50,20,0.12)':'rgba(30,70,160,0.14)'; ctx.fill();
+    // hull
+    ctx.beginPath(); ctx.moveTo(r*1.05,0); ctx.lineTo(r*0.15,-r*0.62); ctx.lineTo(-r*0.55,-r*0.78); ctx.lineTo(-r*0.35,-r*0.32); ctx.lineTo(-r*0.88,-r*0.22); ctx.lineTo(-r*0.88,r*0.22); ctx.lineTo(-r*0.35,r*0.32); ctx.lineTo(-r*0.55,r*0.78); ctx.lineTo(r*0.15,r*0.62); ctx.closePath();
+    ctx.strokeStyle=`rgba(${ac},0.22)`; ctx.lineWidth=7; ctx.lineJoin='round'; ctx.stroke();
+    const hg=ctx.createLinearGradient(-r*0.9,-r*0.6,r*0.9,r*0.4);
+    if(mode==='amber'){ hg.addColorStop(0,'rgba(90,55,20,0.96)'); hg.addColorStop(0.5,'rgba(255,210,120,0.96)'); hg.addColorStop(1,'rgba(255,230,160,0.96)'); }
+    else if(mode==='vector'){ hg.addColorStop(0,'rgba(20,50,20,0.96)'); hg.addColorStop(0.5,'rgba(140,255,160,0.96)'); hg.addColorStop(1,'rgba(200,255,210,0.96)'); }
+    else { hg.addColorStop(0,'rgba(30,70,160,0.96)'); hg.addColorStop(0.5,'rgba(210,235,255,0.96)'); hg.addColorStop(1,'rgba(235,245,255,0.96)'); }
+    ctx.fillStyle=hg; ctx.fill();
+    ctx.strokeStyle='rgba(235,245,255,0.96)'; ctx.lineWidth=1.7; ctx.stroke();
+    ctx.strokeStyle=`rgba(${ac},0.55)`; ctx.lineWidth=0.9; ctx.stroke();
+    // canopy
+    ctx.beginPath(); ctx.ellipse(r*0.18,0,r*0.32,r*0.22,0,0,Math.PI*2);
+    const cg=ctx.createLinearGradient(r*0.05,-r*0.2,r*0.35,r*0.2); cg.addColorStop(0,'rgba(90,200,255,0.95)'); cg.addColorStop(0.5,'rgba(180,230,255,0.85)'); cg.addColorStop(1,'rgba(90,160,255,0.35)'); ctx.fillStyle=cg; ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=1.1; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(r*0.14,-r*0.08,r*0.13,r*0.07,-0.3,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fill();
+    // wing lines + rivets
+    ctx.strokeStyle= mode==='amber'?'rgba(90,55,20,0.55)':'rgba(20,50,30,0.55)'; ctx.lineWidth=0.9; ctx.beginPath(); ctx.moveTo(-r*0.1,-r*0.42); ctx.lineTo(-r*0.48,-r*0.58); ctx.moveTo(-r*0.1,r*0.42); ctx.lineTo(-r*0.48,r*0.58); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.55)'; for(const [wx,wy] of [[-0.22,-0.38],[-0.22,0.38],[0.08,-0.28],[0.08,0.28]]){ ctx.beginPath(); ctx.arc(r*wx,r*wy,0.9,0,Math.PI*2); ctx.fill(); }
+    // nose
+    ctx.beginPath(); ctx.arc(r*1.02,0,2.6,0,Math.PI*2); ctx.fillStyle=`rgba(${ac},1)`; ctx.fill(); ctx.beginPath(); ctx.arc(r*1.02,0,4.8,0,Math.PI*2); ctx.fillStyle=`rgba(${ac},0.22)`; ctx.fill();
+    ctx.restore();
+  })(cx, cy-10, Math.sin(time*0.6)*0.18);
   // orbit ring
   ctx.strokeStyle = mode==='amber' ? 'rgba(255,190,60,0.22)' : mode==='vector' ? 'rgba(90,255,140,0.18)' : 'rgba(90,200,255,0.18)';
   ctx.lineWidth=1; ctx.beginPath(); ctx.arc(cx,cy-10,70,0,Math.PI*2); ctx.stroke();
