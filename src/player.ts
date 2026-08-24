@@ -1,5 +1,5 @@
 import { isKeyDown, touch, consumeDashRequest, triggerHaptic } from './input';
-import { MAP_WIDTH, MAP_HEIGHT, wrapPosition, drawSphereShading, TWO_PI } from './utils';
+import { MAP_WIDTH, MAP_HEIGHT, wrapPosition, TWO_PI } from './utils';
 import { Camera } from './camera';
 import { audio } from './audio';
 
@@ -388,14 +388,11 @@ export class Player {
     const flameFlicker = 0.75 + 0.25 * Math.sin(this.shimmerPhase * 0.3);
     const hurt = this.hurtRatio;
 
-    // Hull palette shifts with HP: healthy cyan -> amber -> red
+    // Matte, illustrated hull — less bloom, more craft
     const hullBase: [number, number, number] = hpRatio > 0.5
-      ? [210, 235, 255]
-      : hpRatio > 0.25 ? [255, 210, 120] : [255, 95, 95];
-    const hullDark: [number, number, number] = hpRatio > 0.5
-      ? [30, 70, 160]
-      : hpRatio > 0.25 ? [90, 55, 20] : [90, 20, 30];
-    const accent: [number, number, number] = hpRatio > 0.5 ? [90, 200, 255] : [255, 170, 80];
+      ? [198, 202, 210] // warm light grey, hand-painted
+      : hpRatio > 0.25 ? [205, 180, 140] : [200, 110, 105];
+    const stripe: [number, number, number] = hpRatio > 0.5 ? [210, 75, 65] : [200, 90, 55];
 
     ctx.save();
     ctx.translate(x, y);
@@ -403,141 +400,180 @@ export class Player {
 
     const r = this.radius;
 
-    // — Engine exhaust — (behind hull, additive)
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const exhaustLen = (r * 0.95 + (this.isDashing ? 8 : 0)) * flameFlicker;
-    const exhaustW = r * 0.55;
-    // outer flame
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.85, 0);
-    ctx.lineTo(-r * 0.85 - exhaustLen, -exhaustW);
-    ctx.lineTo(-r * 0.85 - exhaustLen * 0.72, 0);
-    ctx.lineTo(-r * 0.85 - exhaustLen, exhaustW);
-    ctx.closePath();
-    const flameGrad = ctx.createLinearGradient(-r * 0.85, 0, -r * 0.85 - exhaustLen, 0);
-    flameGrad.addColorStop(0, `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.95)`);
-    flameGrad.addColorStop(0.45, `rgba(255, 240, 200, 0.55)`);
-    flameGrad.addColorStop(1, 'rgba(255, 200, 80, 0)');
-    ctx.fillStyle = flameGrad;
-    ctx.fill();
-    // inner hot core
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.82, 0);
-    ctx.lineTo(-r * 0.82 - exhaustLen * 0.62, -exhaustW * 0.42);
-    ctx.lineTo(-r * 0.82 - exhaustLen * 0.48, 0);
-    ctx.lineTo(-r * 0.82 - exhaustLen * 0.62, exhaustW * 0.42);
-    ctx.closePath();
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.85 * flameFlicker})`;
-    ctx.fill();
-    // side nozzle glow
-    ctx.beginPath();
-    ctx.ellipse(-r * 0.78, 0, 2.2, 4.5, 0, 0, TWO_PI);
-    ctx.fillStyle = `rgba(255, 220, 160, ${0.7 + hurt * 0.3})`;
-    ctx.fill();
-    ctx.restore();
+    // — Exhaust — muted, smoky, not additive white
+    {
+      const exhaustLen = (r * 0.72 + (this.isDashing ? 6 : 0)) * (0.82 + 0.18 * flameFlicker);
+      const exhaustW = r * 0.42;
+      // soot puff
+      ctx.fillStyle = `rgba(35, 35, 38, ${0.18 + hurt * 0.08})`;
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.92 - exhaustLen * 0.35, 0, exhaustLen * 0.38, exhaustW * 0.55, 0, 0, TWO_PI);
+      ctx.fill();
+      // flame — dirty amber, no lighter composite
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.84, 0);
+      ctx.lineTo(-r * 0.84 - exhaustLen, -exhaustW);
+      ctx.lineTo(-r * 0.84 - exhaustLen * 0.68, 0);
+      ctx.lineTo(-r * 0.84 - exhaustLen, exhaustW);
+      ctx.closePath();
+      const flameGrad = ctx.createLinearGradient(-r * 0.84, 0, -r * 0.84 - exhaustLen, 0);
+      flameGrad.addColorStop(0, `rgba(210, 170, 120, 0.55)`);
+      flameGrad.addColorStop(0.35, `rgba(180, 140, 110, 0.28)`);
+      flameGrad.addColorStop(1, 'rgba(80, 60, 50, 0)');
+      ctx.fillStyle = flameGrad;
+      ctx.fill();
+      // inner ember — small, warm
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.83, 0);
+      ctx.lineTo(-r * 0.83 - exhaustLen * 0.42, -exhaustW * 0.28);
+      ctx.lineTo(-r * 0.83 - exhaustLen * 0.32, 0);
+      ctx.lineTo(-r * 0.83 - exhaustLen * 0.42, exhaustW * 0.28);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(255, 220, 165, ${0.38 * flameFlicker})`;
+      ctx.fill();
+      // nozzle
+      ctx.fillStyle = `rgba(58, 62, 70, 1)`;
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.80, 0, 2.0, 3.8, 0, 0, TWO_PI);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(165, 175, 185, 0.35)`;
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    }
 
-    // — CRT phosphor bloom behind hull —
+    // — Soft drop shadow — not bloom
+    ctx.fillStyle = `rgba(10, 12, 18, 0.22)`;
     ctx.beginPath();
-    ctx.ellipse(0, 0, r * 1.18, r * 0.92, 0, 0, TWO_PI);
-    ctx.fillStyle = `rgba(${hullDark[0]}, ${hullDark[1]}, ${hullDark[2]}, 0.14)`;
+    ctx.ellipse(1.2, 1.8, r * 1.02, r * 0.78, 0, 0, TWO_PI);
     ctx.fill();
 
-    // — Main hull — pointed vector shape
-    // Shadow / deep stroke first (glow)
+    // — Hull silhouette —
     ctx.beginPath();
-    ctx.moveTo(r * 1.05, 0); // nose
-    ctx.lineTo(r * 0.15, -r * 0.62); // starboard bow
-    ctx.lineTo(-r * 0.55, -r * 0.78); // starboard wing tip
-    ctx.lineTo(-r * 0.35, -r * 0.32); // wing root
-    ctx.lineTo(-r * 0.88, -r * 0.22); // engine starboard
-    ctx.lineTo(-r * 0.88, r * 0.22);  // engine port
-    ctx.lineTo(-r * 0.35, r * 0.32);
-    ctx.lineTo(-r * 0.55, r * 0.78);
-    ctx.lineTo(r * 0.15, r * 0.62);
+    ctx.moveTo(r * 1.02, 0);
+    ctx.lineTo(r * 0.18, -r * 0.60);
+    ctx.lineTo(-r * 0.48, -r * 0.74);
+    ctx.lineTo(-r * 0.33, -r * 0.30);
+    ctx.lineTo(-r * 0.86, -r * 0.20);
+    ctx.lineTo(-r * 0.86, r * 0.20);
+    ctx.lineTo(-r * 0.33, r * 0.30);
+    ctx.lineTo(-r * 0.48, r * 0.74);
+    ctx.lineTo(r * 0.18, r * 0.60);
     ctx.closePath();
-    ctx.strokeStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.22)`;
-    ctx.lineWidth = 7;
+
+    // Flat matte fill with subtle paper grain
+    ctx.fillStyle = `rgb(${hullBase[0]}, ${hullBase[1]}, ${hullBase[2]})`;
+    ctx.fill();
+    // Top-light wash — very subtle, not glossy
+    const wash = ctx.createLinearGradient(0, -r * 0.8, 0, r * 0.7);
+    wash.addColorStop(0, 'rgba(255, 255, 255, 0.10)');
+    wash.addColorStop(0.45, 'rgba(255, 255, 255, 0)');
+    wash.addColorStop(1, 'rgba(0, 0, 0, 0.10)');
+    ctx.fillStyle = wash;
+    ctx.fill();
+
+    // Ink outline — hand-pressed, not neon
+    ctx.strokeStyle = `rgba(28, 32, 44, 0.92)`;
+    ctx.lineWidth = 1.25;
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // Hull fill — faceted gradient
-    const hullGrad = ctx.createLinearGradient(-r * 0.9, -r * 0.6, r * 0.9, r * 0.4);
-    hullGrad.addColorStop(0, `rgba(${hullDark[0]}, ${hullDark[1]}, ${hullDark[2]}, 0.96)`);
-    hullGrad.addColorStop(0.5, `rgba(${hullBase[0]}, ${hullBase[1]}, ${hullBase[2]}, 0.96)`);
-    hullGrad.addColorStop(1, `rgba(${Math.min(255, hullBase[0] + 20)}, ${Math.min(255, hullBase[1] + 20)}, 255, 0.96)`);
-    ctx.fillStyle = hullGrad;
+    // — Illustrated paneling — faint, irregular
+    ctx.strokeStyle = `rgba(28, 32, 44, 0.22)`;
+    ctx.lineWidth = 0.7;
+    ctx.setLineDash([3.5, 3]);
+    ctx.beginPath();
+    // centre spine
+    ctx.moveTo(r * 0.78, 0); ctx.lineTo(-r * 0.78, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = `rgba(28, 32, 44, 0.18)`;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(r * 0.10, -r * 0.38); ctx.lineTo(-r * 0.42, -r * 0.52);
+    ctx.moveTo(r * 0.10, r * 0.38); ctx.lineTo(-r * 0.42, r * 0.52);
+    ctx.moveTo(-r * 0.18, -r * 0.28); ctx.lineTo(-r * 0.18, r * 0.28);
+    ctx.stroke();
+
+    // — Artistic stripe — hand-painted, slightly wobbly
+    ctx.strokeStyle = `rgba(${stripe[0]}, ${stripe[1]}, ${stripe[2]}, 0.92)`;
+    ctx.lineWidth = 1.9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(r * 0.62, -r * 0.12);
+    ctx.quadraticCurveTo(r * 0.10, -r * 0.14, -r * 0.62, -r * 0.10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(r * 0.62, r * 0.12);
+    ctx.quadraticCurveTo(r * 0.10, r * 0.14, -r * 0.62, r * 0.10);
+    ctx.stroke();
+    // stripe chips
+    ctx.fillStyle = `rgba(28, 32, 44, 0.28)`;
+    ctx.fillRect(-r * 0.05, -r * 0.12 - 0.9, 2.2, 1.8);
+    ctx.fillRect(r * 0.32, r * 0.12 - 0.9, 1.6, 1.8);
+
+    // — Cockpit — deep, not glowing
+    ctx.beginPath();
+    ctx.ellipse(r * 0.16, 0, r * 0.29, r * 0.20, 0, 0, TWO_PI);
+    ctx.fillStyle = `rgba(48, 58, 74, 0.96)`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(28, 32, 44, 0.85)`;
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+    // canopy glass — small catch-light, not full gradient
+    ctx.fillStyle = `rgba(205, 220, 235, 0.55)`;
+    ctx.beginPath();
+    ctx.ellipse(r * 0.20, -r * 0.07, r * 0.11, r * 0.05, -0.35, 0, TWO_PI);
+    ctx.fill();
+    ctx.fillStyle = `rgba(205, 220, 235, 0.22)`;
+    ctx.beginPath();
+    ctx.ellipse(r * 0.08, r * 0.06, r * 0.07, r * 0.03, 0.4, 0, TWO_PI);
     ctx.fill();
 
-    // Hull hard outline — crisp vector
-    ctx.strokeStyle = `rgba(235, 245, 255, 0.96)`;
-    ctx.lineWidth = 1.7;
-    ctx.stroke();
-    // inner bevel
-    ctx.strokeStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.55)`;
-    ctx.lineWidth = 0.9;
-    ctx.stroke();
-
-    // — Cockpit canopy —
-    ctx.beginPath();
-    ctx.ellipse(r * 0.18, 0, r * 0.32, r * 0.22, 0, 0, TWO_PI);
-    const canopyGrad = ctx.createLinearGradient(r * 0.05, -r * 0.2, r * 0.35, r * 0.2);
-    canopyGrad.addColorStop(0, 'rgba(90, 200, 255, 0.95)');
-    canopyGrad.addColorStop(0.5, 'rgba(180, 230, 255, 0.85)');
-    canopyGrad.addColorStop(1, 'rgba(90, 160, 255, 0.35)');
-    ctx.fillStyle = canopyGrad;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 1.1;
-    ctx.stroke();
-    // canopy highlight
-    ctx.beginPath();
-    ctx.ellipse(r * 0.14, -r * 0.08, r * 0.13, r * 0.07, -0.3, 0, TWO_PI);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fill();
-
-    // — Wing panel lines —
-    ctx.strokeStyle = `rgba(${hullDark[0]}, ${hullDark[1]}, ${hullDark[2]}, 0.55)`;
-    ctx.lineWidth = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.1, -r * 0.42); ctx.lineTo(-r * 0.48, -r * 0.58);
-    ctx.moveTo(-r * 0.1, r * 0.42); ctx.lineTo(-r * 0.48, r * 0.58);
-    ctx.stroke();
-    // rivets
-    ctx.fillStyle = `rgba(255, 255, 255, 0.55)`;
-    for (const [wx, wy] of [[-0.22, -0.38], [-0.22, 0.38], [0.08, -0.28], [0.08, 0.28]] as const) {
-      ctx.beginPath(); ctx.arc(r * wx, r * wy, 0.9, 0, TWO_PI); ctx.fill();
+    // — Rivets — muted, not shiny
+    ctx.fillStyle = `rgba(28, 32, 44, 0.55)`;
+    for (const [wx, wy] of [[-0.30, -0.34], [-0.30, 0.34], [0.42, -0.22], [0.42, 0.22], [-0.62, -0.08], [-0.62, 0.08]] as const) {
+      ctx.beginPath(); ctx.arc(r * wx, r * wy, 0.85, 0, TWO_PI); ctx.fill();
+      ctx.fillStyle = `rgba(255, 255, 255, 0.18)`; ctx.beginPath(); ctx.arc(r * wx - 0.25, r * wy - 0.25, 0.35, 0, TWO_PI); ctx.fill(); ctx.fillStyle = `rgba(28, 32, 44, 0.55)`;
     }
 
-    // — Nose probe / laser emitter —
+    // — Weathering — edge scuffs, stipple
+    ctx.strokeStyle = `rgba(28, 32, 44, 0.14)`;
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
-    ctx.arc(r * 1.02, 0, 2.6, 0, TWO_PI);
-    ctx.fillStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 1)`;
-    ctx.fill();
-    ctx.beginPath(); ctx.arc(r * 1.02, 0, 4.8, 0, TWO_PI);
-    ctx.fillStyle = `rgba(${accent[0]}, ${accent[1]}, ${accent[2]}, 0.22)`;
-    ctx.fill();
+    ctx.moveTo(r * 0.82, -r * 0.18); ctx.lineTo(r * 0.86, -r * 0.12);
+    ctx.moveTo(-r * 0.44, -r * 0.70); ctx.lineTo(-r * 0.40, -r * 0.66);
+    ctx.moveTo(-r * 0.82, r * 0.14); ctx.lineTo(-r * 0.78, r * 0.18);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(28, 32, 44, 0.09)`;
+    for (let i = 0; i < 7; i++) {
+      const px = (Math.sin(i * 1.7) * 0.5 + 0.5) * r * 0.9 - r * 0.45;
+      const py = (Math.cos(i * 2.3) * 0.5 + 0.5) * r * 0.5 - r * 0.25;
+      ctx.beginPath(); ctx.arc(px, py, 0.6 + (i % 2) * 0.4, 0, TWO_PI); ctx.fill();
+    }
 
-    // Hurt flash — additive white on low HP hit
+    // — Nose — dark steel, not neon dot
+    ctx.fillStyle = `rgba(58, 62, 70, 1)`;
+    ctx.beginPath(); ctx.arc(r * 1.00, 0, 1.8, 0, TWO_PI); ctx.fill();
+    ctx.strokeStyle = `rgba(28, 32, 44, 0.9)`; ctx.lineWidth = 0.8; ctx.stroke();
+    // tiny pitot tube
+    ctx.strokeStyle = `rgba(58, 62, 70, 1)`; ctx.lineWidth = 1.0; ctx.beginPath(); ctx.moveTo(r * 1.00, 0); ctx.lineTo(r * 1.14, 0); ctx.stroke();
+
+    // Hurt — desaturated wash, not white flash
     if (hurt > 0.01) {
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = hurt * 0.42;
+      ctx.globalAlpha = hurt * 0.18;
+      ctx.fillStyle = `rgba(${stripe[0]}, ${stripe[1]}, ${stripe[2]}, 1)`;
       ctx.beginPath();
-      ctx.moveTo(r * 1.05, 0);
-      ctx.lineTo(r * 0.15, -r * 0.62);
-      ctx.lineTo(-r * 0.88, -r * 0.22);
-      ctx.lineTo(-r * 0.88, r * 0.22);
-      ctx.lineTo(r * 0.15, r * 0.62);
-      ctx.closePath();
-      ctx.fillStyle = '#fff';
+      ctx.moveTo(r * 1.02, 0); ctx.lineTo(r * 0.18, -r * 0.60); ctx.lineTo(-r * 0.86, -r * 0.20); ctx.lineTo(-r * 0.86, r * 0.20); ctx.lineTo(r * 0.18, r * 0.60); ctx.closePath();
       ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
     }
 
     ctx.restore();
 
-    // keep subtle sphere shading for depth on top of vector hull
-    drawSphereShading(ctx, x, y, this.radius * 0.72, hullDark[0], hullDark[1], hullDark[2]);
+    // No sphere shading — matte paper, keep just a faint AO
+    ctx.fillStyle = `rgba(10, 12, 18, 0.06)`;
+    ctx.beginPath();
+    ctx.ellipse(x + 0.8, y + 1.2, this.radius * 0.85, this.radius * 0.72, 0, 0, TWO_PI);
+    ctx.fill();
   }
 }
