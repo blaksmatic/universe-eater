@@ -163,7 +163,7 @@ function drawMock(time){
     // nose
     ctx.fillStyle='rgba(58,62,70,1)'; ctx.beginPath(); ctx.arc(r*1.00,0,1.8,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(28,32,44,0.9)'; ctx.lineWidth=0.8; ctx.stroke(); ctx.strokeStyle='rgba(58,62,70,1)'; ctx.lineWidth=1.0; ctx.beginPath(); ctx.moveTo(r*1.00,0); ctx.lineTo(r*1.14,0); ctx.stroke();
     ctx.restore();
-  })(cx, cy-10, Math.sin(time*0.6)*0.12);
+  })(cx, cy-10, (window._shipAng ?? Math.sin(time*0.6)*0.12));
   // orbit ring
   ctx.strokeStyle = mode==='amber' ? 'rgba(255,190,60,0.22)' : mode==='vector' ? 'rgba(90,255,140,0.18)' : 'rgba(90,200,255,0.18)';
   ctx.lineWidth=1; ctx.beginPath(); ctx.arc(cx,cy-10,70,0,Math.PI*2); ctx.stroke();
@@ -210,13 +210,30 @@ function drawMock(time){
   }
 }
 
+let pointerAng = 0;
+let hasPointer = false;
+canvas.addEventListener('pointermove', e=>{
+  const rct=canvas.getBoundingClientRect();
+  const sx=(e.clientX - rct.left)/rct.width * canvas.width;
+  const sy=(e.clientY - rct.top)/rct.height * canvas.height;
+  const cx=canvas.width*0.5, cy=canvas.height*0.5;
+  pointerAng = Math.atan2(sy - (cy-10), sx - cx);
+  hasPointer = true;
+});
+canvas.addEventListener('pointerleave', ()=> hasPointer=false);
+
 function frame(now){
   t=now*0.001;
+  // expose pointer angle to drawMock via global
+  window._shipAng = hasPointer ? pointerAng : Math.sin(t*0.6)*0.12;
   drawMock(t);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 setMode('amber');
+// update draw ship angle to use pointer
+const _origDrawShip = window._shipAng;
+
 </script>
 </body>
 </html>
