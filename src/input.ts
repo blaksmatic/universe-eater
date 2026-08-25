@@ -3,6 +3,18 @@ const keys: Record<string, boolean> = {};
 let dashKeyQueued = false;
 let dashSuppressUntil = 0;
 
+/** Dash suppression windows — tuned to block Space-confirm → dash carry-over (see runtime.ts:88). */
+export const DASH_SUPPRESS_MS = {
+  /** After choosing a draft (Enter/Space/click) — longest, covers levelUp → playing transition */
+  DRAFT_CONFIRM: 500,
+  /** After rerolling the draft (R) — shorter */
+  REROLL: 250,
+  /** After auto-queuing level-ups (combat → levelUp) — covers the engine tick */
+  LEVEL_UP_QUEUE: 600,
+  /** Touch dash double-tap guard */
+  TOUCH_GUARD: 300,
+} as const;
+
 export function suppressDashFor(ms: number): void {
   dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
 }

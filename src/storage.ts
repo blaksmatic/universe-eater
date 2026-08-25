@@ -1,8 +1,12 @@
+export type ParticleQuality = 'high' | 'medium' | 'low';
+
 export interface GameSettings {
   soundEnabled: boolean;
   musicEnabled: boolean;
   shakeEnabled: boolean;
   damageNumbersEnabled: boolean;
+  particleQuality: ParticleQuality;
+  reducedMotion: boolean;
 }
 
 export interface RunRecord {
@@ -38,6 +42,8 @@ const DEFAULT_SETTINGS: GameSettings = {
   musicEnabled: true,
   shakeEnabled: true,
   damageNumbersEnabled: true,
+  particleQuality: 'high',
+  reducedMotion: false,
 };
 
 const DEFAULT_RECORDS: PersistentRecords = {
@@ -79,7 +85,23 @@ let settingsCache: GameSettings | null = null;
 export function loadSettings(): GameSettings {
   if (!settingsCache) {
     const stored = readJson<GameSettings>(SETTINGS_KEY);
-    settingsCache = { ...DEFAULT_SETTINGS, ...stored };
+    const merged = { ...DEFAULT_SETTINGS, ...stored } as GameSettings;
+    // First-visit accessibility: honour OS prefers-reduced-motion if not explicitly stored.
+    if (stored?.reducedMotion === undefined && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      try {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          merged.reducedMotion = true;
+          merged.shakeEnabled = false;
+          if (merged.particleQuality === 'high') merged.particleQuality = 'medium';
+        }
+      } catch {
+        // ignore
+      }
+    }
+    // Migrate old saves that lack new keys
+    if ((merged as unknown as { particleQuality?: unknown }).particleQuality === undefined) merged.particleQuality = 'high';
+    if ((merged as unknown as { reducedMotion?: unknown }).reducedMotion === undefined) merged.reducedMotion = false;
+    settingsCache = merged;
   }
   return settingsCache;
 }

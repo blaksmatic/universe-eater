@@ -1,5 +1,6 @@
 import { MAP_WIDTH, MAP_HEIGHT, randomRange, TWO_PI } from './utils';
 import { Camera } from './camera';
+import { loadSettings } from './storage';
 
 const PARALLAX_FACTORS = [0.2, 0.5, 0.8] as const;
 
@@ -118,10 +119,19 @@ export class Background {
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
-    // Nebulae (furthest back)
-    for (const n of this.nebulae) {
+    // Nebulae (furthest back) — fewer when on low quality for fill-rate saving
+    let nebulaeCount = this.nebulae.length;
+    try {
+      const q = loadSettings().particleQuality;
+      if (q === 'low') nebulaeCount = 4;
+      else if (q === 'medium') nebulaeCount = 6;
+    } catch { /* ignore */ }
+    for (let ni = 0; ni < nebulaeCount; ni++) {
+      const n = this.nebulae[ni];
       const px = n.x - camera.x * 0.3;
       const py = n.y - camera.y * 0.3;
+      // Quick viewport cull for nebulae
+      if (px < -n.radius || px > camera.width + n.radius || py < -n.radius || py > camera.height + n.radius) continue;
       const gradient = ctx.createRadialGradient(px, py, 0, px, py, n.radius);
       gradient.addColorStop(0, `rgba(${n.color[0]}, ${n.color[1]}, ${n.color[2]}, ${n.alpha})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
@@ -136,22 +146,46 @@ export class Background {
     const speed = Math.sqrt(this.velocityX * this.velocityX + this.velocityY * this.velocityY);
     const streakFactors = [0, 0.03, 0.07]; // far stars don't streak, close ones do
 
+    // Quality gate — skip faintest layer on low, reduce halos
+    let quality: string = 'high';
+    let reduced = false;
+    try {
+      const s = loadSettings();
+      quality = s.particleQuality;
+      reduced = s.reducedMotion;
+    } catch { /* ignore */ }
+    const skipFarLayer = quality === 'low';
+    const skipGlow = quality === 'low' || reduced;
+
     for (const star of this.stars) {
+      if (skipFarLayer && star.layer === 0) continue;
       const factor = parallaxFactors[star.layer];
       const sx = star.x - camera.x * factor;
       const sy = star.y - camera.y * factor;
       let screenX = ((sx % camera.width) + camera.width) % camera.width;
       let screenY = ((sy % camera.height) + camera.height) % camera.height;
 
-      // Perspective scaling: stars near screen edges appear slightly larger
-      const offX = (screenX - cx) / cx; // -1..1
-      const offY = (screenY - cy) / cy;
-      const edgeDist = Math.sqrt(offX * offX + offY * offY); // 0 at center, ~1.4 at corners
-      const perspScale = 1 + edgeDist * 0.075 * (star.layer * 0.5);
-      const drawSize = star.size * perspScale;
+      // Perspective scaling: skip sqrt on low quality (flat size)
+      let drawSize: number;
+      let offX = 0;
+      let offY = 0;
+      if (quality === 'low') {
+        drawSize = star.size;
+      } else {
+        offX = (screenX - cx) / cx; // -1..1
+        offY = (screenY - cy) / cy;
+        const edgeDist = Math.sqrt(offX * offX + offY * offY); // 0 at center, ~1.4 at corners
+        const perspScale = 1 + edgeDist * 0.075 * (star.layer * 0.5);
+        drawSize = star.size * perspScale;
+      }
 
-      // Idle star drift
-      if (this.driftIntensity > 0.01) {
+      // Idle star drift — disabled on reducedMotion
+      if (!reduced && this.driftIntensity > 0.01) {
+        // Compute offX/offY if we skipped them above
+        if (quality === 'low') {
+          offX = (screenX - cx) / cx;
+          offY = (screenY - cy) / cy;
+        }
         const driftFactor = [5, 12, 20][star.layer];
         const oscillation = Math.sin(time * 0.4) * 0.5 + 0.5;
         screenX += offX * driftFactor * oscillation * this.driftIntensity;
@@ -165,8 +199,8 @@ export class Background {
       const dofAlpha = star.layer === 0 ? alpha * 0.55 : alpha;
       const [tr, tg, tb] = star.tint;
 
-      // Colored glow halo for foreground stars
-      if (star.layer === 2 && star.size > 1.8) {
+      // Colored glow halo for foreground stars — skip on low/reduced for fill-rate
+      if (!skipGlow && star.layer === 2 && star.size > 1.8) {
         const glowR = drawSize * 4;
         const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, glowR);
         glow.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha * 0.4})`);
@@ -197,15 +231,18 @@ export class Background {
       }
     }
 
-    // Cosmic dust
-    for (const d of this.dust) {
-      const screen = camera.worldToScreen(d.x, d.y);
-      if (screen.x < -10 || screen.x > camera.width + 10 ||
-          screen.y < -10 || screen.y > camera.height + 10) continue;
-      ctx.fillStyle = `rgba(150, 190, 255, ${d.alpha})`;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, d.size, 0, TWO_PI);
-      ctx.fill();
+    // Cosmic dust — skip on low quality (saves worldToScreen per dust)
+    const drawDust = quality !== 'low';
+    if (drawDust) {
+      for (const d of this.dust) {
+        const screen = camera.worldToScreen(d.x, d.y);
+        if (screen.x < -10 || screen.x > camera.width + 10 ||
+            screen.y < -10 || screen.y > camera.height + 10) continue;
+        ctx.fillStyle = `rgba(150, 190, 255, ${d.alpha})`;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, d.size, 0, TWO_PI);
+        ctx.fill();
+      }
     }
   }
 

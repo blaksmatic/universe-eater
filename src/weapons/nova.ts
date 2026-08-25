@@ -1,4 +1,4 @@
-import { wrappedDistance, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import { audio } from '../audio';
@@ -55,9 +55,10 @@ export class NovaBlast implements Weapon {
     if (this.isBlasting) {
       this.blastRadius += stats.expandSpeed * dt;
       if (!this.hasDealtDamage) {
+        const maxRadiusSq = stats.maxRadius * stats.maxRadius;
         for (const enemy of enemies) {
           if (enemy.dead) continue;
-          if (wrappedDistance(playerX, playerY, enemy.x, enemy.y) < stats.maxRadius) {
+          if (wrappedDistanceSquared(playerX, playerY, enemy.x, enemy.y) < maxRadiusSq) {
             hitEnemy(enemy, damage, modifiers);
           }
         }

@@ -51,6 +51,21 @@ export function wrappedDistance(x1: number, y1: number, x2: number, y2: number):
   return Math.sqrt(d.x * d.x + d.y * d.y);
 }
 
+export function wrappedDistanceSquared(x1: number, y1: number, x2: number, y2: number): number {
+  let dx = x2 - x1;
+  let dy = y2 - y1;
+  if (dx > MAP_WIDTH / 2) dx -= MAP_WIDTH;
+  if (dx < -MAP_WIDTH / 2) dx += MAP_WIDTH;
+  if (dy > MAP_HEIGHT / 2) dy -= MAP_HEIGHT;
+  if (dy < -MAP_HEIGHT / 2) dy += MAP_HEIGHT;
+  return dx * dx + dy * dy;
+}
+
+export function wrappedCirclesOverlap(x1: number, y1: number, r1: number, x2: number, y2: number, r2: number): boolean {
+  const r = r1 + r2;
+  return wrappedDistanceSquared(x1, y1, x2, y2) < r * r;
+}
+
 export function wrappedAngle(x1: number, y1: number, x2: number, y2: number): number {
   const d = wrappedDelta(x1, y1, x2, y2);
   return Math.atan2(d.y, d.x);

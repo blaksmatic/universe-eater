@@ -1,4 +1,4 @@
-import { wrappedAngle, wrappedDelta, wrappedDistance, TWO_PI } from '../utils';
+import { wrappedAngle, wrappedDelta, wrappedDistanceSquared, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import type { Enemy } from '../enemies';
 import { hitEnemySilent } from './shared';
@@ -76,10 +76,12 @@ export function applyBeamDamage(
   modifiers: import('./shared').WeaponModifiers,
 ): void {
   const angle = wrappedAngle(originX, originY, targetX, targetY);
+  const rangeSq = range * range;
   for (const enemy of enemies) {
     if (enemy.dead) continue;
-    const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
-    if (dist > range) continue;
+    const distSq = wrappedDistanceSquared(originX, originY, enemy.x, enemy.y);
+    if (distSq > rangeSq) continue;
+    const dist = Math.sqrt(distSq);
     const eAngle = wrappedAngle(originX, originY, enemy.x, enemy.y);
     const diff = Math.abs(eAngle - angle);
     const normDiff = Math.min(diff, TWO_PI - diff);

@@ -68,12 +68,16 @@ export class WeaponManager {
     return this.weapons.find((w) => w.name === name);
   }
 
+  /** Clamp damage to 2.8× (prevents multiplicative creep from doctrines + overclock). */
   multiplyDamage(multiplier: number): void {
-    this.modifiers.damageMultiplier *= multiplier;
+    const next = this.modifiers.damageMultiplier * multiplier;
+    this.modifiers.damageMultiplier = Math.max(0.5, Math.min(2.8, next));
   }
 
+  /** Clamp cooldown to 0.4× (60% reduction floor) – see `docs/GAME_DESIGN.md:30`. */
   multiplyCooldown(multiplier: number): void {
-    this.modifiers.cooldownMultiplier *= multiplier;
+    const next = this.modifiers.cooldownMultiplier * multiplier;
+    this.modifiers.cooldownMultiplier = Math.max(0.4, Math.min(2.0, next));
   }
 
   allMaxed(): boolean {

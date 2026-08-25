@@ -1,4 +1,4 @@
-import { wrappedDistance } from '../utils';
+import { wrappedDistanceSquared } from '../utils';
 import { Enemy } from '../enemies';
 
 export type OnFireCallback = (angle: number) => void;
@@ -33,12 +33,13 @@ export function hitEnemySilent(enemy: Enemy, amount: number, _modifiers: WeaponM
 
 export function getNearestEnemy(originX: number, originY: number, enemies: Enemy[], range: number): Enemy | null {
   let nearest: Enemy | null = null;
-  let nearestDist = Infinity;
+  let nearestDistSq = range * range;
+  // Use squared distance to avoid sqrt per enemy; only sqrt would be needed if we cared about exact distance, but ordering by squared is identical
   for (const enemy of enemies) {
     if (enemy.dead) continue;
-    const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
-    if (dist < range && dist < nearestDist) {
-      nearestDist = dist;
+    const distSq = wrappedDistanceSquared(originX, originY, enemy.x, enemy.y);
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq;
       nearest = enemy;
     }
   }

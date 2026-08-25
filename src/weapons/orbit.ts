@@ -1,4 +1,4 @@
-import { wrappedDistance, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import type { Weapon, WeaponModifiers } from './shared';
@@ -53,9 +53,11 @@ export class OrbitShield implements Weapon {
       const px = playerX + Math.cos(a) * stats.orbitRadius;
       const py = playerY + Math.sin(a) * stats.orbitRadius;
 
+      const hitRadiusSq = stats.hitRadius;
       for (const enemy of enemies) {
         if (enemy.dead) continue;
-        if (wrappedDistance(px, py, enemy.x, enemy.y) < stats.hitRadius + enemy.radius) {
+        const r = hitRadiusSq + enemy.radius;
+        if (wrappedDistanceSquared(px, py, enemy.x, enemy.y) < r * r) {
           hitEnemySilent(enemy, damage * dt * 10, modifiers);
         }
       }

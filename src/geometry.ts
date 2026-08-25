@@ -1,5 +1,6 @@
 import { Camera } from './camera';
 import { randomRange, TWO_PI, tracePoly } from './utils';
+import { loadSettings } from './storage';
 
 // Neon palette
 const NEON: [number, number, number][] = [
@@ -68,8 +69,16 @@ export class BackgroundGeometry {
   }
 
   update(dt: number): void {
+    let speedMul = 1;
+    try {
+      const { reducedMotion, particleQuality } = loadSettings();
+      if (reducedMotion) speedMul = 0.35;
+      else if (particleQuality === 'low') speedMul = 0.6;
+    } catch {
+      // storage not ready in tests — fall back to full speed
+    }
     for (const s of this.shapes) {
-      s.rotation += s.rotSpeed * dt;
+      s.rotation += s.rotSpeed * dt * speedMul;
     }
   }
 
@@ -80,15 +89,31 @@ export class BackgroundGeometry {
     playerX: number,
     playerY: number,
   ): void {
-    this.drawGrid(ctx, camera, time);
-    this.drawRadials(ctx, camera, time, playerX, playerY);
-    this.drawFloatingShapes(ctx, camera, time);
-    this.drawRings(ctx, camera, time, playerX, playerY);
+    let quality: string = 'high';
+    let reduced = false;
+    try {
+      const s = loadSettings();
+      quality = s.particleQuality;
+      reduced = s.reducedMotion;
+    } catch { /* ignore */ }
+    const low = quality === 'low';
+
+    // Adaptive: skip expensive layers on low
+    this.drawGrid(ctx, camera, time, low ? 4 : GRID_WAVE_SEGMENTS);
+    if (!low || !reduced) {
+      // Radials halved on low (12 vs 24) and rings halved
+      this.drawRadials(ctx, camera, time, playerX, playerY, low ? 12 : NUM_RADIALS);
+    }
+    // Floating shapes: half count on low, skip entirely on low+reduced
+    if (!(low && reduced)) {
+      this.drawFloatingShapes(ctx, camera, time, low ? 15 : this.shapes.length);
+    }
+    this.drawRings(ctx, camera, time, playerX, playerY, low ? 3 : RING_DEFS.length);
   }
 
   // ── Grid: wavy neon lines with glow ───────────────────────────
 
-  private drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
+  private drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, time: number, segsOverride?: number): void {
     const sp = GRID_SPACING;
     const offX = (camera.x * GRID_PARALLAX) % sp;
     const offY = (camera.y * GRID_PARALLAX) % sp;
@@ -99,24 +124,28 @@ export class BackgroundGeometry {
     // Glow pass (thick, dim)
     ctx.lineWidth = 5;
     ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseAlpha * 0.3})`;
-    this.traceGridPaths(ctx, camera, sp, offX, offY, time);
+    this.traceGridPaths(ctx, camera, sp, offX, offY, time, segsOverride);
     ctx.stroke();
 
     // Core pass (thin, bright)
     ctx.lineWidth = 1;
     ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseAlpha})`;
-    this.traceGridPaths(ctx, camera, sp, offX, offY, time);
+    this.traceGridPaths(ctx, camera, sp, offX, offY, time, segsOverride);
     ctx.stroke();
 
-    // Intersection dots
-    ctx.fillStyle = `rgba(${r + 50}, ${g + 70}, ${b}, ${baseAlpha * 1.8})`;
-    for (let gx = -offX - sp; gx <= camera.width + sp; gx += sp) {
-      for (let gy = -offY - sp; gy <= camera.height + sp; gy += sp) {
-        const wx = gx + Math.sin(gy * 0.008 + time * 0.4) * GRID_WAVE_AMP;
-        const wy = gy + Math.sin(gx * 0.008 + time * 0.35) * GRID_WAVE_AMP;
-        ctx.beginPath();
-        ctx.arc(wx, wy, 1.8, 0, TWO_PI);
-        ctx.fill();
+    // Intersection dots — skip on low for fill-rate
+    let skipDots = false;
+    try { skipDots = loadSettings().particleQuality === 'low'; } catch { /* ignore */ }
+    if (!skipDots) {
+      ctx.fillStyle = `rgba(${r + 50}, ${g + 70}, ${b}, ${baseAlpha * 1.8})`;
+      for (let gx = -offX - sp; gx <= camera.width + sp; gx += sp) {
+        for (let gy = -offY - sp; gy <= camera.height + sp; gy += sp) {
+          const wx = gx + Math.sin(gy * 0.008 + time * 0.4) * GRID_WAVE_AMP;
+          const wy = gy + Math.sin(gx * 0.008 + time * 0.35) * GRID_WAVE_AMP;
+          ctx.beginPath();
+          ctx.arc(wx, wy, 1.8, 0, TWO_PI);
+          ctx.fill();
+        }
       }
     }
   }
@@ -128,8 +157,9 @@ export class BackgroundGeometry {
     offX: number,
     offY: number,
     time: number,
+    segsOverride?: number,
   ): void {
-    const segs = GRID_WAVE_SEGMENTS;
+    const segs = segsOverride ?? GRID_WAVE_SEGMENTS;
     const amp = GRID_WAVE_AMP;
     ctx.beginPath();
 
@@ -164,7 +194,9 @@ export class BackgroundGeometry {
     time: number,
     px: number,
     py: number,
+    numOverride?: number,
   ): void {
+    const count = numOverride ?? NUM_RADIALS;
     const screen = camera.worldToScreen(px, py);
     const cx = screen.x;
     const cy = screen.y;
@@ -173,8 +205,8 @@ export class BackgroundGeometry {
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
 
-    for (let i = 0; i < NUM_RADIALS; i++) {
-      const angle = baseRot + (i / NUM_RADIALS) * TWO_PI;
+    for (let i = 0; i < count; i++) {
+      const angle = baseRot + (i / count) * TWO_PI;
       const pulse = 0.5 + 0.5 * Math.sin(time * 0.8 + i * 0.5);
       const len = RADIAL_MAX_LEN * (0.5 + 0.5 * pulse);
       const alpha = 0.028 * pulse;
@@ -196,8 +228,11 @@ export class BackgroundGeometry {
     ctx: CanvasRenderingContext2D,
     camera: Camera,
     time: number,
+    maxCount?: number,
   ): void {
-    for (const s of this.shapes) {
+    const limit = maxCount ?? this.shapes.length;
+    for (let idx = 0; idx < limit; idx++) {
+      const s = this.shapes[idx];
       const sx = s.x - camera.x * s.parallax;
       const sy = s.y - camera.y * s.parallax;
       const padW = camera.width + 400;
@@ -222,12 +257,15 @@ export class BackgroundGeometry {
     time: number,
     px: number,
     py: number,
+    maxRings?: number,
   ): void {
     const screen = camera.worldToScreen(px, py);
     const cx = screen.x;
     const cy = screen.y;
 
-    for (const ring of RING_DEFS) {
+    const limit = maxRings ?? RING_DEFS.length;
+    for (let i = 0; i < limit; i++) {
+      const ring = RING_DEFS[i];
       const breathe = 1 + 0.08 * Math.sin(time * 0.6 + ring.radius * 0.01);
       const r = ring.radius * breathe;
       const rot = time * ring.speed;

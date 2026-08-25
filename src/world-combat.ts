@@ -2,7 +2,7 @@ import { Camera } from './camera';
 import { EnemySpawner } from './enemies';
 import { ParticleSystem } from './particles';
 import { Player } from './player';
-import { wrappedDistance } from './utils';
+import { wrappedDistanceSquared, wrappedCirclesOverlap } from './utils';
 import { audio } from './audio';
 import { loadSettings } from './storage';
 
@@ -56,16 +56,20 @@ export class WorldCombatSystem {
 
   applyCollisions(): void {
     const hpBefore = this.player.hp;
+    const px = this.player.x;
+    const py = this.player.y;
+    const pr = this.player.radius;
 
     for (const enemy of this.spawner.enemies) {
       if (enemy.dead) continue;
 
-      if (wrappedDistance(this.player.x, this.player.y, enemy.x, enemy.y) < this.player.radius + enemy.radius) {
+      if (wrappedCirclesOverlap(px, py, pr, enemy.x, enemy.y, enemy.radius)) {
         this.player.takeContactHit(CONTACT_HIT_DAMAGE * enemy.damageMultiplier);
       }
 
+      // Inline projectile checks with squared distance to avoid sqrt + allocation
       for (const projectile of enemy.projectiles) {
-        if (wrappedDistance(this.player.x, this.player.y, projectile.x, projectile.y) < this.player.radius + projectile.radius) {
+        if (wrappedCirclesOverlap(px, py, pr, projectile.x, projectile.y, projectile.radius)) {
           this.player.takeDamage(projectile.damage);
           projectile.lifetime = 0;
         }
@@ -89,7 +93,12 @@ export class WorldCombatSystem {
     let bossKilled = false;
 
     // Snapshot dead enemies first — remains (splitter shards) get appended below.
-    const deadEnemies = this.spawner.enemies.filter(e => e.dead);
+    // Manual collect to avoid filter allocation when none dead (common case)
+    let deadCount = 0;
+    for (const e of this.spawner.enemies) if (e.dead) deadCount++;
+    if (deadCount === 0) return { levelUps, kills, bossKilled };
+    const deadEnemies: typeof this.spawner.enemies = [];
+    for (const e of this.spawner.enemies) if (e.dead) deadEnemies.push(e);
 
     for (const enemy of deadEnemies) {
       this.particles.spawnDeath(enemy.x, enemy.y, enemy.radius, enemy.outlineColor);
@@ -164,17 +173,22 @@ export class WorldCombatSystem {
     const radius = LEVEL_UP_BLAST_RADIUS + (levelUps - 1) * 50;
     const damage = LEVEL_UP_BLAST_DAMAGE + (levelUps - 1) * 35;
 
+    const px = this.player.x;
+    const py = this.player.y;
+    const radiusSq = radius * radius;
     for (const enemy of this.spawner.enemies) {
       if (enemy.dead) continue;
 
-      const distance = wrappedDistance(this.player.x, this.player.y, enemy.x, enemy.y);
-      if (distance > radius + enemy.radius) continue;
+      const distSq = wrappedDistanceSquared(px, py, enemy.x, enemy.y);
+      const maxDist = radius + enemy.radius;
+      if (distSq > maxDist * maxDist) continue;
 
+      const distance = Math.sqrt(distSq);
       const falloff = 1 - Math.min(0.7, distance / radius * 0.7);
       enemy.takeDamage(damage * falloff);
 
       for (const projectile of enemy.projectiles) {
-        if (wrappedDistance(this.player.x, this.player.y, projectile.x, projectile.y) <= radius) {
+        if (wrappedDistanceSquared(px, py, projectile.x, projectile.y) <= radiusSq) {
           projectile.lifetime = 0;
         }
       }

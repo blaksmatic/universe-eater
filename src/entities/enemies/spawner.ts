@@ -259,7 +259,13 @@ export class EnemySpawner {
   }
 
   removeDead(): void {
-    this.enemies = this.enemies.filter(e => !e.dead);
+    // In-place compact to avoid allocating a new array each frame (called from world.updatePlaying)
+    let write = 0;
+    for (let i = 0; i < this.enemies.length; i++) {
+      const e = this.enemies[i];
+      if (!e.dead) this.enemies[write++] = e;
+    }
+    this.enemies.length = write;
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {

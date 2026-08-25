@@ -1,4 +1,4 @@
-import { wrappedDistance, wrappedAngle, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, wrappedAngle, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import { audio } from '../audio';
@@ -89,7 +89,12 @@ export class SeekerSwarm implements Weapon {
   }
 
   private pickTarget(px: number, py: number, enemies: Enemy[], index: number): Enemy | null {
-    const alive = enemies.filter((e) => !e.dead && wrappedDistance(px, py, e.x, e.y) < 700);
+    const rangeSq = 700 * 700;
+    const alive: Enemy[] = [];
+    for (const e of enemies) {
+      if (e.dead) continue;
+      if (wrappedDistanceSquared(px, py, e.x, e.y) < rangeSq) alive.push(e);
+    }
     if (alive.length === 0) return null;
     return alive[index % alive.length];
   }
@@ -97,7 +102,8 @@ export class SeekerSwarm implements Weapon {
   private detonate(missile: Missile, stats: ReturnType<typeof this.computeStats>, damage: number, enemies: Enemy[], modifiers: WeaponModifiers): void {
     for (const enemy of enemies) {
       if (enemy.dead) continue;
-      if (wrappedDistance(missile.x, missile.y, enemy.x, enemy.y) < stats.aoeRadius + enemy.radius) {
+      const r = stats.aoeRadius + enemy.radius;
+      if (wrappedDistanceSquared(missile.x, missile.y, enemy.x, enemy.y) < r * r) {
         hitEnemy(enemy, damage, modifiers);
       }
     }
@@ -154,10 +160,13 @@ export class SeekerSwarm implements Weapon {
         m.vx = Math.cos(turned) * speed;
         m.vy = Math.sin(turned) * speed;
 
-        if (m.age > 0.15 && wrappedDistance(m.x, m.y, m.target.x, m.target.y) < m.target.radius + 10) {
-          m.age = stats.maxLifetime + 1;
-          this.detonate(m, stats, stats.damage * modifiers.damageMultiplier, enemies, modifiers);
-          continue;
+        if (m.age > 0.15) {
+          const r = m.target.radius + 10;
+          if (wrappedDistanceSquared(m.x, m.y, m.target.x, m.target.y) < r * r) {
+            m.age = stats.maxLifetime + 1;
+            this.detonate(m, stats, stats.damage * modifiers.damageMultiplier, enemies, modifiers);
+            continue;
+          }
         }
       }
 
@@ -167,9 +176,22 @@ export class SeekerSwarm implements Weapon {
       m.y += m.vy * dt;
     }
 
-    this.missiles = this.missiles.filter((m) => m.age < stats.maxLifetime);
+    // Compact missiles in-place (avoid GC)
+    {
+      let w = 0;
+      for (let i = 0; i < this.missiles.length; i++) {
+        if (this.missiles[i].age < stats.maxLifetime) this.missiles[w++] = this.missiles[i];
+      }
+      this.missiles.length = w;
+    }
     for (const ex of this.explosions) ex.age += dt;
-    this.explosions = this.explosions.filter((ex) => ex.age < 0.3);
+    {
+      let w = 0;
+      for (let i = 0; i < this.explosions.length; i++) {
+        if (this.explosions[i].age < 0.3) this.explosions[w++] = this.explosions[i];
+      }
+      this.explosions.length = w;
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _playerX: number, _playerY: number, _playerRadius: number): void {

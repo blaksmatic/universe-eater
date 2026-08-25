@@ -1,4 +1,4 @@
-import { wrappedDistance, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import { audio } from '../audio';
@@ -74,12 +74,12 @@ export class ArcReactor implements Weapon {
           damage *= stats.falloff;
 
           let next: Enemy | null = null;
-          let nextDist = Infinity;
+          let nextDistSq = stats.chainRange * stats.chainRange;
           for (const enemy of enemies) {
             if (enemy.dead || visited.has(enemy)) continue;
-            const d = wrappedDistance(fromX, fromY, enemy.x, enemy.y);
-            if (d < stats.chainRange && d < nextDist) {
-              nextDist = d;
+            const dSq = wrappedDistanceSquared(fromX, fromY, enemy.x, enemy.y);
+            if (dSq < nextDistSq) {
+              nextDistSq = dSq;
               next = enemy;
             }
           }
@@ -91,7 +91,13 @@ export class ArcReactor implements Weapon {
     }
 
     for (const s of this.segments) s.age += dt;
-    this.segments = this.segments.filter((s) => s.age < 0.22);
+    {
+      let w = 0;
+      for (let i = 0; i < this.segments.length; i++) {
+        if (this.segments[i].age < 0.22) this.segments[w++] = this.segments[i];
+      }
+      this.segments.length = w;
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _playerX: number, _playerY: number, _playerRadius: number): void {

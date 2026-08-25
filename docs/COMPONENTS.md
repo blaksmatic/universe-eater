@@ -35,16 +35,21 @@ Prior monoliths: `ui.ts` 1471 lines, `weapons.ts` 1186, `enemies.ts` 1172 — si
 | **Ids** | `src/ids.ts` | `WeaponId/Name`, `PassiveId/Name`, `UpgradeTag`, `DoctrineId`, `MutatorId`, `PASSIVE_CAPS` | — |
 | **Utils** | `src/utils.ts` | `MAP_*`, `wrap*`, `TWO_PI`, `tracePoly`, `roundedRect`, `formatTime`, easing | — |
 
-## Barrel layers
+## Barrel layers (current vs planned)
 
-- `src/core/index.ts` → `game, ids, mutators, storage, upgrades, runtime`
-- `src/entities/index.ts` → `player, enemies, weapons`
-- `src/render/index.ts` → `camera, background, geometry, particles, three-view, world-renderer`
-- `src/systems/index.ts` → `world, world-combat, world-motion, audio, input`
+Current (v0.3.0) — flat `src/*.ts` plus realized barrels:
+- `src/entities/enemies/index.ts` → `enemy, spawner, types`
+- `src/weapons/index.ts` → `shared, laser, orbit, nova, escort, seeker, arc, singularity, manager`
 - `src/weapons/shared.ts` → `Weapon`, `WeaponModifiers`, `hitEnemy`, `getNearestEnemy`
 - `src/ui/{icons,theme}.ts` → icons + design system
+- Top-level re-exports `src/enemies.ts` → `src/entities/enemies` and `src/weapons.ts` → `src/weapons/*` kept for back-compat
 
-New code should import from barrels (`from '@/core'` if path alias added, or `from './core'` relatively); legacy `from './weapons'` imports remain valid via retained files.
+Planned (not yet materialized):
+- `src/core/index.ts` → `game, ids, mutators, storage, upgrades, runtime`
+- `src/systems/index.ts` → `world, world-combat, world-motion, audio, input`
+- `src/render/index.ts` → `camera, background, geometry, particles, three-view, world-renderer`
+
+New code should import from realized barrels; legacy `from './weapons'` imports remain valid via retained shims. When `src/core` etc land, prefer `from './core'`.
 
 ## UI split details
 

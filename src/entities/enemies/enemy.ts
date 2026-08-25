@@ -1,4 +1,4 @@
-import { wrappedAngle, wrappedDistance, randomRange, wrapPosition, drawSphereShading, TWO_PI, tracePoly, easeOutBack } from '../../utils';
+import { wrappedAngle, wrappedDistance, randomRange, drawSphereShading, TWO_PI, tracePoly, easeOutBack, MAP_WIDTH, MAP_HEIGHT } from '../../utils';
 import { Camera } from '../../camera';
 import {
   BOSS_BASE_HP,
@@ -259,9 +259,11 @@ export class Enemy {
         break;
     }
 
-    const wrapped = wrapPosition(this.x, this.y);
-    this.x = wrapped.x;
-    this.y = wrapped.y;
+    // Inline wrap to avoid per-enemy object allocation (hot path: ~100 enemies × 60fps)
+    if (this.x < 0) this.x += MAP_WIDTH;
+    else if (this.x >= MAP_WIDTH) this.x -= MAP_WIDTH;
+    if (this.y < 0) this.y += MAP_HEIGHT;
+    else if (this.y >= MAP_HEIGHT) this.y -= MAP_HEIGHT;
 
     this.updateProjectiles(dt);
   }
@@ -347,13 +349,22 @@ export class Enemy {
 
   private updateProjectiles(dt: number): void {
     if (this.projectiles.length === 0) return;
-    for (const p of this.projectiles) {
-      const wrappedProjectile = wrapPosition(p.x + p.vx * dt, p.y + p.vy * dt);
-      p.x = wrappedProjectile.x;
-      p.y = wrappedProjectile.y;
+    let write = 0;
+    for (let i = 0; i < this.projectiles.length; i++) {
+      const p = this.projectiles[i];
+      let nx = p.x + p.vx * dt;
+      let ny = p.y + p.vy * dt;
+      // Inline wrap without allocation
+      if (nx < 0) nx += MAP_WIDTH;
+      else if (nx >= MAP_WIDTH) nx -= MAP_WIDTH;
+      if (ny < 0) ny += MAP_HEIGHT;
+      else if (ny >= MAP_HEIGHT) ny -= MAP_HEIGHT;
+      p.x = nx;
+      p.y = ny;
       p.lifetime -= dt;
+      if (p.lifetime > 0) this.projectiles[write++] = p;
     }
-    this.projectiles = this.projectiles.filter(p => p.lifetime > 0);
+    this.projectiles.length = write;
   }
 
   takeDamage(amount: number): void {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Enemy, EnemyType } from './enemies';
 import { GameWorld } from './world';
 import { wrappedAngle } from './utils';
+import { loadSettings } from './storage';
 
 type LitMaterial = THREE.MeshLambertMaterial;
 type DetailMode = 'full' | 'lite';
@@ -328,13 +329,48 @@ export class ThreeEntityRenderer {
     this.composer?.setSize(width, height);
   }
 
+  /** Release all pooled visuals and hide player — called on run reset / quit. */
+  clear(): void {
+    for (const visual of this.enemyVisuals.values()) {
+      visual.group.visible = false;
+      this.enemyPools[visual.detail][visual.type].push(visual);
+    }
+    this.enemyVisuals.clear();
+    this.playerVisual.group.visible = false;
+  }
+
+  /** Fully dispose WebGL resources (call on page unload or WebGL context loss). */
+  dispose(): void {
+    try {
+      this.clear();
+      this.renderer.dispose();
+      const el = this.renderer.domElement;
+      el.parentElement?.removeChild(el);
+      for (const pool of Object.values(this.enemyPools)) {
+        for (const list of Object.values(pool)) list.length = 0;
+      }
+      this.scene.clear();
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
   render(world: GameWorld | null, time: number): void {
     this.applyAdaptiveQuality(world?.spawner.enemies.length ?? 0);
 
     if (this.dustPoints) {
-      this.dustPoints.rotation.z = time * 0.008;
-      this.dustPoints.position.x = Math.sin(time * 0.05) * 30;
-      this.dustPoints.position.y = Math.cos(time * 0.04) * 20;
+      let dustMul = 1;
+      try {
+        const s = loadSettings();
+        if (s.reducedMotion) dustMul = 0.25;
+        else if (s.particleQuality === 'low') dustMul = 0.5;
+      } catch {
+        // ignore
+      }
+      this.dustPoints.rotation.z = time * 0.008 * dustMul;
+      this.dustPoints.position.x = Math.sin(time * 0.05 * dustMul) * 30;
+      this.dustPoints.position.y = Math.cos(time * 0.04 * dustMul) * 20;
+      this.dustPoints.visible = loadSettings().particleQuality !== 'low' || (world?.spawner.enemies.length ?? 0) < 20;
     }
 
     if (!world) {
@@ -529,19 +565,39 @@ export class ThreeEntityRenderer {
   }
 
   private applyAdaptiveQuality(enemyCount: number): void {
+    // User quality pref biases the thresholds
+    let qualityBias = 0;
+    try {
+      const q = loadSettings().particleQuality;
+      if (q === 'low') qualityBias = -8;
+      else if (q === 'medium') qualityBias = -4;
+      if (loadSettings().reducedMotion) qualityBias -= 4;
+    } catch {
+      // ignore
+    }
+    const enterThreshold = REDUCED_DETAIL_ENTER_THRESHOLD + qualityBias;
+    const exitThreshold = REDUCED_DETAIL_EXIT_THRESHOLD + qualityBias;
     const nextDetailMode: DetailMode = this.detailMode === 'full'
-      ? (enemyCount >= REDUCED_DETAIL_ENTER_THRESHOLD ? 'lite' : 'full')
-      : (enemyCount <= REDUCED_DETAIL_EXIT_THRESHOLD ? 'full' : 'lite');
+      ? (enemyCount >= enterThreshold ? 'lite' : 'full')
+      : (enemyCount <= exitThreshold ? 'full' : 'lite');
     if (nextDetailMode !== this.detailMode) {
       this.detailMode = nextDetailMode;
       this.recycleActiveEnemyVisuals();
     }
 
-    const pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD
+    let pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD
       ? 0.62
       : enemyCount >= REDUCED_PIXEL_RATIO_THRESHOLD
         ? 0.8
         : 1;
+    try {
+      const q = loadSettings().particleQuality;
+      if (q === 'low') pixelRatioScale *= 0.75;
+      else if (q === 'medium') pixelRatioScale *= 0.88;
+      if (loadSettings().reducedMotion) pixelRatioScale *= 0.85;
+    } catch {
+      // ignore
+    }
     this.updatePixelRatio(pixelRatioScale);
 
     // Sustained slow frames: drop bloom before anything else.

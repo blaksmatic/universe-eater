@@ -1,4 +1,4 @@
-import { wrappedDistance, wrappedAngle, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, wrappedAngle, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import { audio } from '../audio';
@@ -93,15 +93,19 @@ export class Singularity implements Weapon {
       case 'active': {
         this.state.age += dt;
 
+        const pullRadius = stats.pullRadius;
+        const dpsRadius = pullRadius * 0.62;
         for (const enemy of enemies) {
           if (enemy.dead) continue;
-          const dist = wrappedDistance(this.state.x, this.state.y, enemy.x, enemy.y);
-          if (dist < stats.pullRadius + enemy.radius) {
+          const distSq = wrappedDistanceSquared(this.state.x, this.state.y, enemy.x, enemy.y);
+          const maxDist = pullRadius + enemy.radius;
+          if (distSq < maxDist * maxDist) {
+            const dist = Math.sqrt(distSq);
             const pullAngle = wrappedAngle(enemy.x, enemy.y, this.state.x, this.state.y);
-            const strength = stats.pullStrength * (1 - Math.min(0.65, dist / stats.pullRadius));
+            const strength = stats.pullStrength * (1 - Math.min(0.65, dist / pullRadius));
             enemy.x += Math.cos(pullAngle) * strength * dt;
             enemy.y += Math.sin(pullAngle) * strength * dt;
-            if (dist < stats.pullRadius * 0.62) {
+            if (dist < dpsRadius) {
               hitEnemySilent(enemy, stats.dps * modifiers.damageMultiplier * dt, modifiers);
             }
           }
@@ -111,7 +115,8 @@ export class Singularity implements Weapon {
           const collapseRadius = stats.pullRadius * stats.collapseRadiusMul;
           for (const enemy of enemies) {
             if (enemy.dead) continue;
-            if (wrappedDistance(this.state.x, this.state.y, enemy.x, enemy.y) < collapseRadius + enemy.radius) {
+            const r = collapseRadius + enemy.radius;
+            if (wrappedDistanceSquared(this.state.x, this.state.y, enemy.x, enemy.y) < r * r) {
               hitEnemy(enemy, stats.collapseDamage * modifiers.damageMultiplier, modifiers);
             }
           }

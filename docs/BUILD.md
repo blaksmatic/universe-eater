@@ -20,10 +20,10 @@ npx playwright install chromium   # only if you run automated tests
 | `npm run build` | `esbuild src/main.ts --bundle --outfile=dist/bundle.js --sourcemap` + `node build-standalone.js` → `dist/universe-eater.html` |
 | `npm run typecheck` | `tsc --noEmit` (strict, `noUnusedLocals`, `noUnusedParameters`) |
 | `npm run build:wx` | WeChat mini-game bundle → `wx/bundle.js` (guards `window`/`localStorage`/`navigator`) |
-| `npm run serve` | `npx serve . -p 3000` |
-| `npm test` | Playwright harness — requires server on `:3456` |
-| `npm run test:smoke` | Smoke subset |
-| `npm run test:qa` | Edge-case harness `scripts/qa-edge.mjs` |
+| `npm run serve` | `npx serve . -p 3000` (dev default) |
+| `npm test` | Playwright harness — requires server on `:3456` (`npx serve . -p 3456` in second terminal) |
+| `npm run test:smoke` | Smoke subset (also expects `:3456`) |
+| `npm run test:qa` | Edge-case harness `scripts/qa-edge.mjs` (expects `:3456`) |
 
 ## Dev loop
 
@@ -60,7 +60,7 @@ Bundler is invoked via CLI in `package.json` (no `esbuild.config.js`). Key flags
 
 ## Troubleshooting
 
-- **Port in use**: `npm run serve` defaults to 3000; `playtest` expects 3456 — start `npx serve . -p 3456` in another terminal.
+- **Port mismatch**: `npm run dev` / `npm run serve` defaults to **3000**; the Playwright harness (`npm test` / `scripts/playtest.mjs` / `balance-boss.mjs`) expects **3456** — start `npx serve . -p 3456` in another terminal when running automated tests. `BASE_URL=http://localhost:3000/index.html npm test` can override.
 - **Three.js fallback**: `runtime.ts:34` catches `ThreeEntityRenderer` construction; game runs 2D-only if WebGL fails.
 - **Audio unlock**: `runtime.unlockAudioOnce` must be called from user gesture; autoplay without gesture stays muted (by design).
 - **WeChat guards**: never access `window`/`localStorage`/`navigator`/`document` at top-level without `typeof window !== 'undefined'` check — see `storage.ts`, `i18n.ts`.

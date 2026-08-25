@@ -1,5 +1,5 @@
 import { isKeyDown, touch, consumeDashRequest, triggerHaptic } from './input';
-import { MAP_WIDTH, MAP_HEIGHT, wrapPosition, TWO_PI } from './utils';
+import { MAP_WIDTH, MAP_HEIGHT, TWO_PI } from './utils';
 import { Camera } from './camera';
 import { audio } from './audio';
 
@@ -254,9 +254,10 @@ export class Player {
       this.y += dy * this.speed * dt;
     }
 
-    const wrapped = wrapPosition(this.x, this.y);
-    this.x = wrapped.x;
-    this.y = wrapped.y;
+    if (this.x < 0) this.x += MAP_WIDTH;
+    else if (this.x >= MAP_WIDTH) this.x -= MAP_WIDTH;
+    if (this.y < 0) this.y += MAP_HEIGHT;
+    else if (this.y >= MAP_HEIGHT) this.y -= MAP_HEIGHT;
   }
 
   private dxNonZero(dx: number, dy: number): boolean {

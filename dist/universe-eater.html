@@ -27316,8 +27316,13 @@ void main() {
       settingMusic: "\u97F3\u4E50",
       settingShake: "\u5C4F\u5E55\u9707\u52A8",
       settingNumbers: "\u4F24\u5BB3\u6570\u5B57",
+      settingParticles: "\u7C92\u5B50\u8D28\u91CF",
+      settingReducedMotion: "\u51CF\u5C11\u52A8\u6548",
       toggleOn: "\u5F00",
       toggleOff: "\u5173",
+      qualityHigh: "\u9AD8",
+      qualityMedium: "\u4E2D",
+      qualityLow: "\u4F4E",
       resumeBtn: "\u7EE7\u7EED\u6218\u6597",
       restartBtn: "\u91CD\u65B0\u5F00\u59CB",
       quitBtn: "\u56DE\u5230\u6807\u9898",
@@ -27369,8 +27374,13 @@ void main() {
       settingMusic: "Music",
       settingShake: "Screen shake",
       settingNumbers: "Damage numbers",
+      settingParticles: "Particles",
+      settingReducedMotion: "Reduced motion",
       toggleOn: "ON",
       toggleOff: "OFF",
+      qualityHigh: "HIGH",
+      qualityMedium: "MED",
+      qualityLow: "LOW",
       resumeBtn: "RESUME",
       restartBtn: "RESTART RUN",
       quitBtn: "QUIT TO TITLE",
@@ -28106,6 +28116,19 @@ void main() {
     const d = wrappedDelta(x1, y1, x2, y2);
     return Math.sqrt(d.x * d.x + d.y * d.y);
   }
+  function wrappedDistanceSquared(x1, y1, x2, y2) {
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    if (dx > MAP_WIDTH / 2) dx -= MAP_WIDTH;
+    if (dx < -MAP_WIDTH / 2) dx += MAP_WIDTH;
+    if (dy > MAP_HEIGHT / 2) dy -= MAP_HEIGHT;
+    if (dy < -MAP_HEIGHT / 2) dy += MAP_HEIGHT;
+    return dx * dx + dy * dy;
+  }
+  function wrappedCirclesOverlap(x1, y1, r1, x2, y2, r2) {
+    const r = r1 + r2;
+    return wrappedDistanceSquared(x1, y1, x2, y2) < r * r;
+  }
   function wrappedAngle(x1, y1, x2, y2) {
     const d = wrappedDelta(x1, y1, x2, y2);
     return Math.atan2(d.y, d.x);
@@ -28173,6 +28196,16 @@ void main() {
   var keys = {};
   var dashKeyQueued = false;
   var dashSuppressUntil = 0;
+  var DASH_SUPPRESS_MS = {
+    /** After choosing a draft (Enter/Space/click) — longest, covers levelUp → playing transition */
+    DRAFT_CONFIRM: 500,
+    /** After rerolling the draft (R) — shorter */
+    REROLL: 250,
+    /** After auto-queuing level-ups (combat → levelUp) — covers the engine tick */
+    LEVEL_UP_QUEUE: 600,
+    /** Touch dash double-tap guard */
+    TOUCH_GUARD: 300
+  };
   function suppressDashFor(ms) {
     dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
   }
@@ -28687,12 +28720,12 @@ void main() {
   }
   function getNearestEnemy(originX, originY, enemies, range) {
     let nearest = null;
-    let nearestDist = Infinity;
+    let nearestDistSq = range * range;
     for (const enemy of enemies) {
       if (enemy.dead) continue;
-      const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
-      if (dist < range && dist < nearestDist) {
-        nearestDist = dist;
+      const distSq = wrappedDistanceSquared(originX, originY, enemy.x, enemy.y);
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
         nearest = enemy;
       }
     }
@@ -28737,10 +28770,12 @@ void main() {
   }
   function applyBeamDamage(originX, originY, targetX, targetY, enemies, damage, range, width, modifiers) {
     const angle = wrappedAngle(originX, originY, targetX, targetY);
+    const rangeSq = range * range;
     for (const enemy of enemies) {
       if (enemy.dead) continue;
-      const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
-      if (dist > range) continue;
+      const distSq = wrappedDistanceSquared(originX, originY, enemy.x, enemy.y);
+      if (distSq > rangeSq) continue;
+      const dist = Math.sqrt(distSq);
       const eAngle = wrappedAngle(originX, originY, enemy.x, enemy.y);
       const diff = Math.abs(eAngle - angle);
       const normDiff = Math.min(diff, TWO_PI - diff);
@@ -28861,7 +28896,9 @@ void main() {
     soundEnabled: true,
     musicEnabled: true,
     shakeEnabled: true,
-    damageNumbersEnabled: true
+    damageNumbersEnabled: true,
+    particleQuality: "high",
+    reducedMotion: false
   };
   var DEFAULT_RECORDS = {
     bestStage: 1,
@@ -28895,7 +28932,20 @@ void main() {
   function loadSettings() {
     if (!settingsCache) {
       const stored = readJson(SETTINGS_KEY);
-      settingsCache = { ...DEFAULT_SETTINGS, ...stored };
+      const merged = { ...DEFAULT_SETTINGS, ...stored };
+      if (stored?.reducedMotion === void 0 && typeof window !== "undefined" && typeof window.matchMedia === "function") {
+        try {
+          if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            merged.reducedMotion = true;
+            merged.shakeEnabled = false;
+            if (merged.particleQuality === "high") merged.particleQuality = "medium";
+          }
+        } catch {
+        }
+      }
+      if (merged.particleQuality === void 0) merged.particleQuality = "high";
+      if (merged.reducedMotion === void 0) merged.reducedMotion = false;
+      settingsCache = merged;
     }
     return settingsCache;
   }
@@ -29342,9 +29392,11 @@ void main() {
         const a = this.angle + TWO_PI / stats.projectileCount * i;
         const px = playerX + Math.cos(a) * stats.orbitRadius;
         const py = playerY + Math.sin(a) * stats.orbitRadius;
+        const hitRadiusSq = stats.hitRadius;
         for (const enemy of enemies) {
           if (enemy.dead) continue;
-          if (wrappedDistance(px, py, enemy.x, enemy.y) < stats.hitRadius + enemy.radius) {
+          const r = hitRadiusSq + enemy.radius;
+          if (wrappedDistanceSquared(px, py, enemy.x, enemy.y) < r * r) {
             hitEnemySilent(enemy, damage * dt * 10, modifiers);
           }
         }
@@ -29429,9 +29481,10 @@ void main() {
       if (this.isBlasting) {
         this.blastRadius += stats.expandSpeed * dt;
         if (!this.hasDealtDamage) {
+          const maxRadiusSq = stats.maxRadius * stats.maxRadius;
           for (const enemy of enemies) {
             if (enemy.dead) continue;
-            if (wrappedDistance(playerX, playerY, enemy.x, enemy.y) < stats.maxRadius) {
+            if (wrappedDistanceSquared(playerX, playerY, enemy.x, enemy.y) < maxRadiusSq) {
               hitEnemy(enemy, damage, modifiers);
             }
           }
@@ -29673,14 +29726,20 @@ void main() {
       audio.playMissile();
     }
     pickTarget(px, py, enemies, index) {
-      const alive = enemies.filter((e) => !e.dead && wrappedDistance(px, py, e.x, e.y) < 700);
+      const rangeSq = 700 * 700;
+      const alive = [];
+      for (const e of enemies) {
+        if (e.dead) continue;
+        if (wrappedDistanceSquared(px, py, e.x, e.y) < rangeSq) alive.push(e);
+      }
       if (alive.length === 0) return null;
       return alive[index % alive.length];
     }
     detonate(missile, stats, damage, enemies, modifiers) {
       for (const enemy of enemies) {
         if (enemy.dead) continue;
-        if (wrappedDistance(missile.x, missile.y, enemy.x, enemy.y) < stats.aoeRadius + enemy.radius) {
+        const r = stats.aoeRadius + enemy.radius;
+        if (wrappedDistanceSquared(missile.x, missile.y, enemy.x, enemy.y) < r * r) {
           hitEnemy(enemy, damage, modifiers);
         }
       }
@@ -29731,10 +29790,13 @@ void main() {
           const turned = current + Math.max(-maxTurn, Math.min(maxTurn, diff));
           m.vx = Math.cos(turned) * speed;
           m.vy = Math.sin(turned) * speed;
-          if (m.age > 0.15 && wrappedDistance(m.x, m.y, m.target.x, m.target.y) < m.target.radius + 10) {
-            m.age = stats.maxLifetime + 1;
-            this.detonate(m, stats, stats.damage * modifiers.damageMultiplier, enemies, modifiers);
-            continue;
+          if (m.age > 0.15) {
+            const r = m.target.radius + 10;
+            if (wrappedDistanceSquared(m.x, m.y, m.target.x, m.target.y) < r * r) {
+              m.age = stats.maxLifetime + 1;
+              this.detonate(m, stats, stats.damage * modifiers.damageMultiplier, enemies, modifiers);
+              continue;
+            }
           }
         }
         m.trail.push({ x: m.x, y: m.y });
@@ -29742,9 +29804,21 @@ void main() {
         m.x += m.vx * dt;
         m.y += m.vy * dt;
       }
-      this.missiles = this.missiles.filter((m) => m.age < stats.maxLifetime);
+      {
+        let w = 0;
+        for (let i = 0; i < this.missiles.length; i++) {
+          if (this.missiles[i].age < stats.maxLifetime) this.missiles[w++] = this.missiles[i];
+        }
+        this.missiles.length = w;
+      }
       for (const ex of this.explosions) ex.age += dt;
-      this.explosions = this.explosions.filter((ex) => ex.age < 0.3);
+      {
+        let w = 0;
+        for (let i = 0; i < this.explosions.length; i++) {
+          if (this.explosions[i].age < 0.3) this.explosions[w++] = this.explosions[i];
+        }
+        this.explosions.length = w;
+      }
     }
     draw(ctx2, camera, _playerX, _playerY, _playerRadius) {
       for (const m of this.missiles) {
@@ -29850,12 +29924,12 @@ void main() {
             fromY = current.y;
             damage *= stats.falloff;
             let next = null;
-            let nextDist = Infinity;
+            let nextDistSq = stats.chainRange * stats.chainRange;
             for (const enemy of enemies) {
               if (enemy.dead || visited.has(enemy)) continue;
-              const d = wrappedDistance(fromX, fromY, enemy.x, enemy.y);
-              if (d < stats.chainRange && d < nextDist) {
-                nextDist = d;
+              const dSq = wrappedDistanceSquared(fromX, fromY, enemy.x, enemy.y);
+              if (dSq < nextDistSq) {
+                nextDistSq = dSq;
                 next = enemy;
               }
             }
@@ -29866,7 +29940,13 @@ void main() {
         }
       }
       for (const s of this.segments) s.age += dt;
-      this.segments = this.segments.filter((s) => s.age < 0.22);
+      {
+        let w = 0;
+        for (let i = 0; i < this.segments.length; i++) {
+          if (this.segments[i].age < 0.22) this.segments[w++] = this.segments[i];
+        }
+        this.segments.length = w;
+      }
     }
     draw(ctx2, camera, _playerX, _playerY, _playerRadius) {
       for (const s of this.segments) {
@@ -29988,15 +30068,19 @@ void main() {
         }
         case "active": {
           this.state.age += dt;
+          const pullRadius = stats.pullRadius;
+          const dpsRadius = pullRadius * 0.62;
           for (const enemy of enemies) {
             if (enemy.dead) continue;
-            const dist = wrappedDistance(this.state.x, this.state.y, enemy.x, enemy.y);
-            if (dist < stats.pullRadius + enemy.radius) {
+            const distSq = wrappedDistanceSquared(this.state.x, this.state.y, enemy.x, enemy.y);
+            const maxDist = pullRadius + enemy.radius;
+            if (distSq < maxDist * maxDist) {
+              const dist = Math.sqrt(distSq);
               const pullAngle = wrappedAngle(enemy.x, enemy.y, this.state.x, this.state.y);
-              const strength = stats.pullStrength * (1 - Math.min(0.65, dist / stats.pullRadius));
+              const strength = stats.pullStrength * (1 - Math.min(0.65, dist / pullRadius));
               enemy.x += Math.cos(pullAngle) * strength * dt;
               enemy.y += Math.sin(pullAngle) * strength * dt;
-              if (dist < stats.pullRadius * 0.62) {
+              if (dist < dpsRadius) {
                 hitEnemySilent(enemy, stats.dps * modifiers.damageMultiplier * dt, modifiers);
               }
             }
@@ -30005,7 +30089,8 @@ void main() {
             const collapseRadius = stats.pullRadius * stats.collapseRadiusMul;
             for (const enemy of enemies) {
               if (enemy.dead) continue;
-              if (wrappedDistance(this.state.x, this.state.y, enemy.x, enemy.y) < collapseRadius + enemy.radius) {
+              const r = collapseRadius + enemy.radius;
+              if (wrappedDistanceSquared(this.state.x, this.state.y, enemy.x, enemy.y) < r * r) {
                 hitEnemy(enemy, stats.collapseDamage * modifiers.damageMultiplier, modifiers);
               }
             }
@@ -30149,11 +30234,15 @@ void main() {
     getWeapon(name) {
       return this.weapons.find((w) => w.name === name);
     }
+    /** Clamp damage to 2.8× (prevents multiplicative creep from doctrines + overclock). */
     multiplyDamage(multiplier) {
-      this.modifiers.damageMultiplier *= multiplier;
+      const next = this.modifiers.damageMultiplier * multiplier;
+      this.modifiers.damageMultiplier = Math.max(0.5, Math.min(2.8, next));
     }
+    /** Clamp cooldown to 0.4× (60% reduction floor) – see `docs/GAME_DESIGN.md:30`. */
     multiplyCooldown(multiplier) {
-      this.modifiers.cooldownMultiplier *= multiplier;
+      const next = this.modifiers.cooldownMultiplier * multiplier;
+      this.modifiers.cooldownMultiplier = Math.max(0.4, Math.min(2, next));
     }
     allMaxed() {
       return this.weapons.length === WEAPON_ORDER.length && this.weapons.every((w) => w.level >= w.maxLevel);
@@ -30374,7 +30463,7 @@ void main() {
   };
 
   // src/ui.ts
-  var SETTING_KEYS = ["soundEnabled", "musicEnabled", "shakeEnabled", "damageNumbersEnabled"];
+  var SETTING_KEYS = ["soundEnabled", "musicEnabled", "shakeEnabled", "damageNumbersEnabled", "particleQuality", "reducedMotion"];
   function settingLabel(key) {
     switch (key) {
       case "soundEnabled":
@@ -30385,7 +30474,21 @@ void main() {
         return getUiText("settingShake");
       case "damageNumbersEnabled":
         return getUiText("settingNumbers");
+      case "particleQuality":
+        return getUiText("settingParticles");
+      case "reducedMotion":
+        return getUiText("settingReducedMotion");
     }
+  }
+  function settingValueLabel(key) {
+    const s = loadSettings();
+    if (key === "particleQuality") {
+      const q = s.particleQuality;
+      if (q === "high") return getUiText("qualityHigh");
+      if (q === "medium") return getUiText("qualityMedium");
+      return getUiText("qualityLow");
+    }
+    return s[key] ? getUiText("toggleOn") : getUiText("toggleOff");
   }
   var UI = class {
     constructor() {
@@ -30418,7 +30521,8 @@ void main() {
       ctx2.save();
       ctx2.textAlign = "center";
       if (game.bossEngaged) {
-        const pulse = 0.72 + 0.28 * Math.sin(this.stateAge * 6);
+        const rm = loadSettings().reducedMotion;
+        const pulse = rm ? 0.85 : 0.72 + 0.28 * Math.sin(this.stateAge * 6);
         ctx2.font = uiFont(24, "bold");
         ctx2.fillStyle = `rgba(255, 60, 90, ${pulse})`;
         ctx2.fillText(getUiText("slayPrompt"), w / 2, topInset + 26);
@@ -30500,6 +30604,12 @@ void main() {
         glowGrad.addColorStop(1, "rgba(150, 230, 255, 0)");
         ctx2.fillStyle = glowGrad;
         ctx2.fillRect(edgeX - 15, barY - 10, 30, barH + 20);
+        if (xpRatio > 0.85 && !loadSettings().reducedMotion) {
+          const shimmer = 0.5 + 0.5 * Math.sin(this.stateAge * 5);
+          ctx2.fillStyle = `rgba(255, 255, 255, ${0.12 * shimmer})`;
+          const sx = barX + fillW * (0.5 + 0.5 * Math.sin(this.stateAge * 3));
+          ctx2.fillRect(sx - 18, barY, 36, barH);
+        }
         ctx2.restore();
       }
       ctx2.fillStyle = "rgba(255, 255, 255, 0.5)";
@@ -30575,13 +30685,22 @@ void main() {
       ctx2.font = uiFont(12, "bold");
       ctx2.fillStyle = "rgba(255, 190, 205, 0.92)";
       ctx2.fillText(formatBossTitle(game.stage), w / 2, barY - 6);
+      const lowHp = hpRatio < 0.25 && !loadSettings().reducedMotion;
+      const lowPulse = lowHp ? 0.35 + 0.25 * Math.sin(this.stateAge * 8) : 0.35;
       ctx2.beginPath();
       roundedRect(ctx2, barX, barY, barW, barH, barH / 2);
       ctx2.fillStyle = "rgba(20, 6, 12, 0.75)";
       ctx2.fill();
-      ctx2.strokeStyle = "rgba(255, 90, 120, 0.35)";
-      ctx2.lineWidth = 1;
+      ctx2.strokeStyle = lowHp ? `rgba(255, 90, 120, ${lowPulse + 0.15})` : "rgba(255, 90, 120, 0.35)";
+      ctx2.lineWidth = lowHp ? 1.5 : 1;
       ctx2.stroke();
+      if (lowHp) {
+        ctx2.beginPath();
+        roundedRect(ctx2, barX - 2, barY - 2, barW + 4, barH + 4, barH / 2 + 2);
+        ctx2.strokeStyle = `rgba(255, 60, 80, ${0.14 * (0.5 + 0.5 * Math.sin(this.stateAge * 8))})`;
+        ctx2.lineWidth = 4;
+        ctx2.stroke();
+      }
       if (hpRatio > 0) {
         ctx2.save();
         ctx2.beginPath();
@@ -30646,9 +30765,10 @@ void main() {
     drawComboMeter(ctx2, canvas2, _game, comboCount, topInset) {
       if (comboCount < 3) return;
       const w = canvas2.clientWidth;
-      const pop = Math.max(0, 1 - this.comboPopAge * 3);
+      const s = loadSettings();
+      const pop = s.reducedMotion ? 0 : Math.max(0, 1 - this.comboPopAge * 3);
       this.comboPopAge += 1 / 60;
-      const scale = 1 + pop * 0.35;
+      const scale = s.reducedMotion ? 1 : 1 + pop * 0.35;
       const label = formatCombo(comboCount);
       const heat = Math.min(1, comboCount / 30);
       ctx2.save();
@@ -30773,7 +30893,8 @@ void main() {
       ctx2.fillStyle = `rgba(255, 120, 140, ${subAlpha * 0.75})`;
       ctx2.fillText(getUiText("titleSubtitle"), cx, cy + Math.max(0, titleSize * 0.55 - 18));
       const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
-      const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
+      const rm = loadSettings().reducedMotion;
+      const breathe = rm ? 0.75 : 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
       ctx2.font = uiFont(w < 500 ? 14 : 16);
       ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe})`;
       const startMsg = isTouchDevice() ? getUiText("tapToStart") : getUiText("pressAnyKeyToStart");
@@ -31034,7 +31155,10 @@ void main() {
       ctx2.fillText(getUiText("settingsSection"), layout.panel.x + 28, layout.resume.y + layout.resume.height + (compact ? 16 : 20));
       ctx2.textAlign = "center";
       for (const row of layout.settingRows) {
-        const enabled = this.readSetting(row.key);
+        const isQuality = row.key === "particleQuality";
+        const enabled = !isQuality ? this.readSetting(row.key) : false;
+        const valueLabel = settingValueLabel(row.key);
+        const isOn = isQuality ? loadSettings().particleQuality !== "low" : enabled;
         ctx2.beginPath();
         roundedRect(ctx2, row.x, row.y, row.width, row.height, 8);
         ctx2.fillStyle = "rgba(255, 255, 255, 0.04)";
@@ -31047,17 +31171,17 @@ void main() {
         ctx2.textAlign = "left";
         ctx2.fillText(settingLabel(row.key), row.x + 10, row.y + row.height / 2 + 4);
         ctx2.textAlign = "right";
-        const pillW = compact ? 40 : 52;
+        const pillW = compact ? 52 : 64;
         const pillH = Math.min(row.height - 6, 20);
         const pillX = row.x + row.width - pillW - 8;
         const pillY = row.y + (row.height - pillH) / 2;
         ctx2.beginPath();
         roundedRect(ctx2, pillX, pillY, pillW, pillH, 8);
-        ctx2.fillStyle = enabled ? "rgba(70, 160, 255, 0.3)" : "rgba(90, 90, 110, 0.25)";
+        ctx2.fillStyle = isOn ? "rgba(70, 160, 255, 0.3)" : "rgba(90, 90, 110, 0.25)";
         ctx2.fill();
         ctx2.font = uiFont(10, "bold");
-        ctx2.fillStyle = enabled ? "rgba(190, 230, 255, 0.95)" : "rgba(180, 180, 195, 0.6)";
-        ctx2.fillText(enabled ? getUiText("toggleOn") : getUiText("toggleOff"), pillX + pillW / 2, pillY + pillH / 2 + 4);
+        ctx2.fillStyle = isOn ? "rgba(190, 230, 255, 0.95)" : "rgba(180, 180, 195, 0.6)";
+        ctx2.fillText(valueLabel, pillX + pillW / 2, pillY + pillH / 2 + 4);
         ctx2.textAlign = "center";
       }
       const buildY = layout.buildLabelY;
@@ -31115,7 +31239,13 @@ void main() {
     }
     applySettingToggle(key) {
       const settings = loadSettings();
-      settings[key] = !settings[key];
+      if (key === "particleQuality") {
+        const order = ["high", "medium", "low"];
+        const idx = order.indexOf(settings.particleQuality);
+        settings.particleQuality = order[(idx + 1) % order.length];
+      } else {
+        settings[key] = !settings[key];
+      }
       saveSettings(settings);
       audio.setSoundEnabled(settings.soundEnabled);
       audio.setMusicEnabled(settings.musicEnabled);
@@ -31225,7 +31355,8 @@ void main() {
         ctx2.fillStyle = `rgba(255, 255, 255, ${statAlpha * 0.7})`;
         ctx2.fillText(text, startX, cy + 15 + i * statGap);
         if (badge && statAlpha > 0.1) {
-          const badgePulse = 0.75 + 0.25 * Math.sin(t * 5);
+          const rmBadge = loadSettings().reducedMotion;
+          const badgePulse = rmBadge ? 0.9 : 0.75 + 0.25 * Math.sin(t * 5);
           ctx2.font = uiFont(shortEnd ? 12 : 14, "bold");
           ctx2.fillStyle = `rgba(255, 210, 90, ${statAlpha * badgePulse})`;
           ctx2.fillText(badgeLabel, startX + textW + 10, cy + 15 + i * statGap);
@@ -31233,7 +31364,8 @@ void main() {
       }
       ctx2.textAlign = "center";
       const promptAlpha = Math.max(0, Math.min(1, (t - 1.2) * 2));
-      const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
+      const rmPrompt = loadSettings().reducedMotion;
+      const breathe = rmPrompt ? 0.7 : 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
       ctx2.font = uiFont(14);
       ctx2.fillStyle = `rgba(255, 255, 255, ${promptAlpha * (subduedPrompt ? 0.55 : breathe * 0.5)})`;
       ctx2.fillText(promptText, cx, cy + (shortEnd ? 78 : 95) + Math.max(0, stats.length - 3) * statGap);
@@ -31243,14 +31375,16 @@ void main() {
       const cx = w / 2;
       const cy = h / 2;
       const r = Math.max(w, h) * 0.75;
-      const baseAlpha = 0.3 + (1 - hpRatio) * 0.35;
+      const s = loadSettings();
+      const motionMul = s.reducedMotion ? 0.55 : 1;
+      const baseAlpha = (0.3 + (1 - hpRatio) * 0.35) * motionMul;
       const grad = ctx2.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
       grad.addColorStop(0, "rgba(0, 0, 0, 0)");
       grad.addColorStop(1, `rgba(0, 0, 0, ${baseAlpha})`);
       ctx2.fillStyle = grad;
       ctx2.fillRect(0, 0, w, h);
       if (hpRatio < 0.35) {
-        const redAlpha = (0.35 - hpRatio) * 0.4;
+        const redAlpha = (0.35 - hpRatio) * 0.4 * motionMul;
         const redGrad = ctx2.createRadialGradient(cx, cy, r * 0.3, cx, cy, r);
         redGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
         redGrad.addColorStop(1, `rgba(150, 0, 0, ${redAlpha})`);
@@ -31409,11 +31543,14 @@ void main() {
       this.height = canvasHeight;
     }
     shake(intensity, duration) {
-      if (!loadSettings().shakeEnabled) return;
-      if (intensity > this.shakeIntensity) {
-        this.shakeIntensity = intensity;
-        this.shakeDuration = duration;
-        this.shakeTimer = duration;
+      const s = loadSettings();
+      if (!s.shakeEnabled || s.reducedMotion) return;
+      const effectiveIntensity = s.reducedMotion ? intensity * 0.35 : intensity;
+      const effectiveDuration = s.reducedMotion ? duration * 0.5 : duration;
+      if (effectiveIntensity > this.shakeIntensity) {
+        this.shakeIntensity = effectiveIntensity;
+        this.shakeDuration = effectiveDuration;
+        this.shakeTimer = effectiveDuration;
       }
     }
     updateShake(dt) {
@@ -31645,9 +31782,10 @@ void main() {
         this.x += dx * this.speed * dt;
         this.y += dy * this.speed * dt;
       }
-      const wrapped = wrapPosition(this.x, this.y);
-      this.x = wrapped.x;
-      this.y = wrapped.y;
+      if (this.x < 0) this.x += MAP_WIDTH;
+      else if (this.x >= MAP_WIDTH) this.x -= MAP_WIDTH;
+      if (this.y < 0) this.y += MAP_HEIGHT;
+      else if (this.y >= MAP_HEIGHT) this.y -= MAP_HEIGHT;
     }
     dxNonZero(dx, dy) {
       return dx !== 0 || dy !== 0;
@@ -32019,9 +32157,18 @@ void main() {
       }
     }
     draw(ctx2, camera, time) {
-      for (const n of this.nebulae) {
+      let nebulaeCount = this.nebulae.length;
+      try {
+        const q = loadSettings().particleQuality;
+        if (q === "low") nebulaeCount = 4;
+        else if (q === "medium") nebulaeCount = 6;
+      } catch {
+      }
+      for (let ni = 0; ni < nebulaeCount; ni++) {
+        const n = this.nebulae[ni];
         const px = n.x - camera.x * 0.3;
         const py = n.y - camera.y * 0.3;
+        if (px < -n.radius || px > camera.width + n.radius || py < -n.radius || py > camera.height + n.radius) continue;
         const gradient = ctx2.createRadialGradient(px, py, 0, px, py, n.radius);
         gradient.addColorStop(0, `rgba(${n.color[0]}, ${n.color[1]}, ${n.color[2]}, ${n.alpha})`);
         gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
@@ -32033,18 +32180,40 @@ void main() {
       const cy = camera.height / 2;
       const speed = Math.sqrt(this.velocityX * this.velocityX + this.velocityY * this.velocityY);
       const streakFactors = [0, 0.03, 0.07];
+      let quality = "high";
+      let reduced = false;
+      try {
+        const s = loadSettings();
+        quality = s.particleQuality;
+        reduced = s.reducedMotion;
+      } catch {
+      }
+      const skipFarLayer = quality === "low";
+      const skipGlow = quality === "low" || reduced;
       for (const star of this.stars) {
+        if (skipFarLayer && star.layer === 0) continue;
         const factor = parallaxFactors[star.layer];
         const sx = star.x - camera.x * factor;
         const sy = star.y - camera.y * factor;
         let screenX = (sx % camera.width + camera.width) % camera.width;
         let screenY = (sy % camera.height + camera.height) % camera.height;
-        const offX = (screenX - cx) / cx;
-        const offY = (screenY - cy) / cy;
-        const edgeDist = Math.sqrt(offX * offX + offY * offY);
-        const perspScale = 1 + edgeDist * 0.075 * (star.layer * 0.5);
-        const drawSize = star.size * perspScale;
-        if (this.driftIntensity > 0.01) {
+        let drawSize;
+        let offX = 0;
+        let offY = 0;
+        if (quality === "low") {
+          drawSize = star.size;
+        } else {
+          offX = (screenX - cx) / cx;
+          offY = (screenY - cy) / cy;
+          const edgeDist = Math.sqrt(offX * offX + offY * offY);
+          const perspScale = 1 + edgeDist * 0.075 * (star.layer * 0.5);
+          drawSize = star.size * perspScale;
+        }
+        if (!reduced && this.driftIntensity > 0.01) {
+          if (quality === "low") {
+            offX = (screenX - cx) / cx;
+            offY = (screenY - cy) / cy;
+          }
           const driftFactor = [5, 12, 20][star.layer];
           const oscillation = Math.sin(time * 0.4) * 0.5 + 0.5;
           screenX += offX * driftFactor * oscillation * this.driftIntensity;
@@ -32054,7 +32223,7 @@ void main() {
         const alpha = star.brightness * twinkle;
         const dofAlpha = star.layer === 0 ? alpha * 0.55 : alpha;
         const [tr, tg, tb] = star.tint;
-        if (star.layer === 2 && star.size > 1.8) {
+        if (!skipGlow && star.layer === 2 && star.size > 1.8) {
           const glowR = drawSize * 4;
           const glow = ctx2.createRadialGradient(screenX, screenY, 0, screenX, screenY, glowR);
           glow.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha * 0.4})`);
@@ -32082,13 +32251,16 @@ void main() {
           ctx2.fill();
         }
       }
-      for (const d of this.dust) {
-        const screen = camera.worldToScreen(d.x, d.y);
-        if (screen.x < -10 || screen.x > camera.width + 10 || screen.y < -10 || screen.y > camera.height + 10) continue;
-        ctx2.fillStyle = `rgba(150, 190, 255, ${d.alpha})`;
-        ctx2.beginPath();
-        ctx2.arc(screen.x, screen.y, d.size, 0, TWO_PI);
-        ctx2.fill();
+      const drawDust = quality !== "low";
+      if (drawDust) {
+        for (const d of this.dust) {
+          const screen = camera.worldToScreen(d.x, d.y);
+          if (screen.x < -10 || screen.x > camera.width + 10 || screen.y < -10 || screen.y > camera.height + 10) continue;
+          ctx2.fillStyle = `rgba(150, 190, 255, ${d.alpha})`;
+          ctx2.beginPath();
+          ctx2.arc(screen.x, screen.y, d.size, 0, TWO_PI);
+          ctx2.fill();
+        }
       }
     }
     drawWrapZone(ctx2, camera) {
@@ -32174,18 +32346,38 @@ void main() {
       }
     }
     update(dt) {
+      let speedMul = 1;
+      try {
+        const { reducedMotion, particleQuality } = loadSettings();
+        if (reducedMotion) speedMul = 0.35;
+        else if (particleQuality === "low") speedMul = 0.6;
+      } catch {
+      }
       for (const s of this.shapes) {
-        s.rotation += s.rotSpeed * dt;
+        s.rotation += s.rotSpeed * dt * speedMul;
       }
     }
     draw(ctx2, camera, time, playerX, playerY) {
-      this.drawGrid(ctx2, camera, time);
-      this.drawRadials(ctx2, camera, time, playerX, playerY);
-      this.drawFloatingShapes(ctx2, camera, time);
-      this.drawRings(ctx2, camera, time, playerX, playerY);
+      let quality = "high";
+      let reduced = false;
+      try {
+        const s = loadSettings();
+        quality = s.particleQuality;
+        reduced = s.reducedMotion;
+      } catch {
+      }
+      const low = quality === "low";
+      this.drawGrid(ctx2, camera, time, low ? 4 : GRID_WAVE_SEGMENTS);
+      if (!low || !reduced) {
+        this.drawRadials(ctx2, camera, time, playerX, playerY, low ? 12 : NUM_RADIALS);
+      }
+      if (!(low && reduced)) {
+        this.drawFloatingShapes(ctx2, camera, time, low ? 15 : this.shapes.length);
+      }
+      this.drawRings(ctx2, camera, time, playerX, playerY, low ? 3 : RING_DEFS.length);
     }
     // ── Grid: wavy neon lines with glow ───────────────────────────
-    drawGrid(ctx2, camera, time) {
+    drawGrid(ctx2, camera, time, segsOverride) {
       const sp = GRID_SPACING;
       const offX = camera.x * GRID_PARALLAX % sp;
       const offY = camera.y * GRID_PARALLAX % sp;
@@ -32194,25 +32386,32 @@ void main() {
       const [r, g, b] = NEON[3];
       ctx2.lineWidth = 5;
       ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseAlpha * 0.3})`;
-      this.traceGridPaths(ctx2, camera, sp, offX, offY, time);
+      this.traceGridPaths(ctx2, camera, sp, offX, offY, time, segsOverride);
       ctx2.stroke();
       ctx2.lineWidth = 1;
       ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseAlpha})`;
-      this.traceGridPaths(ctx2, camera, sp, offX, offY, time);
+      this.traceGridPaths(ctx2, camera, sp, offX, offY, time, segsOverride);
       ctx2.stroke();
-      ctx2.fillStyle = `rgba(${r + 50}, ${g + 70}, ${b}, ${baseAlpha * 1.8})`;
-      for (let gx = -offX - sp; gx <= camera.width + sp; gx += sp) {
-        for (let gy = -offY - sp; gy <= camera.height + sp; gy += sp) {
-          const wx = gx + Math.sin(gy * 8e-3 + time * 0.4) * GRID_WAVE_AMP;
-          const wy = gy + Math.sin(gx * 8e-3 + time * 0.35) * GRID_WAVE_AMP;
-          ctx2.beginPath();
-          ctx2.arc(wx, wy, 1.8, 0, TWO_PI);
-          ctx2.fill();
+      let skipDots = false;
+      try {
+        skipDots = loadSettings().particleQuality === "low";
+      } catch {
+      }
+      if (!skipDots) {
+        ctx2.fillStyle = `rgba(${r + 50}, ${g + 70}, ${b}, ${baseAlpha * 1.8})`;
+        for (let gx = -offX - sp; gx <= camera.width + sp; gx += sp) {
+          for (let gy = -offY - sp; gy <= camera.height + sp; gy += sp) {
+            const wx = gx + Math.sin(gy * 8e-3 + time * 0.4) * GRID_WAVE_AMP;
+            const wy = gy + Math.sin(gx * 8e-3 + time * 0.35) * GRID_WAVE_AMP;
+            ctx2.beginPath();
+            ctx2.arc(wx, wy, 1.8, 0, TWO_PI);
+            ctx2.fill();
+          }
         }
       }
     }
-    traceGridPaths(ctx2, camera, sp, offX, offY, time) {
-      const segs = GRID_WAVE_SEGMENTS;
+    traceGridPaths(ctx2, camera, sp, offX, offY, time, segsOverride) {
+      const segs = segsOverride ?? GRID_WAVE_SEGMENTS;
       const amp = GRID_WAVE_AMP;
       ctx2.beginPath();
       for (let gx = -offX - sp; gx <= camera.width + sp; gx += sp) {
@@ -32235,15 +32434,16 @@ void main() {
       }
     }
     // ── Radial light rays from player ─────────────────────────────
-    drawRadials(ctx2, camera, time, px, py) {
+    drawRadials(ctx2, camera, time, px, py, numOverride) {
+      const count = numOverride ?? NUM_RADIALS;
       const screen = camera.worldToScreen(px, py);
       const cx = screen.x;
       const cy = screen.y;
       const baseRot = time * 0.05;
       ctx2.lineWidth = 1.5;
       ctx2.lineCap = "round";
-      for (let i = 0; i < NUM_RADIALS; i++) {
-        const angle = baseRot + i / NUM_RADIALS * TWO_PI;
+      for (let i = 0; i < count; i++) {
+        const angle = baseRot + i / count * TWO_PI;
         const pulse = 0.5 + 0.5 * Math.sin(time * 0.8 + i * 0.5);
         const len = RADIAL_MAX_LEN * (0.5 + 0.5 * pulse);
         const alpha = 0.028 * pulse;
@@ -32257,8 +32457,10 @@ void main() {
       }
     }
     // ── Floating wireframe shapes with parallax ───────────────────
-    drawFloatingShapes(ctx2, camera, time) {
-      for (const s of this.shapes) {
+    drawFloatingShapes(ctx2, camera, time, maxCount) {
+      const limit = maxCount ?? this.shapes.length;
+      for (let idx = 0; idx < limit; idx++) {
+        const s = this.shapes[idx];
         const sx = s.x - camera.x * s.parallax;
         const sy = s.y - camera.y * s.parallax;
         const padW = camera.width + 400;
@@ -32273,11 +32475,13 @@ void main() {
       }
     }
     // ── Concentric rotating polygon rings around player ───────────
-    drawRings(ctx2, camera, time, px, py) {
+    drawRings(ctx2, camera, time, px, py, maxRings) {
       const screen = camera.worldToScreen(px, py);
       const cx = screen.x;
       const cy = screen.y;
-      for (const ring of RING_DEFS) {
+      const limit = maxRings ?? RING_DEFS.length;
+      for (let i = 0; i < limit; i++) {
+        const ring = RING_DEFS[i];
         const breathe = 1 + 0.08 * Math.sin(time * 0.6 + ring.radius * 0.01);
         const r = ring.radius * breathe;
         const rot = time * ring.speed;
@@ -32609,9 +32813,10 @@ void main() {
           this.y += Math.sin(angle) * this.speed * dt;
           break;
       }
-      const wrapped = wrapPosition(this.x, this.y);
-      this.x = wrapped.x;
-      this.y = wrapped.y;
+      if (this.x < 0) this.x += MAP_WIDTH;
+      else if (this.x >= MAP_WIDTH) this.x -= MAP_WIDTH;
+      if (this.y < 0) this.y += MAP_HEIGHT;
+      else if (this.y >= MAP_HEIGHT) this.y -= MAP_HEIGHT;
       this.updateProjectiles(dt);
     }
     updateBoss(dt, angle, playerX, playerY, distToPlayer) {
@@ -32688,13 +32893,21 @@ void main() {
     }
     updateProjectiles(dt) {
       if (this.projectiles.length === 0) return;
-      for (const p of this.projectiles) {
-        const wrappedProjectile = wrapPosition(p.x + p.vx * dt, p.y + p.vy * dt);
-        p.x = wrappedProjectile.x;
-        p.y = wrappedProjectile.y;
+      let write = 0;
+      for (let i = 0; i < this.projectiles.length; i++) {
+        const p = this.projectiles[i];
+        let nx = p.x + p.vx * dt;
+        let ny = p.y + p.vy * dt;
+        if (nx < 0) nx += MAP_WIDTH;
+        else if (nx >= MAP_WIDTH) nx -= MAP_WIDTH;
+        if (ny < 0) ny += MAP_HEIGHT;
+        else if (ny >= MAP_HEIGHT) ny -= MAP_HEIGHT;
+        p.x = nx;
+        p.y = ny;
         p.lifetime -= dt;
+        if (p.lifetime > 0) this.projectiles[write++] = p;
       }
-      this.projectiles = this.projectiles.filter((p) => p.lifetime > 0);
+      this.projectiles.length = write;
     }
     takeDamage(amount) {
       this.hp -= amount;
@@ -33462,7 +33675,12 @@ void main() {
       }
     }
     removeDead() {
-      this.enemies = this.enemies.filter((e) => !e.dead);
+      let write = 0;
+      for (let i = 0; i < this.enemies.length; i++) {
+        const e = this.enemies[i];
+        if (!e.dead) this.enemies[write++] = e;
+      }
+      this.enemies.length = write;
     }
     draw(ctx2, camera, time) {
       for (const enemy of this.enemies) {
@@ -33479,7 +33697,15 @@ void main() {
   };
 
   // src/particles.ts
-  var MAX_PARTICLES = 500;
+  var MAX_PARTICLES_HIGH = 500;
+  var MAX_PARTICLES_MEDIUM = 360;
+  var MAX_PARTICLES_LOW = 220;
+  function getBudgetCap() {
+    const q = loadSettings().particleQuality;
+    if (q === "low") return MAX_PARTICLES_LOW;
+    if (q === "medium") return MAX_PARTICLES_MEDIUM;
+    return MAX_PARTICLES_HIGH;
+  }
   var DeathParticle = class {
     constructor(x, y, radius, outlineColor, lifetime = 1) {
       this.x = x;
@@ -33862,18 +34088,20 @@ void main() {
       this.damageNumberCount = 0;
     }
     getParticleLoadScale() {
-      const load = this.particles.length / MAX_PARTICLES;
+      const cap = getBudgetCap();
+      const load = this.particles.length / cap;
       if (load >= 0.85) return 0.35;
       if (load >= 0.65) return 0.5;
       if (load >= 0.45) return 0.7;
       return 1;
     }
     emitParticle(factory) {
-      if (this.particles.length >= MAX_PARTICLES) return;
+      if (this.particles.length >= getBudgetCap()) return;
       this.particles.push(factory());
     }
     emitBurst(count, factory) {
-      const allowed = Math.max(0, Math.min(count, MAX_PARTICLES - this.particles.length));
+      const cap = getBudgetCap();
+      const allowed = Math.max(0, Math.min(count, cap - this.particles.length));
       for (let i = 0; i < allowed; i++) {
         this.particles.push(factory());
       }
@@ -33884,22 +34112,31 @@ void main() {
       this.damageNumberCount = 0;
     }
     spawnDeath(x, y, radius, outlineColor) {
-      if (this.particles.length >= MAX_PARTICLES) return;
+      if (this.particles.length >= getBudgetCap()) return;
       const loadScale = this.getParticleLoadScale();
+      const quality = loadSettings().particleQuality;
+      const qualityScale = quality === "low" ? 0.55 : quality === "medium" ? 0.78 : 1;
+      const isSmall = radius < 14;
       this.emitParticle(() => new DeathParticle(x, y, radius, outlineColor));
-      const burstCount = Math.max(4, Math.round((8 + Math.floor(Math.random() * 8)) * loadScale));
+      const baseBurst = isSmall ? 4 : 8;
+      const burstJitter = isSmall ? 3 : 8;
+      const burstCount = Math.max(isSmall ? 2 : 4, Math.round((baseBurst + Math.floor(Math.random() * burstJitter)) * loadScale * qualityScale));
       this.emitBurst(burstCount, () => new ExplosionParticle(x, y, outlineColor));
-      const sparkCount = Math.max(3, Math.round((6 + radius * 0.3) * loadScale));
+      const baseSparks = isSmall ? 2 : 6;
+      const sparkRate = isSmall ? 0.15 : 0.3;
+      const sparkCount = Math.max(isSmall ? 2 : 3, Math.round((baseSparks + radius * sparkRate) * loadScale * qualityScale));
       this.emitBurst(sparkCount, () => new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
-      const debrisCount = Math.max(2, Math.round((4 + radius * 0.15) * loadScale));
+      const baseDebris = isSmall ? 2 : 4;
+      const debrisRate = isSmall ? 0.08 : 0.15;
+      const debrisCount = Math.max(isSmall ? 1 : 2, Math.round((baseDebris + radius * debrisRate) * loadScale * qualityScale));
       this.emitBurst(debrisCount, () => new DebrisParticle(x, y, outlineColor, radius));
       this.emitParticle(() => new GlowPool(x, y, outlineColor, radius));
-      if (radius > 25) {
+      if (radius > 25 && quality !== "low") {
         this.emitParticle(() => new FlashParticle(x, y, radius));
       }
     }
     spawnXpOrbs(x, y, playerX, playerY, count) {
-      if (count <= 0 || this.particles.length >= MAX_PARTICLES) return;
+      if (count <= 0 || this.particles.length >= getBudgetCap()) return;
       const orbCount = Math.max(1, Math.round(count * this.getParticleLoadScale()));
       this.emitBurst(orbCount, () => new XpOrb(x, y, playerX, playerY));
     }
@@ -33916,28 +34153,44 @@ void main() {
       this.emitParticle(() => new AfterimageRing(x, y, radius));
     }
     addScreenFlash(r, g, b, alpha, duration) {
+      const s = loadSettings();
+      if (s.reducedMotion) {
+        alpha *= 0.45;
+        duration *= 0.6;
+        if (alpha < 0.04) return;
+      }
       this.screenEffects.push(new ScreenFlash(r, g, b, alpha, duration));
     }
     addDamageVignette(duration, intensity) {
+      const s = loadSettings();
+      if (s.reducedMotion) {
+        intensity *= 0.4;
+        duration *= 0.5;
+      }
       this.screenEffects.push(new DamageVignette(duration, intensity));
     }
     update(dt) {
-      for (const p of this.particles) p.update(dt);
-      if (this.particles.length > 0) {
-        this.particles = this.particles.filter((p) => !p.done);
-        let numberCount = 0;
-        for (const p of this.particles) {
+      let write = 0;
+      let numberCount = 0;
+      for (let i = 0; i < this.particles.length; i++) {
+        const p = this.particles[i];
+        p.update(dt);
+        if (!p.done) {
+          this.particles[write++] = p;
           if (p instanceof DamageNumber) {
             numberCount++;
-            if (numberCount >= 60) break;
           }
         }
-        this.damageNumberCount = numberCount;
-      } else {
-        this.damageNumberCount = 0;
       }
-      for (const e of this.screenEffects) e.update(dt);
-      this.screenEffects = this.screenEffects.filter((e) => !e.done);
+      this.particles.length = write;
+      this.damageNumberCount = Math.min(numberCount, 60);
+      let w2 = 0;
+      for (let i = 0; i < this.screenEffects.length; i++) {
+        const e = this.screenEffects[i];
+        e.update(dt);
+        if (!e.done) this.screenEffects[w2++] = e;
+      }
+      this.screenEffects.length = w2;
     }
     draw(ctx2, camera) {
       for (const p of this.particles) p.draw(ctx2, camera);
@@ -33986,13 +34239,16 @@ void main() {
     }
     applyCollisions() {
       const hpBefore = this.player.hp;
+      const px = this.player.x;
+      const py = this.player.y;
+      const pr = this.player.radius;
       for (const enemy of this.spawner.enemies) {
         if (enemy.dead) continue;
-        if (wrappedDistance(this.player.x, this.player.y, enemy.x, enemy.y) < this.player.radius + enemy.radius) {
+        if (wrappedCirclesOverlap(px, py, pr, enemy.x, enemy.y, enemy.radius)) {
           this.player.takeContactHit(CONTACT_HIT_DAMAGE * enemy.damageMultiplier);
         }
         for (const projectile of enemy.projectiles) {
-          if (wrappedDistance(this.player.x, this.player.y, projectile.x, projectile.y) < this.player.radius + projectile.radius) {
+          if (wrappedCirclesOverlap(px, py, pr, projectile.x, projectile.y, projectile.radius)) {
             this.player.takeDamage(projectile.damage);
             projectile.lifetime = 0;
           }
@@ -34010,7 +34266,11 @@ void main() {
       let levelUps = 0;
       let kills = 0;
       let bossKilled = false;
-      const deadEnemies = this.spawner.enemies.filter((e) => e.dead);
+      let deadCount = 0;
+      for (const e of this.spawner.enemies) if (e.dead) deadCount++;
+      if (deadCount === 0) return { levelUps, kills, bossKilled };
+      const deadEnemies = [];
+      for (const e of this.spawner.enemies) if (e.dead) deadEnemies.push(e);
       for (const enemy of deadEnemies) {
         this.particles.spawnDeath(enemy.x, enemy.y, enemy.radius, enemy.outlineColor);
         if (!enemy.noXp) {
@@ -34069,14 +34329,19 @@ void main() {
       if (levelUps <= 0) return;
       const radius = LEVEL_UP_BLAST_RADIUS + (levelUps - 1) * 50;
       const damage = LEVEL_UP_BLAST_DAMAGE + (levelUps - 1) * 35;
+      const px = this.player.x;
+      const py = this.player.y;
+      const radiusSq = radius * radius;
       for (const enemy of this.spawner.enemies) {
         if (enemy.dead) continue;
-        const distance = wrappedDistance(this.player.x, this.player.y, enemy.x, enemy.y);
-        if (distance > radius + enemy.radius) continue;
+        const distSq = wrappedDistanceSquared(px, py, enemy.x, enemy.y);
+        const maxDist = radius + enemy.radius;
+        if (distSq > maxDist * maxDist) continue;
+        const distance = Math.sqrt(distSq);
         const falloff = 1 - Math.min(0.7, distance / radius * 0.7);
         enemy.takeDamage(damage * falloff);
         for (const projectile of enemy.projectiles) {
-          if (wrappedDistance(this.player.x, this.player.y, projectile.x, projectile.y) <= radius) {
+          if (wrappedDistanceSquared(px, py, projectile.x, projectile.y) <= radiusSq) {
             projectile.lifetime = 0;
           }
         }
@@ -34571,12 +34836,43 @@ void main() {
       this.renderer.setSize(width, height, false);
       this.composer?.setSize(width, height);
     }
+    /** Release all pooled visuals and hide player — called on run reset / quit. */
+    clear() {
+      for (const visual of this.enemyVisuals.values()) {
+        visual.group.visible = false;
+        this.enemyPools[visual.detail][visual.type].push(visual);
+      }
+      this.enemyVisuals.clear();
+      this.playerVisual.group.visible = false;
+    }
+    /** Fully dispose WebGL resources (call on page unload or WebGL context loss). */
+    dispose() {
+      try {
+        this.clear();
+        this.renderer.dispose();
+        const el = this.renderer.domElement;
+        el.parentElement?.removeChild(el);
+        for (const pool of Object.values(this.enemyPools)) {
+          for (const list of Object.values(pool)) list.length = 0;
+        }
+        this.scene.clear();
+      } catch {
+      }
+    }
     render(world, time) {
       this.applyAdaptiveQuality(world?.spawner.enemies.length ?? 0);
       if (this.dustPoints) {
-        this.dustPoints.rotation.z = time * 8e-3;
-        this.dustPoints.position.x = Math.sin(time * 0.05) * 30;
-        this.dustPoints.position.y = Math.cos(time * 0.04) * 20;
+        let dustMul = 1;
+        try {
+          const s = loadSettings();
+          if (s.reducedMotion) dustMul = 0.25;
+          else if (s.particleQuality === "low") dustMul = 0.5;
+        } catch {
+        }
+        this.dustPoints.rotation.z = time * 8e-3 * dustMul;
+        this.dustPoints.position.x = Math.sin(time * 0.05 * dustMul) * 30;
+        this.dustPoints.position.y = Math.cos(time * 0.04 * dustMul) * 20;
+        this.dustPoints.visible = loadSettings().particleQuality !== "low" || (world?.spawner.enemies.length ?? 0) < 20;
       }
       if (!world) {
         this.playerVisual.group.visible = false;
@@ -34743,12 +35039,29 @@ void main() {
       return { group: root, shell, core, fins };
     }
     applyAdaptiveQuality(enemyCount) {
-      const nextDetailMode = this.detailMode === "full" ? enemyCount >= REDUCED_DETAIL_ENTER_THRESHOLD ? "lite" : "full" : enemyCount <= REDUCED_DETAIL_EXIT_THRESHOLD ? "full" : "lite";
+      let qualityBias = 0;
+      try {
+        const q = loadSettings().particleQuality;
+        if (q === "low") qualityBias = -8;
+        else if (q === "medium") qualityBias = -4;
+        if (loadSettings().reducedMotion) qualityBias -= 4;
+      } catch {
+      }
+      const enterThreshold = REDUCED_DETAIL_ENTER_THRESHOLD + qualityBias;
+      const exitThreshold = REDUCED_DETAIL_EXIT_THRESHOLD + qualityBias;
+      const nextDetailMode = this.detailMode === "full" ? enemyCount >= enterThreshold ? "lite" : "full" : enemyCount <= exitThreshold ? "full" : "lite";
       if (nextDetailMode !== this.detailMode) {
         this.detailMode = nextDetailMode;
         this.recycleActiveEnemyVisuals();
       }
-      const pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD ? 0.62 : enemyCount >= REDUCED_PIXEL_RATIO_THRESHOLD ? 0.8 : 1;
+      let pixelRatioScale = enemyCount >= HEAVY_PIXEL_RATIO_THRESHOLD ? 0.62 : enemyCount >= REDUCED_PIXEL_RATIO_THRESHOLD ? 0.8 : 1;
+      try {
+        const q = loadSettings().particleQuality;
+        if (q === "low") pixelRatioScale *= 0.75;
+        else if (q === "medium") pixelRatioScale *= 0.88;
+        if (loadSettings().reducedMotion) pixelRatioScale *= 0.85;
+      } catch {
+      }
       this.updatePixelRatio(pixelRatioScale);
       if (this.composer && this.composerReady) {
         if (this.lastFrameCost > 24) {
@@ -35314,11 +35627,11 @@ void main() {
             event.preventDefault();
             this.game.chooseSelectedDraft(this.world.weaponManager, this.world.player);
             clearTransientInput();
-            suppressDashFor(500);
+            suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
           } else if (event.key.toLowerCase() === "r") {
             this.game.rerollDraft(this.world.weaponManager);
             clearTransientInput();
-            suppressDashFor(250);
+            suppressDashFor(DASH_SUPPRESS_MS.REROLL);
           }
           return;
         }
@@ -35327,8 +35640,8 @@ void main() {
             this.game.state = "playing" /* PLAYING */;
             return;
           }
-          if (event.key >= "1" && event.key <= "4") {
-            const keys2 = ["soundEnabled", "musicEnabled", "shakeEnabled", "damageNumbersEnabled"];
+          if (event.key >= "1" && event.key <= "6") {
+            const keys2 = ["soundEnabled", "musicEnabled", "shakeEnabled", "damageNumbersEnabled", "particleQuality", "reducedMotion"];
             this.ui.applySettingToggle(keys2[Number(event.key) - 1]);
             return;
           }
@@ -35379,7 +35692,7 @@ void main() {
             this.game.rerollDraft(this.world.weaponManager);
           }
           clearTransientInput();
-          suppressDashFor(500);
+          suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
           return;
         }
         if (this.game.state === "paused" /* PAUSED */) {
@@ -35414,6 +35727,7 @@ void main() {
         }
       };
       this.frame = (timestamp) => {
+        const frameStart = performance.now();
         const dt = Math.min((timestamp - this.lastFrameTime) / 1e3, 0.05);
         this.lastFrameTime = timestamp;
         this.ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
@@ -35486,6 +35800,8 @@ void main() {
             this.ui.drawVictory(this.ctx, this.canvas, this.world.player, this.game, this.lastRecordResult ?? void 0);
             break;
         }
+        const frameCost = performance.now() - frameStart;
+        this.entityRenderer?.reportFrameCost(frameCost);
         requestAnimationFrame(this.frame);
       };
       this.resize();
@@ -35565,7 +35881,7 @@ void main() {
         if (!this.world.weaponManager.allMaxed()) {
           this.game.queueLevelUps(result.levelUps, this.world.weaponManager);
           clearTransientInput();
-          suppressDashFor(600);
+          suppressDashFor(DASH_SUPPRESS_MS.LEVEL_UP_QUEUE);
         }
       }
       this.game.updateNotifications(dt);
@@ -35615,6 +35931,7 @@ void main() {
       }
     }
     resetRun(state) {
+      this.entityRenderer?.clear();
       this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
       this.game = new Game();
       this.game.state = state;
@@ -35624,6 +35941,7 @@ void main() {
       clearTransientInput();
     }
     quitToTitle() {
+      this.entityRenderer?.clear();
       this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
       this.game = new Game();
       this.game.state = "title" /* TITLE */;

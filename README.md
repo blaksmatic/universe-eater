@@ -57,7 +57,7 @@ All weapons fire automatically — your job is positioning, kiting, and dashing 
 - Procedural WebAudio soundtrack + synthesized SFX (no audio assets)
 - Screen shake, hit vignettes, dash afterimages, boss warning stings
 - Persistent records (best stage / kills / combo / time, runs played) + NEW RECORD badges
-- Settings: sound, music, screen shake, damage numbers — all persisted
+- Settings: sound, music, screen shake, damage numbers, **particle quality (high/medium/low) + reduced motion** — all persisted (auto-honours `prefers-reduced-motion` on first visit)
 - Full English / 中文 localization, switchable in-game
 
 ## Docs

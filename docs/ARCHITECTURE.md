@@ -1,45 +1,51 @@
 # Architecture
 
-## Layers (management files)
+## Layers — current layout (v0.3.0)
 
 ```
 src/
-  main.ts                 entry — canvas + GameRuntime + window.__universeEater hook
-  core/                   barrel: game.ts, ids.ts, mutators.ts, storage.ts, upgrades.ts, runtime.ts
-    game.ts               Game state machine, draft/level-up, notifications, scheduled hints
-    runtime.ts            requestAnimationFrame loop, state routing, input, audio unlock, records
-    ids.ts                union types + PASSIVE_CAPS
-    mutators.ts           stage mutators (frenzy/heavy/…) + composeSpawnMods
-    storage.ts            localStorage settings/records + submitRun() bests
-    upgrades.ts           draft builder, passives stack caps, doctrines, tags
-  entities/               barrel: player.ts, enemies.ts, weapons.ts
-    player.ts             movement, dash (i-frames/ghosts), crit/vamp/xp, ripples
-    enemies.ts            8 types + elites + 3-phase Void Warden + spawner escalation
-    weapons/              shared.ts + legacy bundle; 7 weapons (laser/orbit/nova/escort/seeker/arc/singularity) + manager
-  systems/                barrel: world.ts, world-combat.ts, world-motion.ts, audio.ts, input.ts
-    world.ts              composition root — wires camera/player/spawner/particles/weapons/combat/motion/renderer
-    world-combat.ts       collisions, combo chain, kill rewards, boss events
-    world-motion.ts       velocity sampling for background parallax
-    audio.ts              WebAudio engine, throttled SFX + generative music, persisted toggles
-    input.ts              keyboard, floating joystick, dash/pause buttons, haptics
-  render/                 barrel: camera.ts, background.ts, geometry.ts, particles.ts, three-view.ts, world-renderer.ts
-    camera.ts             follow + shake (shakeEnabled guard)
-    background.ts         parallax starfield + wrap zone
-    geometry.ts           neon grid/radials/rings
-    particles.ts          death FX, sparks, debris, XP orbs, damage numbers, screen flashes
-    three-view.ts         three.js entity overlay (pooled visuals, adaptive quality, 2D fallback)
-    world-renderer.ts     draw order: bg → geometry → entities/3D → auras → particles → weapons → player → wrap → vignette → HUD
-  ui/                     icons.ts + theme.ts split from ui.ts
-    ui.ts                 HUD, boss bar, combo meter, draft cards, pause, title — now imports icons/theme
-    ui/icons.ts           WEAPON_SHAPES (all weapon+passive icons)
-    ui/theme.ts           UI_COLORS, glassPanel, glowText, spacedText, gradientText (design system)
-    storage/i18n interplay for language selector
-  utils/
-    utils.ts              MAP constants, wrapPosition/wrappedDelta/Distance/Angle, distance/clamp/randomRange, TWO_PI, tracePoly, roundedRect, formatTime, easing
-  i18n.ts                 EN/zh-CN tables, formatters, syncDocumentLanguage
+  main.ts            entry — canvas + GameRuntime + window.__universeEater hook
+  runtime.ts         requestAnimationFrame loop, state routing, input, audio unlock, records
+  game.ts            Game state machine, draft/level-up, notifications, scheduled hints
+  ids.ts             union types + PASSIVE_CAPS
+  mutators.ts        stage mutators (frenzy/heavy/…) + composeSpawnMods
+  storage.ts         localStorage settings/records + submitRun() bests
+  upgrades.ts        draft builder, passives stack caps, doctrines, tags
+  player.ts          movement, dash (i-frames/ghosts), crit/vamp/xp, ripples
+  enemies.ts         re-export shim → src/entities/enemies/*
+  weapons.ts         re-export shim → src/weapons/*
+  world.ts           composition root — wires camera/player/spawner/particles/weapons/combat/motion/renderer
+  world-combat.ts    collisions, combo chain, kill rewards, boss events
+  world-motion.ts    velocity sampling for background parallax
+  world-renderer.ts  draw order: bg → geometry → entities/3D → auras → particles → weapons → player → wrap → vignette → HUD
+  camera.ts          follow + shake (shakeEnabled + prefers-reduced-motion guard)
+  background.ts      parallax starfield + wrap zone
+  geometry.ts        neon grid/radials/rings
+  particles.ts       death FX, sparks, debris, XP orbs, damage numbers, screen flashes (budget-capped)
+  three-view.ts      three.js entity overlay, pooled visuals, adaptive quality, dispose() lifecycle, 2D fallback
+  audio.ts           WebAudio engine, throttled SFX + generative music, persisted toggles
+  input.ts           keyboard, floating joystick, dash/pause buttons, haptics, dash suppression constants
+  ui.ts              HUD, boss bar, combo meter, draft cards, pause, title — imports icons/theme
+  utils.ts           MAP constants, wrapPosition/wrappedDelta/Distance/Angle, distance/clamp/randomRange, TWO_PI, tracePoly, roundedRect, formatTime, easing
+  i18n.ts            EN/zh-CN tables, formatters, syncDocumentLanguage
+  entities/
+    enemies/
+      types.ts       EnemyType, EnemySpawnOptions, ENEMY_TYPES config, BOSS_BASE_HP
+      enemy.ts       Enemy class + all 8 type behaviours + boss phases
+      spawner.ts     EnemySpawner escalation + elite/boss spawning
+      index.ts       barrel re-export
+  weapons/
+    shared.ts        Weapon interface + WeaponModifiers + hitEnemy helpers
+    laser.ts / orbit.ts / nova.ts / escort.ts / seeker.ts / arc.ts / singularity.ts
+    beam.ts          drawBeam helper
+    manager.ts       WeaponManager registry (damage 2.8× cap, cooldown 0.4× floor)
+    index.ts         barrel
+  ui/
+    icons.ts         WEAPON_SHAPES (all weapon+passive icons)
+    theme.ts         UI_COLORS, glassPanel, glowText, spacedText, gradientText
 ```
 
-Import rule: new code prefers `src/<layer>/index.ts` barrels; legacy `from './weapons'` etc still works via re-export shims retained for compatibility.
+Planned barrels `src/core/`, `src/systems/`, `src/render/` are documented in `docs/COMPONENTS.md:40` but not yet materialized — new code may use `src/<layer>/index.ts` barrels when they land; legacy `from './weapons'` / `from './enemies'` imports remain valid via retained re-export shims for backward compat.
 
 ## Game loop — `runtime.ts:13`
 

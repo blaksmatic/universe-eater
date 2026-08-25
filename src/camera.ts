@@ -30,12 +30,15 @@ export class Camera {
   }
 
   shake(intensity: number, duration: number): void {
-    if (!loadSettings().shakeEnabled) return;
-    // Only override if stronger than current shake
-    if (intensity > this.shakeIntensity) {
-      this.shakeIntensity = intensity;
-      this.shakeDuration = duration;
-      this.shakeTimer = duration;
+    const s = loadSettings();
+    if (!s.shakeEnabled || s.reducedMotion) return;
+    // Reduced motion halves intensity even if shakeEnabled
+    const effectiveIntensity = s.reducedMotion ? intensity * 0.35 : intensity;
+    const effectiveDuration = s.reducedMotion ? duration * 0.5 : duration;
+    if (effectiveIntensity > this.shakeIntensity) {
+      this.shakeIntensity = effectiveIntensity;
+      this.shakeDuration = effectiveDuration;
+      this.shakeTimer = effectiveDuration;
     }
   }
 

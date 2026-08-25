@@ -29,6 +29,7 @@ All via `WeaponManager.modifiers` (damage/cooldown/crit). Unlock order gated by 
 
 - hull (+25 HP + repair), thrusters (+speed), nanoforge (regen), plating (DR), targeting (+8% crit ×2), overclock (-7% cd), vampiric (+0.8 on kill), amplifier (+12% XP). Caps: targeting 6, overclock/vampiric/amplifier 5.
 - Doctrines unlock at trait thresholds: e.g., bulwark from ward tags → +20 hull + grace.
+- Weapon tuning caps: `WeaponManager.multiplyDamage` clamped at **2.8×**, `multiplyCooldown` floored at **0.4×** (`weapons/manager.ts:71`) — prevents doctrine + overclock multiplicative creep across stages.
 
 ## Combat & combo
 
@@ -43,13 +44,16 @@ All via `WeaponManager.modifiers` (damage/cooldown/crit). Unlock order gated by 
 
 ## Feel
 
-- Dash i-frames + ghosts + cooldown ring (`player.dashCooldownRatio`).
-- Off-screen arrows for boss/elite, boss bar pips, XP bar glow, damage vignette (`ui.drawVignette`), shake respecting `shakeEnabled`, WebAudio ambient+stings, persisted settings.
+- Dash i-frames + ghosts + cooldown ring (`player.dashCooldownRatio`), gated by `DASH_SUPPRESS_MS` constants (`input.ts:6`) to block Space-confirm carry-over.
+- Off-screen arrows for boss/elite, boss bar pips (pulses at <25% HP), XP bar glow + 85%+ shimmer, damage vignette (`ui.drawVignette`), shake respecting `shakeEnabled` + `reducedMotion`, WebAudio ambient+stings, persisted settings.
+- Accessibility: `prefers-reduced-motion` auto-sets `reducedMotion:true` + `shakeEnabled:false` + `particleQuality:medium` on first visit; runtime dampens shake 0.35×, flashes 0.45× alpha, geometry 0.35×, three.js dust 0.25×; combo/title pulses disabled.
+- Particles: budget capped by `particleQuality` (high 500 / medium 360 / low 220, `particles.ts:4`), load-scaled emissions; swarmer death halves sparks/debris vs heavy elites; low quality skips large flash rings.
 
 ## Balancing references
 
-- `scripts/balance-boss.mjs` — mid-tier DPS/TTK sim.
-- `scripts/playtest.mjs` / `qa-edge.mjs` / `mobile-audit.mjs` — automated coverage.
+- `scripts/balance-boss.mjs` — mid-tier DPS/TTK sim now runs 3 modes: legacy DPS isolation (godmode), survivability (no godmode kiting at 130px), and mutator variance matrix (neutral / heavy / frenzy / overdrive+shrapnel / elites / veterans / tiny). Effective DPS, kill/die/timeout and phase timelines logged.
+- `scripts/playtest.mjs` / `qa-edge.mjs` / `mobile-audit.mjs` — automated coverage; harness expects server on `:3456` (see `docs/BUILD.md`).
+- Adaptive rendering: `three-view.ts` `applyAdaptiveQuality` biases lite mode + pixel-ratio scale by `particleQuality` and `reducedMotion`; sustained slow frames (>24ms for 90 frames) disable bloom once per session.
 
 ## Adding content
 

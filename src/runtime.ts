@@ -1,7 +1,7 @@
 import { Game, GameState } from './game';
 import { setLanguage, syncDocumentLanguage } from './i18n';
 import { UI } from './ui';
-import { consumeAnyTap, consumePauseTap, clearTransientInput, suppressDashFor, triggerHaptic } from './input';
+import { consumeAnyTap, consumePauseTap, clearTransientInput, suppressDashFor, triggerHaptic, DASH_SUPPRESS_MS } from './input';
 import { GameWorld } from './world';
 import { ThreeEntityRenderer } from './three-view';
 import { audio } from './audio';
@@ -88,11 +88,11 @@ export class GameRuntime {
         event.preventDefault();
         this.game.chooseSelectedDraft(this.world.weaponManager, this.world.player);
         clearTransientInput();
-        suppressDashFor(500);
+        suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
       } else if (event.key.toLowerCase() === 'r') {
         this.game.rerollDraft(this.world.weaponManager);
         clearTransientInput();
-        suppressDashFor(250);
+        suppressDashFor(DASH_SUPPRESS_MS.REROLL);
       }
       return;
     }
@@ -102,8 +102,8 @@ export class GameRuntime {
         this.game.state = GameState.PLAYING;
         return;
       }
-      if (event.key >= '1' && event.key <= '4') {
-        const keys = ['soundEnabled', 'musicEnabled', 'shakeEnabled', 'damageNumbersEnabled'] as const;
+      if (event.key >= '1' && event.key <= '6') {
+        const keys = ['soundEnabled', 'musicEnabled', 'shakeEnabled', 'damageNumbersEnabled', 'particleQuality', 'reducedMotion'] as const;
         this.ui.applySettingToggle(keys[Number(event.key) - 1]);
         return;
       }
@@ -159,7 +159,7 @@ export class GameRuntime {
         this.game.rerollDraft(this.world.weaponManager);
       }
       clearTransientInput();
-      suppressDashFor(500);
+      suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
       return;
     }
 
@@ -198,6 +198,7 @@ export class GameRuntime {
   };
 
   private frame = (timestamp: number): void => {
+    const frameStart = performance.now();
     const dt = Math.min((timestamp - this.lastFrameTime) / 1000, 0.05);
     this.lastFrameTime = timestamp;
 
@@ -274,6 +275,8 @@ export class GameRuntime {
         break;
     }
 
+    const frameCost = performance.now() - frameStart;
+    this.entityRenderer?.reportFrameCost(frameCost);
     requestAnimationFrame(this.frame);
   };
 
@@ -334,7 +337,7 @@ export class GameRuntime {
       if (!this.world.weaponManager.allMaxed()) {
         this.game.queueLevelUps(result.levelUps, this.world.weaponManager);
         clearTransientInput();
-        suppressDashFor(600);
+        suppressDashFor(DASH_SUPPRESS_MS.LEVEL_UP_QUEUE);
       }
     }
 
@@ -390,6 +393,7 @@ export class GameRuntime {
   }
 
   private resetRun(state: GameState): void {
+    this.entityRenderer?.clear();
     this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
     this.game = new Game();
     this.game.state = state;
@@ -400,6 +404,7 @@ export class GameRuntime {
   }
 
   private quitToTitle(): void {
+    this.entityRenderer?.clear();
     this.world = new GameWorld(this.viewportWidth, this.viewportHeight);
     this.game = new Game();
     this.game.state = GameState.TITLE;

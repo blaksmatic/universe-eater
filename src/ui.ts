@@ -27,9 +27,9 @@ export type PauseAction =
   | { type: 'quit' }
   | { type: 'toggle'; key: SettingKey };
 
-export type SettingKey = 'soundEnabled' | 'musicEnabled' | 'shakeEnabled' | 'damageNumbersEnabled';
+export type SettingKey = 'soundEnabled' | 'musicEnabled' | 'shakeEnabled' | 'damageNumbersEnabled' | 'particleQuality' | 'reducedMotion';
 
-const SETTING_KEYS: SettingKey[] = ['soundEnabled', 'musicEnabled', 'shakeEnabled', 'damageNumbersEnabled'];
+const SETTING_KEYS: SettingKey[] = ['soundEnabled', 'musicEnabled', 'shakeEnabled', 'damageNumbersEnabled', 'particleQuality', 'reducedMotion'];
 
 function settingLabel(key: SettingKey): string {
   switch (key) {
@@ -37,7 +37,20 @@ function settingLabel(key: SettingKey): string {
     case 'musicEnabled': return getUiText('settingMusic');
     case 'shakeEnabled': return getUiText('settingShake');
     case 'damageNumbersEnabled': return getUiText('settingNumbers');
+    case 'particleQuality': return getUiText('settingParticles');
+    case 'reducedMotion': return getUiText('settingReducedMotion');
   }
+}
+
+function settingValueLabel(key: SettingKey): string {
+  const s = loadSettings();
+  if (key === 'particleQuality') {
+    const q = s.particleQuality;
+    if (q === 'high') return getUiText('qualityHigh');
+    if (q === 'medium') return getUiText('qualityMedium');
+    return getUiText('qualityLow');
+  }
+  return (s as unknown as Record<string, boolean>)[key] ? getUiText('toggleOn') : getUiText('toggleOff');
 }
 
 export class UI {
@@ -82,7 +95,8 @@ export class UI {
     ctx.save();
     ctx.textAlign = 'center';
     if (game.bossEngaged) {
-      const pulse = 0.72 + 0.28 * Math.sin(this.stateAge * 6);
+      const rm = loadSettings().reducedMotion;
+      const pulse = rm ? 0.85 : 0.72 + 0.28 * Math.sin(this.stateAge * 6);
       ctx.font = uiFont(24, 'bold');
       ctx.fillStyle = `rgba(255, 60, 90, ${pulse})`;
       ctx.fillText(getUiText('slayPrompt'), w / 2, topInset + 26);
@@ -178,6 +192,13 @@ export class UI {
       glowGrad.addColorStop(1, 'rgba(150, 230, 255, 0)');
       ctx.fillStyle = glowGrad;
       ctx.fillRect(edgeX - 15, barY - 10, 30, barH + 20);
+      // Polish: shimmer tick when close to leveling (85%+)
+      if (xpRatio > 0.85 && !loadSettings().reducedMotion) {
+        const shimmer = 0.5 + 0.5 * Math.sin(this.stateAge * 5);
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.12 * shimmer})`;
+        const sx = barX + fillW * (0.5 + 0.5 * Math.sin(this.stateAge * 3));
+        ctx.fillRect(sx - 18, barY, 36, barH);
+      }
       ctx.restore();
     }
 
@@ -280,14 +301,23 @@ export class UI {
     ctx.fillStyle = 'rgba(255, 190, 205, 0.92)';
     ctx.fillText(formatBossTitle(game.stage), w / 2, barY - 6);
 
-    // Backing
+    // Backing — pulses red when boss <25% HP (polish), respects reducedMotion
+    const lowHp = hpRatio < 0.25 && !loadSettings().reducedMotion;
+    const lowPulse = lowHp ? 0.35 + 0.25 * Math.sin(this.stateAge * 8) : 0.35;
     ctx.beginPath();
     roundedRect(ctx, barX, barY, barW, barH, barH / 2);
     ctx.fillStyle = 'rgba(20, 6, 12, 0.75)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 90, 120, 0.35)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = lowHp ? `rgba(255, 90, 120, ${lowPulse + 0.15})` : 'rgba(255, 90, 120, 0.35)';
+    ctx.lineWidth = lowHp ? 1.5 : 1;
     ctx.stroke();
+    if (lowHp) {
+      ctx.beginPath();
+      roundedRect(ctx, barX - 2, barY - 2, barW + 4, barH + 4, barH / 2 + 2);
+      ctx.strokeStyle = `rgba(255, 60, 80, ${0.14 * (0.5 + 0.5 * Math.sin(this.stateAge * 8))})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
 
     // Fill with phase gradient
     if (hpRatio > 0) {
@@ -374,9 +404,10 @@ export class UI {
   ): void {
     if (comboCount < 3) return;
     const w = canvas.clientWidth;
-    const pop = Math.max(0, 1 - this.comboPopAge * 3);
+    const s = loadSettings();
+    const pop = s.reducedMotion ? 0 : Math.max(0, 1 - this.comboPopAge * 3);
     this.comboPopAge += 1 / 60;
-    const scale = 1 + pop * 0.35;
+    const scale = s.reducedMotion ? 1 : 1 + pop * 0.35;
     const label = formatCombo(comboCount);
     const heat = Math.min(1, comboCount / 30);
 
@@ -524,7 +555,8 @@ export class UI {
     ctx.fillText(getUiText('titleSubtitle'), cx, cy + Math.max(0, titleSize * 0.55 - 18));
 
     const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
-    const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
+    const rm = loadSettings().reducedMotion;
+    const breathe = rm ? 0.75 : 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
     ctx.font = uiFont(w < 500 ? 14 : 16);
     ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe})`;
     const startMsg = isTouchDevice() ? getUiText('tapToStart') : getUiText('pressAnyKeyToStart');
@@ -865,7 +897,10 @@ export class UI {
     ctx.textAlign = 'center';
 
     for (const row of layout.settingRows) {
-      const enabled = this.readSetting(row.key);
+      const isQuality = row.key === 'particleQuality';
+      const enabled = !isQuality ? this.readSetting(row.key as Exclude<SettingKey, 'particleQuality'>) : false;
+      const valueLabel = settingValueLabel(row.key);
+      const isOn = isQuality ? loadSettings().particleQuality !== 'low' : enabled;
       ctx.beginPath();
       roundedRect(ctx, row.x, row.y, row.width, row.height, 8);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
@@ -880,17 +915,17 @@ export class UI {
       ctx.fillText(settingLabel(row.key), row.x + 10, row.y + row.height / 2 + 4);
       ctx.textAlign = 'right';
 
-      const pillW = compact ? 40 : 52;
+      const pillW = compact ? 52 : 64;
       const pillH = Math.min(row.height - 6, 20);
       const pillX = row.x + row.width - pillW - 8;
       const pillY = row.y + (row.height - pillH) / 2;
       ctx.beginPath();
       roundedRect(ctx, pillX, pillY, pillW, pillH, 8);
-      ctx.fillStyle = enabled ? 'rgba(70, 160, 255, 0.3)' : 'rgba(90, 90, 110, 0.25)';
+      ctx.fillStyle = isOn ? 'rgba(70, 160, 255, 0.3)' : 'rgba(90, 90, 110, 0.25)';
       ctx.fill();
       ctx.font = uiFont(10, 'bold');
-      ctx.fillStyle = enabled ? 'rgba(190, 230, 255, 0.95)' : 'rgba(180, 180, 195, 0.6)';
-      ctx.fillText(enabled ? getUiText('toggleOn') : getUiText('toggleOff'), pillX + pillW / 2, pillY + pillH / 2 + 4);
+      ctx.fillStyle = isOn ? 'rgba(190, 230, 255, 0.95)' : 'rgba(180, 180, 195, 0.6)';
+      ctx.fillText(valueLabel, pillX + pillW / 2, pillY + pillH / 2 + 4);
       ctx.textAlign = 'center';
     }
 
@@ -953,13 +988,19 @@ export class UI {
     }
   }
 
-  private readSetting(key: SettingKey): boolean {
+  private readSetting(key: Exclude<SettingKey, 'particleQuality'>): boolean {
     return loadSettings()[key];
   }
 
   applySettingToggle(key: SettingKey): void {
     const settings = loadSettings();
-    settings[key] = !settings[key];
+    if (key === 'particleQuality') {
+      const order: Array<'high' | 'medium' | 'low'> = ['high', 'medium', 'low'];
+      const idx = order.indexOf(settings.particleQuality);
+      settings.particleQuality = order[(idx + 1) % order.length];
+    } else {
+      (settings as unknown as Record<string, boolean>)[key] = !(settings as unknown as Record<string, boolean>)[key];
+    }
     saveSettings(settings);
     audio.setSoundEnabled(settings.soundEnabled);
     audio.setMusicEnabled(settings.musicEnabled);
@@ -1118,7 +1159,8 @@ export class UI {
       ctx.fillStyle = `rgba(255, 255, 255, ${statAlpha * 0.7})`;
       ctx.fillText(text, startX, cy + 15 + i * statGap);
       if (badge && statAlpha > 0.1) {
-        const badgePulse = 0.75 + 0.25 * Math.sin(t * 5);
+        const rmBadge = loadSettings().reducedMotion;
+        const badgePulse = rmBadge ? 0.9 : 0.75 + 0.25 * Math.sin(t * 5);
         ctx.font = uiFont(shortEnd ? 12 : 14, 'bold');
         ctx.fillStyle = `rgba(255, 210, 90, ${statAlpha * badgePulse})`;
         ctx.fillText(badgeLabel, startX + textW + 10, cy + 15 + i * statGap);
@@ -1127,7 +1169,8 @@ export class UI {
     ctx.textAlign = 'center';
 
     const promptAlpha = Math.max(0, Math.min(1, (t - 1.2) * 2));
-    const breathe = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
+    const rmPrompt = loadSettings().reducedMotion;
+    const breathe = rmPrompt ? 0.7 : 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
     ctx.font = uiFont(14);
     ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha * (subduedPrompt ? 0.55 : breathe * 0.5)})`;
     ctx.fillText(promptText, cx, cy + (shortEnd ? 78 : 95) + Math.max(0, stats.length - 3) * statGap);
@@ -1138,8 +1181,10 @@ export class UI {
     const cx = w / 2;
     const cy = h / 2;
     const r = Math.max(w, h) * 0.75;
+    const s = loadSettings();
+    const motionMul = s.reducedMotion ? 0.55 : 1;
 
-    const baseAlpha = 0.3 + (1 - hpRatio) * 0.35;
+    const baseAlpha = (0.3 + (1 - hpRatio) * 0.35) * motionMul;
     const grad = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
     grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
     grad.addColorStop(1, `rgba(0, 0, 0, ${baseAlpha})`);
@@ -1147,7 +1192,7 @@ export class UI {
     ctx.fillRect(0, 0, w, h);
 
     if (hpRatio < 0.35) {
-      const redAlpha = (0.35 - hpRatio) * 0.4;
+      const redAlpha = (0.35 - hpRatio) * 0.4 * motionMul;
       const redGrad = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r);
       redGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
       redGrad.addColorStop(1, `rgba(150, 0, 0, ${redAlpha})`);

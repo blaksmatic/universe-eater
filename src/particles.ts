@@ -1,7 +1,17 @@
 import { Camera } from './camera';
 import { parseHexColor, TWO_PI, wrappedAngle } from './utils';
+import { loadSettings } from './storage';
 
-const MAX_PARTICLES = 500;
+const MAX_PARTICLES_HIGH = 500;
+const MAX_PARTICLES_MEDIUM = 360;
+const MAX_PARTICLES_LOW = 220;
+
+function getBudgetCap(): number {
+  const q = loadSettings().particleQuality;
+  if (q === 'low') return MAX_PARTICLES_LOW;
+  if (q === 'medium') return MAX_PARTICLES_MEDIUM;
+  return MAX_PARTICLES_HIGH;
+}
 
 interface Particle {
   done: boolean;
@@ -509,7 +519,8 @@ export class ParticleSystem {
   private damageNumberCount = 0;
 
   private getParticleLoadScale(): number {
-    const load = this.particles.length / MAX_PARTICLES;
+    const cap = getBudgetCap();
+    const load = this.particles.length / cap;
     if (load >= 0.85) return 0.35;
     if (load >= 0.65) return 0.5;
     if (load >= 0.45) return 0.7;
@@ -517,12 +528,13 @@ export class ParticleSystem {
   }
 
   private emitParticle(factory: () => Particle): void {
-    if (this.particles.length >= MAX_PARTICLES) return;
+    if (this.particles.length >= getBudgetCap()) return;
     this.particles.push(factory());
   }
 
   private emitBurst(count: number, factory: () => Particle): void {
-    const allowed = Math.max(0, Math.min(count, MAX_PARTICLES - this.particles.length));
+    const cap = getBudgetCap();
+    const allowed = Math.max(0, Math.min(count, cap - this.particles.length));
     for (let i = 0; i < allowed; i++) {
       this.particles.push(factory());
     }
@@ -535,35 +547,44 @@ export class ParticleSystem {
   }
 
   spawnDeath(x: number, y: number, radius: number, outlineColor: string): void {
-    if (this.particles.length >= MAX_PARTICLES) return;
+    if (this.particles.length >= getBudgetCap()) return;
     const loadScale = this.getParticleLoadScale();
+    const quality = loadSettings().particleQuality;
+    const qualityScale = quality === 'low' ? 0.55 : quality === 'medium' ? 0.78 : 1;
+    const isSmall = radius < 14; // swarmer / shard tier
 
     // Hollow ring bubble-up
     this.emitParticle(() => new DeathParticle(x, y, radius, outlineColor));
 
-    // Explosion burst
-    const burstCount = Math.max(4, Math.round((8 + Math.floor(Math.random() * 8)) * loadScale));
+    // Explosion burst — reduced for small fry
+    const baseBurst = isSmall ? 4 : 8;
+    const burstJitter = isSmall ? 3 : 8;
+    const burstCount = Math.max(isSmall ? 2 : 4, Math.round((baseBurst + Math.floor(Math.random() * burstJitter)) * loadScale * qualityScale));
     this.emitBurst(burstCount, () => new ExplosionParticle(x, y, outlineColor));
 
-    // Spark trails
-    const sparkCount = Math.max(3, Math.round((6 + radius * 0.3) * loadScale));
+    // Spark trails — swarmer gets ~40% fewer
+    const baseSparks = isSmall ? 2 : 6;
+    const sparkRate = isSmall ? 0.15 : 0.3;
+    const sparkCount = Math.max(isSmall ? 2 : 3, Math.round((baseSparks + radius * sparkRate) * loadScale * qualityScale));
     this.emitBurst(sparkCount, () => new SparkParticle(x, y, outlineColor, 120 + Math.random() * 180));
 
-    // Rotating debris
-    const debrisCount = Math.max(2, Math.round((4 + radius * 0.15) * loadScale));
+    // Rotating debris — swarmer debris halved
+    const baseDebris = isSmall ? 2 : 4;
+    const debrisRate = isSmall ? 0.08 : 0.15;
+    const debrisCount = Math.max(isSmall ? 1 : 2, Math.round((baseDebris + radius * debrisRate) * loadScale * qualityScale));
     this.emitBurst(debrisCount, () => new DebrisParticle(x, y, outlineColor, radius));
 
     // Glow pool
     this.emitParticle(() => new GlowPool(x, y, outlineColor, radius));
 
-    // Flash for bigger enemies
-    if (radius > 25) {
+    // Flash for bigger enemies — skip on low quality
+    if (radius > 25 && quality !== 'low') {
       this.emitParticle(() => new FlashParticle(x, y, radius));
     }
   }
 
   spawnXpOrbs(x: number, y: number, playerX: number, playerY: number, count: number): void {
-    if (count <= 0 || this.particles.length >= MAX_PARTICLES) return;
+    if (count <= 0 || this.particles.length >= getBudgetCap()) return;
     const orbCount = Math.max(1, Math.round(count * this.getParticleLoadScale()));
     this.emitBurst(orbCount, () => new XpOrb(x, y, playerX, playerY));
   }
@@ -584,31 +605,50 @@ export class ParticleSystem {
   }
 
   addScreenFlash(r: number, g: number, b: number, alpha: number, duration: number): void {
+    const s = loadSettings();
+    if (s.reducedMotion) {
+      alpha *= 0.45;
+      duration *= 0.6;
+      if (alpha < 0.04) return;
+    }
     this.screenEffects.push(new ScreenFlash(r, g, b, alpha, duration));
   }
 
   addDamageVignette(duration: number, intensity: number): void {
+    const s = loadSettings();
+    if (s.reducedMotion) {
+      intensity *= 0.4;
+      duration *= 0.5;
+    }
     this.screenEffects.push(new DamageVignette(duration, intensity));
   }
 
   update(dt: number): void {
-    for (const p of this.particles) p.update(dt);
-    if (this.particles.length > 0) {
-      this.particles = this.particles.filter(p => !p.done);
-      let numberCount = 0;
-      for (const p of this.particles) {
+    // In-place update + compact to avoid per-frame array allocations (GC pressure at 60fps)
+    let write = 0;
+    let numberCount = 0;
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i];
+      p.update(dt);
+      if (!p.done) {
+        this.particles[write++] = p;
         if (p instanceof DamageNumber) {
           numberCount++;
-          if (numberCount >= 60) break;
+          // Cap counted but keep particle; cap enforced at spawn
         }
       }
-      this.damageNumberCount = numberCount;
-    } else {
-      this.damageNumberCount = 0;
     }
+    this.particles.length = write;
+    // Clamp count to cap for spawn gate (already bounded)
+    this.damageNumberCount = Math.min(numberCount, 60);
 
-    for (const e of this.screenEffects) e.update(dt);
-    this.screenEffects = this.screenEffects.filter(e => !e.done);
+    let w2 = 0;
+    for (let i = 0; i < this.screenEffects.length; i++) {
+      const e = this.screenEffects[i];
+      e.update(dt);
+      if (!e.done) this.screenEffects[w2++] = e;
+    }
+    this.screenEffects.length = w2;
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
