@@ -1,7 +1,7 @@
 import { Game, GameState } from './game';
 import { setLanguage, syncDocumentLanguage } from './i18n';
 import { UI } from './ui';
-import { consumeAnyTap, consumePauseTap, clearTransientInput, triggerHaptic } from './input';
+import { consumeAnyTap, consumePauseTap, clearTransientInput, suppressDashFor, triggerHaptic } from './input';
 import { GameWorld } from './world';
 import { ThreeEntityRenderer } from './three-view';
 import { audio } from './audio';
@@ -88,9 +88,11 @@ export class GameRuntime {
         event.preventDefault();
         this.game.chooseSelectedDraft(this.world.weaponManager, this.world.player);
         clearTransientInput();
+        suppressDashFor(500);
       } else if (event.key.toLowerCase() === 'r') {
         this.game.rerollDraft(this.world.weaponManager);
         clearTransientInput();
+        suppressDashFor(250);
       }
       return;
     }
@@ -157,6 +159,7 @@ export class GameRuntime {
         this.game.rerollDraft(this.world.weaponManager);
       }
       clearTransientInput();
+      suppressDashFor(500);
       return;
     }
 
@@ -330,6 +333,8 @@ export class GameRuntime {
       audio.playLevelUp();
       if (!this.world.weaponManager.allMaxed()) {
         this.game.queueLevelUps(result.levelUps, this.world.weaponManager);
+        clearTransientInput();
+        suppressDashFor(600);
       }
     }
 

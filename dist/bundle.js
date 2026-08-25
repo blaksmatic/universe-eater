@@ -28120,11 +28120,18 @@ void main() {
   // src/input.ts
   var keys = {};
   var dashKeyQueued = false;
+  var dashSuppressUntil = 0;
+  function suppressDashFor(ms) {
+    dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
+  }
   window.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (!keys[key]) {
       if (key === " " || key === "shift") {
-        dashKeyQueued = true;
+        if (performance.now() < dashSuppressUntil) {
+        } else {
+          dashKeyQueued = true;
+        }
       }
     }
     keys[key] = true;
@@ -28293,6 +28300,11 @@ void main() {
     return false;
   }
   function consumeDashRequest() {
+    if (performance.now() < dashSuppressUntil) {
+      dashKeyQueued = false;
+      touch.dashTapped = false;
+      return false;
+    }
     if (dashKeyQueued) {
       dashKeyQueued = false;
       return true;
@@ -35222,9 +35234,11 @@ void main() {
             event.preventDefault();
             this.game.chooseSelectedDraft(this.world.weaponManager, this.world.player);
             clearTransientInput();
+            suppressDashFor(500);
           } else if (event.key.toLowerCase() === "r") {
             this.game.rerollDraft(this.world.weaponManager);
             clearTransientInput();
+            suppressDashFor(250);
           }
           return;
         }
@@ -35285,6 +35299,7 @@ void main() {
             this.game.rerollDraft(this.world.weaponManager);
           }
           clearTransientInput();
+          suppressDashFor(500);
           return;
         }
         if (this.game.state === "paused" /* PAUSED */) {
@@ -35469,6 +35484,8 @@ void main() {
         audio.playLevelUp();
         if (!this.world.weaponManager.allMaxed()) {
           this.game.queueLevelUps(result.levelUps, this.world.weaponManager);
+          clearTransientInput();
+          suppressDashFor(600);
         }
       }
       this.game.updateNotifications(dt);

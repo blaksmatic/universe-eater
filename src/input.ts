@@ -1,12 +1,21 @@
 const keys: Record<string, boolean> = {};
 
 let dashKeyQueued = false;
+let dashSuppressUntil = 0;
+
+export function suppressDashFor(ms: number): void {
+  dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
+}
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (!keys[key]) {
     if (key === ' ' || key === 'shift') {
-      dashKeyQueued = true;
+      if (performance.now() < dashSuppressUntil) {
+        // Draft confirm etc. — swallow the queued dash
+      } else {
+        dashKeyQueued = true;
+      }
     }
   }
   keys[key] = true;
@@ -226,6 +235,11 @@ export function consumeAnyTap(): boolean {
  * Returns true at most once per physical press.
  */
 export function consumeDashRequest(): boolean {
+  if (performance.now() < dashSuppressUntil) {
+    dashKeyQueued = false;
+    touch.dashTapped = false;
+    return false;
+  }
   if (dashKeyQueued) {
     dashKeyQueued = false;
     return true;
