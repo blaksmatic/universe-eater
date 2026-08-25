@@ -27289,6 +27289,7 @@ void main() {
       tapToStart: "\u70B9\u51FB\u5F00\u59CB",
       pressAnyKeyToStart: "\u6309\u4EFB\u610F\u952E\u5F00\u59CB",
       titleHintPrimary: "\u79FB\u52A8\u6C42\u751F  \u2022  \u6B66\u5668\u81EA\u52A8\u5F00\u706B  \u2022  \u7A7A\u683C\u51B2\u523A",
+      titleHintPrimaryMobile: "\u6447\u6746\u79FB\u52A8  \u2022  \u6B66\u5668\u81EA\u52A8\u5F00\u706B  \u2022  \u70B9\u6309\u95EA\u7535\u51B2\u523A",
       titleHintSecondaryCompact: "\u51FB\u8D25\u865A\u7A7A\u770B\u5B88\u8005\u8FDB\u5165\u4E0B\u4E00\u9636\u6BB5",
       titleHintSecondaryWide: "\u8BA1\u65F6\u7ED3\u675F\u540E\u770B\u5B88\u8005\u964D\u4E34  \u2022  \u6784\u7B51\u4F1A\u5EF6\u7EED\u5230\u4E0B\u4E00\u9636\u6BB5",
       levelUpTitle: "\u5347\u7EA7",
@@ -27341,6 +27342,7 @@ void main() {
       tapToStart: "Tap to start",
       pressAnyKeyToStart: "Press any key to start",
       titleHintPrimary: "MOVE TO SURVIVE  \u2022  WEAPONS AUTO-FIRE  \u2022  SPACE TO DASH",
+      titleHintPrimaryMobile: "DRAG TO MOVE  \u2022  WEAPONS AUTO-FIRE  \u2022  TAP BOLT TO DASH",
       titleHintSecondaryCompact: "DEFEAT THE VOID WARDEN TO ADVANCE",
       titleHintSecondaryWide: "WHEN THE TIMER ENDS THE WARDEN ARRIVES  \u2022  YOUR BUILD CARRIES FORWARD",
       levelUpTitle: "LEVEL UP",
@@ -30759,9 +30761,10 @@ void main() {
       const startMsg = isTouchDevice() ? getUiText("tapToStart") : getUiText("pressAnyKeyToStart");
       ctx2.fillText(startMsg, cx, cy + 60);
       const helpAlpha = Math.max(0, Math.min(1, (t - 1.3) * 2));
-      ctx2.font = uiFont(w < 500 ? 11 : 13);
+      const isTouch = isTouchDevice();
+      ctx2.font = uiFont(w < 500 ? isTouch ? 12 : 11 : 13);
       ctx2.fillStyle = `rgba(160, 200, 255, ${helpAlpha * 0.5})`;
-      ctx2.fillText(getUiText("titleHintPrimary"), cx, cy + (w < 500 ? 88 : 95));
+      ctx2.fillText(getUiText(isTouch ? "titleHintPrimaryMobile" : "titleHintPrimary"), cx, cy + (w < 500 ? 88 : 95));
       if (w < 500) {
         ctx2.fillText(getUiText("titleHintSecondaryCompact"), cx, cy + 106);
       } else {

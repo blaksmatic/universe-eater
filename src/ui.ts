@@ -531,9 +531,10 @@ export class UI {
     ctx.fillText(startMsg, cx, cy + 60);
 
     const helpAlpha = Math.max(0, Math.min(1, (t - 1.3) * 2));
-    ctx.font = uiFont(w < 500 ? 11 : 13);
+    const isTouch = isTouchDevice();
+    ctx.font = uiFont(w < 500 ? (isTouch ? 12 : 11) : 13);
     ctx.fillStyle = `rgba(160, 200, 255, ${helpAlpha * 0.5})`;
-    ctx.fillText(getUiText('titleHintPrimary'), cx, cy + (w < 500 ? 88 : 95));
+    ctx.fillText(getUiText(isTouch ? 'titleHintPrimaryMobile' : 'titleHintPrimary'), cx, cy + (w < 500 ? 88 : 95));
     if (w < 500) {
       ctx.fillText(getUiText('titleHintSecondaryCompact'), cx, cy + 106);
     } else {
