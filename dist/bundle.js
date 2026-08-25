@@ -28124,11 +28124,19 @@ void main() {
   function suppressDashFor(ms) {
     dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
   }
+  function isLevelUp() {
+    try {
+      const r = window.__universeEater;
+      return r?.game?.state === "levelUp";
+    } catch {
+      return false;
+    }
+  }
   window.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (!keys[key]) {
       if (key === " " || key === "shift") {
-        if (performance.now() < dashSuppressUntil) {
+        if (performance.now() < dashSuppressUntil || isLevelUp()) {
         } else {
           dashKeyQueued = true;
         }
@@ -28233,7 +28241,10 @@ void main() {
         continue;
       }
       if (isDashButton(t.clientX, t.clientY)) {
-        touch.dashTapped = true;
+        if (performance.now() < dashSuppressUntil || isLevelUp()) {
+        } else {
+          touch.dashTapped = true;
+        }
         vibrate(12);
         continue;
       }
@@ -28300,7 +28311,7 @@ void main() {
     return false;
   }
   function consumeDashRequest() {
-    if (performance.now() < dashSuppressUntil) {
+    if (performance.now() < dashSuppressUntil || isLevelUp()) {
       dashKeyQueued = false;
       touch.dashTapped = false;
       return false;

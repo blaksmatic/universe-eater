@@ -7,11 +7,20 @@ export function suppressDashFor(ms: number): void {
   dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
 }
 
+function isLevelUp(): boolean {
+  try {
+    const r = (window as unknown as { __universeEater?: { game?: { state?: string } } }).__universeEater;
+    return r?.game?.state === 'levelUp';
+  } catch {
+    return false;
+  }
+}
+
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (!keys[key]) {
     if (key === ' ' || key === 'shift') {
-      if (performance.now() < dashSuppressUntil) {
+      if (performance.now() < dashSuppressUntil || isLevelUp()) {
         // Draft confirm etc. — swallow the queued dash
       } else {
         dashKeyQueued = true;
@@ -154,7 +163,11 @@ function handleTouchStart(e: TouchEvent): void {
     }
 
     if (isDashButton(t.clientX, t.clientY)) {
-      touch.dashTapped = true;
+      if (performance.now() < dashSuppressUntil || isLevelUp()) {
+        // swallow dash during draft
+      } else {
+        touch.dashTapped = true;
+      }
       vibrate(12);
       continue;
     }
@@ -235,7 +248,7 @@ export function consumeAnyTap(): boolean {
  * Returns true at most once per physical press.
  */
 export function consumeDashRequest(): boolean {
-  if (performance.now() < dashSuppressUntil) {
+  if (performance.now() < dashSuppressUntil || isLevelUp()) {
     dashKeyQueued = false;
     touch.dashTapped = false;
     return false;
