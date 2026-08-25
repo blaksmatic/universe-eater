@@ -28625,6 +28625,185 @@ void main() {
     }
   };
 
+  // src/weapons/shared.ts
+  function hitEnemy(enemy, amount, modifiers) {
+    const crit = Math.random() < modifiers.critChance;
+    const total = crit ? amount * modifiers.critMultiplier : amount;
+    enemy.takeDamage(total);
+    modifiers.onHit?.(enemy, total, crit);
+  }
+  function hitEnemySilent(enemy, amount, _modifiers) {
+    enemy.takeDamage(amount);
+  }
+  function getNearestEnemy(originX, originY, enemies, range) {
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const enemy of enemies) {
+      if (enemy.dead) continue;
+      const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
+      if (dist < range && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = enemy;
+      }
+    }
+    return nearest;
+  }
+
+  // src/weapons/beam.ts
+  var LASER_COLORS = {
+    glow: "80, 160, 255",
+    glowAlphaBoost: 0,
+    midStart: [100, 180, 255],
+    midEnd: [255, 200, 255],
+    coreStart: [255, 220, 240],
+    coreEnd: [255, 255, 255],
+    impactOuter: "rgba(80, 160, 255, 0)",
+    impactMid: "rgba(100, 200, 255, 0.5)",
+    originOuter: "rgba(80, 150, 255, VAR)",
+    originInner: "rgba(210, 235, 255, VAR)"
+  };
+  var ESCORT_COLORS = {
+    glow: "120, 255, 220",
+    glowAlphaBoost: 0.06,
+    midStart: [110, 255, 220],
+    midEnd: [200, 255, 245],
+    coreStart: [220, 255, 245],
+    coreEnd: [255, 255, 255],
+    impactOuter: "rgba(80, 255, 220, 0)",
+    impactMid: "rgba(110, 255, 225, 0.45)",
+    originOuter: "rgba(90, 255, 220, VAR)",
+    originInner: "rgba(230, 255, 245, VAR)"
+  };
+  function computeLaserStats(level) {
+    return {
+      damage: 8 + level * 4,
+      cooldown: Math.max(0.15, 0.8 - level * 0.065),
+      duration: 0.1 + level * 0.01,
+      range: 200 + level * 40,
+      width: 1 + level * 0.8,
+      glowAlpha: 0.1 + level * 0.06,
+      particleCount: Math.floor(level / 3)
+    };
+  }
+  function applyBeamDamage(originX, originY, targetX, targetY, enemies, damage, range, width, modifiers) {
+    const angle = wrappedAngle(originX, originY, targetX, targetY);
+    for (const enemy of enemies) {
+      if (enemy.dead) continue;
+      const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
+      if (dist > range) continue;
+      const eAngle = wrappedAngle(originX, originY, enemy.x, enemy.y);
+      const diff = Math.abs(eAngle - angle);
+      const normDiff = Math.min(diff, TWO_PI - diff);
+      if (dist * Math.sin(normDiff) < enemy.radius + width) {
+        hitEnemySilent(enemy, damage, modifiers);
+      }
+    }
+  }
+  function drawBeam(ctx2, camera, originWorldX, originWorldY, originRadius, targetWorldX, targetWorldY, stats, time, level, colors) {
+    const screen = camera.worldToScreen(originWorldX, originWorldY);
+    const delta = wrappedDelta(originWorldX, originWorldY, targetWorldX, targetWorldY);
+    const endX = screen.x + delta.x;
+    const endY = screen.y + delta.y;
+    const beamAngle = Math.atan2(delta.y, delta.x);
+    const originX = screen.x + Math.cos(beamAngle) * originRadius;
+    const originY = screen.y + Math.sin(beamAngle) * originRadius;
+    const beamLength = Math.max(0, Math.sqrt(delta.x * delta.x + delta.y * delta.y) - originRadius);
+    const perpX = -Math.sin(beamAngle);
+    const perpY = Math.cos(beamAngle);
+    const amplitude = 0.5 + level * 0.6;
+    const frequency = 3.5;
+    const waveSpeed = 8;
+    const segments = 20;
+    const points = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const along = t * beamLength;
+      const wave = Math.sin(t * frequency * TWO_PI + time * waveSpeed) * amplitude;
+      points.push({
+        x: originX + Math.cos(beamAngle) * along + perpX * wave,
+        y: originY + Math.sin(beamAngle) * along + perpY * wave
+      });
+    }
+    const drawWavyPath = () => {
+      ctx2.beginPath();
+      ctx2.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i <= segments; i++) ctx2.lineTo(points[i].x, points[i].y);
+    };
+    ctx2.lineJoin = "round";
+    ctx2.lineCap = "round";
+    if (level >= 3) {
+      drawWavyPath();
+      ctx2.strokeStyle = `rgba(${colors.glow}, ${stats.glowAlpha + colors.glowAlphaBoost})`;
+      ctx2.lineWidth = stats.width * 5;
+      ctx2.stroke();
+    }
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      const taper = 1 - t * 0.5;
+      const r = Math.round(colors.midStart[0] + (colors.midEnd[0] - colors.midStart[0]) * t);
+      const g = Math.round(colors.midStart[1] + (colors.midEnd[1] - colors.midStart[1]) * t);
+      const b = Math.round(colors.midStart[2] + (colors.midEnd[2] - colors.midStart[2]) * t);
+      ctx2.beginPath();
+      ctx2.moveTo(points[i].x, points[i].y);
+      ctx2.lineTo(points[i + 1].x, points[i + 1].y);
+      ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.35 + stats.glowAlpha})`;
+      ctx2.lineWidth = stats.width * 2.5 * taper;
+      ctx2.stroke();
+    }
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      const taper = 1 - t * 0.6;
+      const r = Math.round(colors.coreStart[0] + (colors.coreEnd[0] - colors.coreStart[0]) * t);
+      const g = Math.round(colors.coreStart[1] + (colors.coreEnd[1] - colors.coreStart[1]) * t);
+      const b = Math.round(colors.coreStart[2] + (colors.coreEnd[2] - colors.coreStart[2]) * t);
+      ctx2.beginPath();
+      ctx2.moveTo(points[i].x, points[i].y);
+      ctx2.lineTo(points[i + 1].x, points[i + 1].y);
+      ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.95)`;
+      ctx2.lineWidth = stats.width * taper;
+      ctx2.stroke();
+    }
+    const flashRadius = stats.width * 3 + 4;
+    const flashGrad = ctx2.createRadialGradient(endX, endY, 0, endX, endY, flashRadius * 2.5);
+    flashGrad.addColorStop(0, "rgba(230, 255, 255, 0.9)");
+    flashGrad.addColorStop(0.4, colors.impactMid);
+    flashGrad.addColorStop(1, colors.impactOuter);
+    ctx2.beginPath();
+    ctx2.arc(endX, endY, flashRadius * 2.5, 0, TWO_PI);
+    ctx2.fillStyle = flashGrad;
+    ctx2.fill();
+    ctx2.beginPath();
+    ctx2.arc(endX, endY, flashRadius * 0.5, 0, TWO_PI);
+    ctx2.fillStyle = "rgba(240, 255, 255, 0.95)";
+    ctx2.fill();
+    if (level >= 5) {
+      const orbPulse = 0.6 + 0.4 * Math.sin(time * 12);
+      const orbRadius = stats.width * 2.5 * orbPulse;
+      const orbGrad = ctx2.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, orbRadius * 3);
+      orbGrad.addColorStop(0, colors.originOuter.replace("VAR", `${0.8 * orbPulse}`));
+      orbGrad.addColorStop(0.5, colors.originOuter.replace("VAR", `${0.4 * orbPulse}`));
+      orbGrad.addColorStop(1, colors.impactOuter);
+      ctx2.beginPath();
+      ctx2.arc(screen.x, screen.y, orbRadius * 3, 0, TWO_PI);
+      ctx2.fillStyle = orbGrad;
+      ctx2.fill();
+      ctx2.beginPath();
+      ctx2.arc(screen.x, screen.y, orbRadius, 0, TWO_PI);
+      ctx2.fillStyle = colors.originInner.replace("VAR", `${0.9 * orbPulse}`);
+      ctx2.fill();
+    }
+    for (let i = 0; i < stats.particleCount; i++) {
+      const t = Math.random();
+      const segIdx = Math.floor(t * segments);
+      const px = points[segIdx].x + (Math.random() - 0.5) * stats.width * 3;
+      const py = points[segIdx].y + (Math.random() - 0.5) * stats.width * 3;
+      ctx2.fillStyle = `rgba(220, 255, 255, ${0.5 + Math.random() * 0.5})`;
+      ctx2.beginPath();
+      ctx2.arc(px, py, Math.random() * 2, 0, TWO_PI);
+      ctx2.fill();
+    }
+  }
+
   // src/storage.ts
   var SETTINGS_KEY = "universe-eater.settings.v1";
   var RECORDS_KEY = "universe-eater.records.v1";
@@ -29006,182 +29185,7 @@ void main() {
   };
   var audio = new AudioEngine();
 
-  // src/weapons.ts
-  function hitEnemy(enemy, amount, modifiers) {
-    const crit = Math.random() < modifiers.critChance;
-    const total = crit ? amount * modifiers.critMultiplier : amount;
-    enemy.takeDamage(total);
-    modifiers.onHit?.(enemy, total, crit);
-  }
-  function hitEnemySilent(enemy, amount, _modifiers) {
-    enemy.takeDamage(amount);
-  }
-  var LASER_COLORS = {
-    glow: "80, 160, 255",
-    glowAlphaBoost: 0,
-    midStart: [100, 180, 255],
-    midEnd: [255, 200, 255],
-    coreStart: [255, 220, 240],
-    coreEnd: [255, 255, 255],
-    impactOuter: "rgba(80, 160, 255, 0)",
-    impactMid: "rgba(100, 200, 255, 0.5)",
-    originOuter: "rgba(80, 150, 255, VAR)",
-    originInner: "rgba(210, 235, 255, VAR)"
-  };
-  var ESCORT_COLORS = {
-    glow: "120, 255, 220",
-    glowAlphaBoost: 0.06,
-    midStart: [110, 255, 220],
-    midEnd: [200, 255, 245],
-    coreStart: [220, 255, 245],
-    coreEnd: [255, 255, 255],
-    impactOuter: "rgba(80, 255, 220, 0)",
-    impactMid: "rgba(110, 255, 225, 0.45)",
-    originOuter: "rgba(90, 255, 220, VAR)",
-    originInner: "rgba(230, 255, 245, VAR)"
-  };
-  function computeLaserStats(level) {
-    return {
-      damage: 8 + level * 4,
-      cooldown: Math.max(0.15, 0.8 - level * 0.065),
-      duration: 0.1 + level * 0.01,
-      range: 200 + level * 40,
-      width: 1 + level * 0.8,
-      glowAlpha: 0.1 + level * 0.06,
-      particleCount: Math.floor(level / 3)
-    };
-  }
-  function getNearestEnemy(originX, originY, enemies, range) {
-    let nearest = null;
-    let nearestDist = Infinity;
-    for (const enemy of enemies) {
-      if (enemy.dead) continue;
-      const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
-      if (dist < range && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = enemy;
-      }
-    }
-    return nearest;
-  }
-  function applyBeamDamage(originX, originY, targetX, targetY, enemies, damage, range, width, modifiers) {
-    const angle = wrappedAngle(originX, originY, targetX, targetY);
-    for (const enemy of enemies) {
-      if (enemy.dead) continue;
-      const dist = wrappedDistance(originX, originY, enemy.x, enemy.y);
-      if (dist > range) continue;
-      const eAngle = wrappedAngle(originX, originY, enemy.x, enemy.y);
-      const diff = Math.abs(eAngle - angle);
-      const normDiff = Math.min(diff, TWO_PI - diff);
-      if (dist * Math.sin(normDiff) < enemy.radius + width) {
-        hitEnemySilent(enemy, damage, modifiers);
-      }
-    }
-  }
-  function drawBeam(ctx2, camera, originWorldX, originWorldY, originRadius, targetWorldX, targetWorldY, stats, time, level, colors) {
-    const screen = camera.worldToScreen(originWorldX, originWorldY);
-    const delta = wrappedDelta(originWorldX, originWorldY, targetWorldX, targetWorldY);
-    const endX = screen.x + delta.x;
-    const endY = screen.y + delta.y;
-    const beamAngle = Math.atan2(delta.y, delta.x);
-    const originX = screen.x + Math.cos(beamAngle) * originRadius;
-    const originY = screen.y + Math.sin(beamAngle) * originRadius;
-    const beamLength = Math.max(0, Math.sqrt(delta.x * delta.x + delta.y * delta.y) - originRadius);
-    const perpX = -Math.sin(beamAngle);
-    const perpY = Math.cos(beamAngle);
-    const amplitude = 0.5 + level * 0.6;
-    const frequency = 3.5;
-    const waveSpeed = 8;
-    const segments = 20;
-    const points = [];
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
-      const along = t * beamLength;
-      const wave = Math.sin(t * frequency * TWO_PI + time * waveSpeed) * amplitude;
-      points.push({
-        x: originX + Math.cos(beamAngle) * along + perpX * wave,
-        y: originY + Math.sin(beamAngle) * along + perpY * wave
-      });
-    }
-    const drawWavyPath = () => {
-      ctx2.beginPath();
-      ctx2.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i <= segments; i++) ctx2.lineTo(points[i].x, points[i].y);
-    };
-    ctx2.lineJoin = "round";
-    ctx2.lineCap = "round";
-    if (level >= 3) {
-      drawWavyPath();
-      ctx2.strokeStyle = `rgba(${colors.glow}, ${stats.glowAlpha + colors.glowAlphaBoost})`;
-      ctx2.lineWidth = stats.width * 5;
-      ctx2.stroke();
-    }
-    for (let i = 0; i < segments; i++) {
-      const t = i / segments;
-      const taper = 1 - t * 0.5;
-      const r = Math.round(colors.midStart[0] + (colors.midEnd[0] - colors.midStart[0]) * t);
-      const g = Math.round(colors.midStart[1] + (colors.midEnd[1] - colors.midStart[1]) * t);
-      const b = Math.round(colors.midStart[2] + (colors.midEnd[2] - colors.midStart[2]) * t);
-      ctx2.beginPath();
-      ctx2.moveTo(points[i].x, points[i].y);
-      ctx2.lineTo(points[i + 1].x, points[i + 1].y);
-      ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.35 + stats.glowAlpha})`;
-      ctx2.lineWidth = stats.width * 2.5 * taper;
-      ctx2.stroke();
-    }
-    for (let i = 0; i < segments; i++) {
-      const t = i / segments;
-      const taper = 1 - t * 0.6;
-      const r = Math.round(colors.coreStart[0] + (colors.coreEnd[0] - colors.coreStart[0]) * t);
-      const g = Math.round(colors.coreStart[1] + (colors.coreEnd[1] - colors.coreStart[1]) * t);
-      const b = Math.round(colors.coreStart[2] + (colors.coreEnd[2] - colors.coreStart[2]) * t);
-      ctx2.beginPath();
-      ctx2.moveTo(points[i].x, points[i].y);
-      ctx2.lineTo(points[i + 1].x, points[i + 1].y);
-      ctx2.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.95)`;
-      ctx2.lineWidth = stats.width * taper;
-      ctx2.stroke();
-    }
-    const flashRadius = stats.width * 3 + 4;
-    const flashGrad = ctx2.createRadialGradient(endX, endY, 0, endX, endY, flashRadius * 2.5);
-    flashGrad.addColorStop(0, "rgba(230, 255, 255, 0.9)");
-    flashGrad.addColorStop(0.4, colors.impactMid);
-    flashGrad.addColorStop(1, colors.impactOuter);
-    ctx2.beginPath();
-    ctx2.arc(endX, endY, flashRadius * 2.5, 0, TWO_PI);
-    ctx2.fillStyle = flashGrad;
-    ctx2.fill();
-    ctx2.beginPath();
-    ctx2.arc(endX, endY, flashRadius * 0.5, 0, TWO_PI);
-    ctx2.fillStyle = "rgba(240, 255, 255, 0.95)";
-    ctx2.fill();
-    if (level >= 5) {
-      const orbPulse = 0.6 + 0.4 * Math.sin(time * 12);
-      const orbRadius = stats.width * 2.5 * orbPulse;
-      const orbGrad = ctx2.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, orbRadius * 3);
-      orbGrad.addColorStop(0, colors.originOuter.replace("VAR", `${0.8 * orbPulse}`));
-      orbGrad.addColorStop(0.5, colors.originOuter.replace("VAR", `${0.4 * orbPulse}`));
-      orbGrad.addColorStop(1, colors.impactOuter);
-      ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, orbRadius * 3, 0, TWO_PI);
-      ctx2.fillStyle = orbGrad;
-      ctx2.fill();
-      ctx2.beginPath();
-      ctx2.arc(screen.x, screen.y, orbRadius, 0, TWO_PI);
-      ctx2.fillStyle = colors.originInner.replace("VAR", `${0.9 * orbPulse}`);
-      ctx2.fill();
-    }
-    for (let i = 0; i < stats.particleCount; i++) {
-      const t = Math.random();
-      const segIdx = Math.floor(t * segments);
-      const px = points[segIdx].x + (Math.random() - 0.5) * stats.width * 3;
-      const py = points[segIdx].y + (Math.random() - 0.5) * stats.width * 3;
-      ctx2.fillStyle = `rgba(220, 255, 255, ${0.5 + Math.random() * 0.5})`;
-      ctx2.beginPath();
-      ctx2.arc(px, py, Math.random() * 2, 0, TWO_PI);
-      ctx2.fill();
-    }
-  }
+  // src/weapons/laser.ts
   var LaserBeam = class {
     constructor() {
       this.name = "Laser Beam";
@@ -29249,126 +29253,8 @@ void main() {
       );
     }
   };
-  var EscortWing = class {
-    constructor() {
-      this.name = "Escort Wing";
-      this.level = 1;
-      this.maxLevel = 10;
-      this.cooldownTimer = 0;
-      this.firingTimer = 0;
-      this.isFiring = false;
-      this.targetX = 0;
-      this.targetY = 0;
-      this.time = 0;
-      this.facingAngle = 0;
-      this.cachedStats = this.computeStats();
-      this.cachedLevel = 1;
-    }
-    computeStats() {
-      const base = computeLaserStats(this.level);
-      return {
-        ...base,
-        damage: base.damage * 0.7,
-        width: Math.max(1.1, base.width * 0.82),
-        glowAlpha: base.glowAlpha + 0.03,
-        orbitRadius: 28 + this.level * 2.5,
-        craftRadius: 8 + this.level * 0.35
-      };
-    }
-    getStats() {
-      if (this.level !== this.cachedLevel) {
-        this.cachedStats = this.computeStats();
-        this.cachedLevel = this.level;
-      }
-      return this.cachedStats;
-    }
-    getEscortPosition(playerX, playerY) {
-      const stats = this.getStats();
-      const angle = this.time * 1.4;
-      return {
-        x: playerX + Math.cos(angle) * stats.orbitRadius,
-        y: playerY + Math.sin(angle * 1.15) * stats.orbitRadius * 0.6 - 20
-      };
-    }
-    update(dt, playerX, playerY, enemies, modifiers) {
-      const stats = this.getStats();
-      const damage = stats.damage * modifiers.damageMultiplier;
-      const cooldown = stats.cooldown * modifiers.cooldownMultiplier;
-      this.time += dt;
-      const escort = this.getEscortPosition(playerX, playerY);
-      const aimTarget = this.isFiring ? { x: this.targetX, y: this.targetY } : getNearestEnemy(escort.x, escort.y, enemies, stats.range);
-      if (aimTarget) {
-        this.facingAngle = wrappedAngle(escort.x, escort.y, aimTarget.x, aimTarget.y) + Math.PI / 2;
-      }
-      if (this.isFiring) {
-        this.firingTimer -= dt;
-        if (this.firingTimer <= 0) this.isFiring = false;
-      }
-      this.cooldownTimer -= dt;
-      if (this.cooldownTimer <= 0 && !this.isFiring) {
-        const nearest = getNearestEnemy(escort.x, escort.y, enemies, stats.range);
-        if (nearest) {
-          this.isFiring = true;
-          this.firingTimer = stats.duration;
-          this.cooldownTimer = cooldown;
-          this.targetX = nearest.x;
-          this.targetY = nearest.y;
-          this.facingAngle = wrappedAngle(escort.x, escort.y, nearest.x, nearest.y) + Math.PI / 2;
-          applyBeamDamage(escort.x, escort.y, nearest.x, nearest.y, enemies, damage, stats.range, stats.width, modifiers);
-        }
-      }
-    }
-    draw(ctx2, camera, playerX, playerY, _playerRadius) {
-      const stats = this.getStats();
-      const escort = this.getEscortPosition(playerX, playerY);
-      const screen = camera.worldToScreen(escort.x, escort.y);
-      ctx2.save();
-      ctx2.translate(screen.x, screen.y);
-      ctx2.rotate(this.facingAngle);
-      ctx2.beginPath();
-      ctx2.arc(0, 0, stats.craftRadius * 2.2, 0, TWO_PI);
-      ctx2.fillStyle = "rgba(90, 255, 220, 0.12)";
-      ctx2.fill();
-      ctx2.beginPath();
-      ctx2.moveTo(0, -stats.craftRadius * 1.4);
-      ctx2.lineTo(stats.craftRadius * 0.95, stats.craftRadius * 1.1);
-      ctx2.lineTo(0, stats.craftRadius * 0.5);
-      ctx2.lineTo(-stats.craftRadius * 0.95, stats.craftRadius * 1.1);
-      ctx2.closePath();
-      ctx2.fillStyle = "rgba(150, 255, 235, 0.9)";
-      ctx2.fill();
-      ctx2.beginPath();
-      ctx2.moveTo(0, -stats.craftRadius * 0.6);
-      ctx2.lineTo(stats.craftRadius * 0.45, stats.craftRadius * 0.35);
-      ctx2.lineTo(-stats.craftRadius * 0.45, stats.craftRadius * 0.35);
-      ctx2.closePath();
-      ctx2.fillStyle = "rgba(255, 255, 255, 0.92)";
-      ctx2.fill();
-      ctx2.beginPath();
-      ctx2.moveTo(-stats.craftRadius * 1.4, stats.craftRadius * 0.2);
-      ctx2.lineTo(-stats.craftRadius * 2.1, stats.craftRadius * 1.15);
-      ctx2.moveTo(stats.craftRadius * 1.4, stats.craftRadius * 0.2);
-      ctx2.lineTo(stats.craftRadius * 2.1, stats.craftRadius * 1.15);
-      ctx2.strokeStyle = "rgba(110, 255, 225, 0.75)";
-      ctx2.lineWidth = 1.5;
-      ctx2.stroke();
-      ctx2.restore();
-      if (!this.isFiring) return;
-      drawBeam(
-        ctx2,
-        camera,
-        escort.x,
-        escort.y,
-        stats.craftRadius * 0.8,
-        this.targetX,
-        this.targetY,
-        stats,
-        this.time,
-        this.level,
-        ESCORT_COLORS
-      );
-    }
-  };
+
+  // src/weapons/orbit.ts
   var OrbitShield = class {
     constructor() {
       this.name = "Orbit Shield";
@@ -29452,6 +29338,8 @@ void main() {
       }
     }
   };
+
+  // src/weapons/nova.ts
   var NovaBlast = class {
     constructor() {
       this.name = "Nova Blast";
@@ -29556,6 +29444,130 @@ void main() {
       }
     }
   };
+
+  // src/weapons/escort.ts
+  var EscortWing = class {
+    constructor() {
+      this.name = "Escort Wing";
+      this.level = 1;
+      this.maxLevel = 10;
+      this.cooldownTimer = 0;
+      this.firingTimer = 0;
+      this.isFiring = false;
+      this.targetX = 0;
+      this.targetY = 0;
+      this.time = 0;
+      this.facingAngle = 0;
+      this.cachedStats = this.computeStats();
+      this.cachedLevel = 1;
+    }
+    computeStats() {
+      const base = computeLaserStats(this.level);
+      return {
+        ...base,
+        damage: base.damage * 0.7,
+        width: Math.max(1.1, base.width * 0.82),
+        glowAlpha: base.glowAlpha + 0.03,
+        orbitRadius: 28 + this.level * 2.5,
+        craftRadius: 8 + this.level * 0.35
+      };
+    }
+    getStats() {
+      if (this.level !== this.cachedLevel) {
+        this.cachedStats = this.computeStats();
+        this.cachedLevel = this.level;
+      }
+      return this.cachedStats;
+    }
+    getEscortPosition(playerX, playerY) {
+      const stats = this.getStats();
+      const angle = this.time * 1.4;
+      return {
+        x: playerX + Math.cos(angle) * stats.orbitRadius,
+        y: playerY + Math.sin(angle * 1.15) * stats.orbitRadius * 0.6 - 20
+      };
+    }
+    update(dt, playerX, playerY, enemies, modifiers) {
+      const stats = this.getStats();
+      const damage = stats.damage * modifiers.damageMultiplier;
+      const cooldown = stats.cooldown * modifiers.cooldownMultiplier;
+      this.time += dt;
+      const escort = this.getEscortPosition(playerX, playerY);
+      const aimTarget = this.isFiring ? { x: this.targetX, y: this.targetY } : getNearestEnemy(escort.x, escort.y, enemies, stats.range);
+      if (aimTarget) {
+        this.facingAngle = wrappedAngle(escort.x, escort.y, aimTarget.x, aimTarget.y) + Math.PI / 2;
+      }
+      if (this.isFiring) {
+        this.firingTimer -= dt;
+        if (this.firingTimer <= 0) this.isFiring = false;
+      }
+      this.cooldownTimer -= dt;
+      if (this.cooldownTimer <= 0 && !this.isFiring) {
+        const nearest = getNearestEnemy(escort.x, escort.y, enemies, stats.range);
+        if (nearest) {
+          this.isFiring = true;
+          this.firingTimer = stats.duration;
+          this.cooldownTimer = cooldown;
+          this.targetX = nearest.x;
+          this.targetY = nearest.y;
+          this.facingAngle = wrappedAngle(escort.x, escort.y, nearest.x, nearest.y) + Math.PI / 2;
+          applyBeamDamage(escort.x, escort.y, nearest.x, nearest.y, enemies, damage, stats.range, stats.width, modifiers);
+        }
+      }
+    }
+    draw(ctx2, camera, playerX, playerY, _playerRadius) {
+      const stats = this.getStats();
+      const escort = this.getEscortPosition(playerX, playerY);
+      const screen = camera.worldToScreen(escort.x, escort.y);
+      ctx2.save();
+      ctx2.translate(screen.x, screen.y);
+      ctx2.rotate(this.facingAngle);
+      ctx2.beginPath();
+      ctx2.arc(0, 0, stats.craftRadius * 2.2, 0, Math.PI * 2);
+      ctx2.fillStyle = "rgba(90, 255, 220, 0.12)";
+      ctx2.fill();
+      ctx2.beginPath();
+      ctx2.moveTo(0, -stats.craftRadius * 1.4);
+      ctx2.lineTo(stats.craftRadius * 0.95, stats.craftRadius * 1.1);
+      ctx2.lineTo(0, stats.craftRadius * 0.5);
+      ctx2.lineTo(-stats.craftRadius * 0.95, stats.craftRadius * 1.1);
+      ctx2.closePath();
+      ctx2.fillStyle = "rgba(150, 255, 235, 0.9)";
+      ctx2.fill();
+      ctx2.beginPath();
+      ctx2.moveTo(0, -stats.craftRadius * 0.6);
+      ctx2.lineTo(stats.craftRadius * 0.45, stats.craftRadius * 0.35);
+      ctx2.lineTo(-stats.craftRadius * 0.45, stats.craftRadius * 0.35);
+      ctx2.closePath();
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.92)";
+      ctx2.fill();
+      ctx2.beginPath();
+      ctx2.moveTo(-stats.craftRadius * 1.4, stats.craftRadius * 0.2);
+      ctx2.lineTo(-stats.craftRadius * 2.1, stats.craftRadius * 1.15);
+      ctx2.moveTo(stats.craftRadius * 1.4, stats.craftRadius * 0.2);
+      ctx2.lineTo(stats.craftRadius * 2.1, stats.craftRadius * 1.15);
+      ctx2.strokeStyle = "rgba(110, 255, 225, 0.75)";
+      ctx2.lineWidth = 1.5;
+      ctx2.stroke();
+      ctx2.restore();
+      if (!this.isFiring) return;
+      drawBeam(
+        ctx2,
+        camera,
+        escort.x,
+        escort.y,
+        stats.craftRadius * 0.8,
+        this.targetX,
+        this.targetY,
+        stats,
+        this.time,
+        this.level,
+        ESCORT_COLORS
+      );
+    }
+  };
+
+  // src/weapons/seeker.ts
   var SeekerSwarm = class {
     constructor() {
       this.name = "Seeker Swarm";
@@ -29730,6 +29742,8 @@ void main() {
       }
     }
   };
+
+  // src/weapons/arc.ts
   var ArcReactor = class {
     constructor() {
       this.name = "Arc Reactor";
@@ -29855,6 +29869,8 @@ void main() {
       }
     }
   };
+
+  // src/weapons/singularity.ts
   var Singularity = class {
     constructor() {
       this.name = "Singularity";
@@ -30033,6 +30049,8 @@ void main() {
       }
     }
   };
+
+  // src/weapons/manager.ts
   var WEAPON_ORDER = [
     { id: "laser", name: "Laser Beam" },
     { id: "orbit", name: "Orbit Shield" },
@@ -32238,7 +32256,7 @@ void main() {
     }
   };
 
-  // src/enemies.ts
+  // src/entities/enemies/types.ts
   var CHARGE_SPEED = 500;
   var BOSS_CHARGE_SPEED = 620;
   var SPAWN_DURATION = 0.3;
@@ -32328,6 +32346,8 @@ void main() {
       damageMultiplier: 2.6
     }
   };
+
+  // src/entities/enemies/enemy.ts
   var Enemy = class {
     constructor(type, x, y, stage = 1, options = {}) {
       this.dead = false;
@@ -32707,7 +32727,6 @@ void main() {
       }
       ctx2.restore();
     }
-    // ── Swarmer ──────────────────────────────────────────────────
     drawSwarmer(ctx2, time) {
       const r = this.radius;
       const [cr, cg, cb] = this.color;
@@ -32735,7 +32754,6 @@ void main() {
       this.drawHpFill(ctx2, r, cr, cg, cb);
       if (this.isElite) this.drawEliteAura(ctx2, r);
     }
-    // ── Drifter ──────────────────────────────────────────────────
     drawDrifter(ctx2, time) {
       const r = this.radius;
       const [cr, cg, cb] = this.color;
@@ -32777,7 +32795,6 @@ void main() {
     aimAngle() {
       return Math.atan2(this.chargeVy, this.chargeVx);
     }
-    // ── Titan ────────────────────────────────────────────────────
     drawTitan(ctx2, time) {
       const r = this.radius;
       const [cr, cg, cb] = this.color;
@@ -32834,7 +32851,6 @@ void main() {
       drawSphereShading(ctx2, 0, 0, r, cr, cg, cb);
       if (this.isElite) this.drawEliteAura(ctx2, r);
     }
-    // ── Overlord ─────────────────────────────────────────────────
     drawOverlord(ctx2, time) {
       const side = this.radius * 2;
       const [cr, cg, cb] = this.color;
@@ -32876,7 +32892,6 @@ void main() {
       ctx2.restore();
       if (this.isElite) this.drawEliteAura(ctx2, this.radius);
     }
-    // ── Spitter: ranged kiter ────────────────────────────────────
     drawSpitter(ctx2, time) {
       const r = this.radius;
       const [cr, cg, cb] = this.color;
@@ -32921,7 +32936,6 @@ void main() {
       drawSphereShading(ctx2, 0, 0, r, cr, cg, cb);
       if (this.isElite) this.drawEliteAura(ctx2, r);
     }
-    // ── Splitter ─────────────────────────────────────────────────
     drawSplitter(ctx2, time) {
       const r = this.radius;
       const [cr, cg, cb] = this.color;
@@ -32959,7 +32973,6 @@ void main() {
       drawSphereShading(ctx2, 0, 0, r, cr, cg, cb);
       if (this.isElite) this.drawEliteAura(ctx2, r);
     }
-    // ── Bomber ───────────────────────────────────────────────────
     drawBomber(ctx2, time) {
       const r = this.radius;
       const [cr, cg, cb] = this.color;
@@ -33002,7 +33015,6 @@ void main() {
       this.drawHpFill(ctx2, r, cr, cg, cb);
       if (this.isElite) this.drawEliteAura(ctx2, r);
     }
-    // ── Boss: Void Warden ────────────────────────────────────────
     drawBoss(ctx2, time) {
       const r = this.radius;
       const [baseCr, baseCg, baseCb] = this.color;
@@ -33090,7 +33102,6 @@ void main() {
       }
       drawSphereShading(ctx2, 0, 0, r * 0.78, cr, cg, cb);
     }
-    // ── Shared helpers ───────────────────────────────────────────
     drawProjectiles(ctx2, camera) {
       for (const p of this.projectiles) {
         if (!camera.isVisible(p.x, p.y, p.radius * 4)) continue;
@@ -33147,7 +33158,13 @@ void main() {
         ctx2.restore();
       }
     }
+    static {
+      // Used by enemy.test to avoid unused constant warning.
+      this.BOSS_BASE_HP = BOSS_BASE_HP;
+    }
   };
+
+  // src/entities/enemies/spawner.ts
   var EnemySpawner = class {
     constructor() {
       this.enemies = [];
@@ -33194,7 +33211,6 @@ void main() {
       this.bossSpawned = true;
       return boss;
     }
-    /** Called for each freshly-dead enemy before removal; may spawn remains. */
     handleDeathEffects(enemy) {
       if (enemy.noXp) return;
       if (enemy.type === "splitter") {
