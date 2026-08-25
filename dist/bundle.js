@@ -35221,8 +35221,10 @@ void main() {
           } else if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             this.game.chooseSelectedDraft(this.world.weaponManager, this.world.player);
+            clearTransientInput();
           } else if (event.key.toLowerCase() === "r") {
             this.game.rerollDraft(this.world.weaponManager);
+            clearTransientInput();
           }
           return;
         }
@@ -35282,6 +35284,7 @@ void main() {
           } else {
             this.game.rerollDraft(this.world.weaponManager);
           }
+          clearTransientInput();
           return;
         }
         if (this.game.state === "paused" /* PAUSED */) {

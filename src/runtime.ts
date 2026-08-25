@@ -87,8 +87,10 @@ export class GameRuntime {
       } else if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         this.game.chooseSelectedDraft(this.world.weaponManager, this.world.player);
+        clearTransientInput();
       } else if (event.key.toLowerCase() === 'r') {
         this.game.rerollDraft(this.world.weaponManager);
+        clearTransientInput();
       }
       return;
     }
@@ -154,6 +156,7 @@ export class GameRuntime {
       } else {
         this.game.rerollDraft(this.world.weaponManager);
       }
+      clearTransientInput();
       return;
     }
 
