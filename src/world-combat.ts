@@ -64,13 +64,16 @@ export class WorldCombatSystem {
       if (enemy.dead) continue;
 
       if (wrappedCirclesOverlap(px, py, pr, enemy.x, enemy.y, enemy.radius)) {
-        this.player.takeContactHit(CONTACT_HIT_DAMAGE * enemy.damageMultiplier);
+        this.player.takeContactHit(CONTACT_HIT_DAMAGE * enemy.damageMultiplier,
+          { enemy: enemy.type, kind: 'contact', x: enemy.x, y: enemy.y });
       }
 
       // Inline projectile checks with squared distance to avoid sqrt + allocation
       for (const projectile of enemy.projectiles) {
+        if (projectile.lifetime <= 0) continue;
         if (wrappedCirclesOverlap(px, py, pr, projectile.x, projectile.y, projectile.radius)) {
-          this.player.takeDamage(projectile.damage);
+          this.player.takeDamage(projectile.damage,
+            { enemy: enemy.type, kind: 'projectile', x: enemy.x, y: enemy.y });
           projectile.lifetime = 0;
         }
       }
@@ -150,8 +153,12 @@ export class WorldCombatSystem {
         this.camera.shake(enemy.radius * 0.08, 0.15);
       }
 
-      if (!enemy.noXp && this.player.addXp(enemy.xpDrop)) {
-        levelUps++;
+      if (!enemy.noXp) {
+        let leveled = this.player.addXp(enemy.xpDrop);
+        while (leveled) {
+          levelUps++;
+          leveled = this.player.addXp(0);
+        }
       }
     }
 

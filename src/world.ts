@@ -33,7 +33,7 @@ export class GameWorld {
     this.background = new Background();
     this.geometry = new BackgroundGeometry();
     this.spawner = new EnemySpawner();
-    this.spawner.setStage(1, 300);
+    this.spawner.setStage(1, 600);
     this.particles = new ParticleSystem();
     this.weaponManager = new WeaponManager();
     this.weaponManager.setOnLaserFire((angle) => this.player.addRipple(angle));

@@ -1,4 +1,5 @@
 import { Player } from './player';
+import { getWeaponEvolution } from './weapons/evolutions';
 import { WeaponManager } from './weapons';
 import { DoctrineId, PASSIVE_CAPS, PassiveId, PassiveName, UpgradeTag, WeaponId, WeaponName } from './ids';
 import {
@@ -196,7 +197,9 @@ export function buildUpgradeDraft(wm: WeaponManager, upgradeCount: number, stack
       kind: 'upgrade',
       weaponName,
       title: () => getWeaponUpgradeTitle(weaponName, weapon.level + 1),
-      description: () => getWeaponUpgradeDescription(weaponName),
+      description: () => weapon.level === 7
+        ? getWeaponEvolution(weaponName, 8)?.description ?? getWeaponUpgradeDescription(weaponName)
+        : getWeaponUpgradeDescription(weaponName),
       label: () => getWeaponUpgradeLabel(weaponName, weapon.level + 1),
       iconName: weaponName,
       tags: [...WEAPON_TAGS[weaponName]],

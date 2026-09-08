@@ -2,6 +2,7 @@ const keys: Record<string, boolean> = {};
 
 let dashKeyQueued = false;
 let dashSuppressUntil = 0;
+let menuTouchPending = false;
 
 /** Dash suppression windows — tuned to block Space-confirm → dash carry-over (see runtime.ts:88). */
 export const DASH_SUPPRESS_MS = {
@@ -19,18 +20,22 @@ export function suppressDashFor(ms: number): void {
   dashSuppressUntil = Math.max(dashSuppressUntil, performance.now() + ms);
 }
 
-function isLevelUp(): boolean {
+function currentState(): string | undefined {
   try {
     const r = (window as unknown as { __universeEater?: { game?: { state?: string } } }).__universeEater;
-    return r?.game?.state === 'levelUp';
+    return r?.game?.state;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+function isLevelUp(): boolean {
+  return currentState() === 'levelUp';
 }
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
-  if (!keys[key]) {
+  if (!keys[key] && !e.repeat) {
     if (key === ' ' || key === 'shift') {
       if (performance.now() < dashSuppressUntil || isLevelUp()) {
         // Draft confirm etc. — swallow the queued dash
@@ -166,6 +171,12 @@ function vibrate(pattern: number | number[]): void {
 
 function handleTouchStart(e: TouchEvent): void {
   e.preventDefault();
+  if (menuTouchPending) {
+    menuTouchPending = false;
+    return;
+  }
+  const state = currentState();
+  if (state && state !== 'playing') return;
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
 
@@ -175,12 +186,10 @@ function handleTouchStart(e: TouchEvent): void {
     }
 
     if (isDashButton(t.clientX, t.clientY)) {
-      if (performance.now() < dashSuppressUntil || isLevelUp()) {
-        // swallow dash during draft
-      } else {
+      if (performance.now() >= dashSuppressUntil && !isLevelUp()) {
         touch.dashTapped = true;
+        vibrate(12);
       }
-      vibrate(12);
       continue;
     }
 
@@ -236,7 +245,10 @@ if (isMobile()) {
   document.addEventListener('touchstart', handleTouchStart, { passive: false });
   document.addEventListener('touchmove', handleTouchMove, { passive: false });
   document.addEventListener('touchend', handleTouchEnd, { passive: false });
-  document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+  document.addEventListener('touchcancel', (event) => {
+    handleTouchEnd(event);
+    clearTransientInput();
+  }, { passive: false });
 }
 
 export function consumePauseTap(): boolean {
@@ -288,3 +300,24 @@ export function triggerHaptic(pattern: number | number[]): void {
 }
 
 export const JOYSTICK_DISPLAY_RADIUS = JOYSTICK_RADIUS;
+
+/** A menu pointer gesture must not become a joystick/dash when touchstart follows. */
+export function consumeMenuTouch(): void {
+  menuTouchPending = true;
+}
+
+/** Release held controls when an OS interruption can prevent keyup/touchend. */
+export function releaseAllInput(): void {
+  for (const key of Object.keys(keys)) delete keys[key];
+  clearTransientInput();
+  touch.touchId = -1;
+  touch.active = false;
+  touch.dx = 0;
+  touch.dy = 0;
+  menuTouchPending = false;
+}
+
+window.addEventListener('blur', releaseAllInput);
+window.addEventListener('pagehide', releaseAllInput);
+window.addEventListener('resize', releaseAllInput);
+document.addEventListener('visibilitychange', releaseAllInput);

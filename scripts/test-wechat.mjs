@@ -207,6 +207,27 @@ for (const legacy of [false, true]) {
   touch('TouchEnd', 349, pauseY, 5);
   tick();
   assert.equal(runtime.game.state, 'paused', 'Safe-area pause button works');
+  touch('TouchStart', 349, pauseY, 6);
+  touch('TouchEnd', 349, pauseY, 6);
+  tick();
+  assert.equal(runtime.game.state, 'playing', 'Tapping paused HUD resumes once without re-pausing');
+  tick(35);
+  const cleanResumeX = player.x;
+  tick(5);
+  assert.equal(player.x, cleanResumeX, 'Menu gesture never becomes a held joystick');
+  touch('TouchStart', 100, 600, 7, true);
+  touch('TouchMove', 160, 600, 7, true);
+  tick(3);
+  callbacks.Hide();
+  callbacks.Show();
+  touch('TouchStart', 5, 422, 8);
+  touch('TouchEnd', 5, 422, 8);
+  tick(2);
+  const interruptedX = player.x;
+  tick(5);
+  assert.equal(player.x, interruptedX, 'Lifecycle cancellation clears active movement');
+  runtime.game.state = 'paused';
+
 
   app.resize({
     windowWidth: 844, windowHeight: 390, screenWidth: 844, screenHeight: 390,

@@ -3,8 +3,10 @@ import { Camera } from '../../camera';
 import { NEUTRAL_SPAWN_MODS, type EnemySpawnMods } from '../../mutators';
 import { Enemy } from './enemy';
 import type { EnemyType, EnemySpawnOptions, SpawnWeight } from './types';
+import { EncounterDirector, getEncounterSpawnPace, type EncounterEvent } from '../../encounters';
 
 export class EnemySpawner {
+  private readonly encounters = new EncounterDirector();
   enemies: Enemy[] = [];
   bossSpawned = false;
   private bossPhaseEvents = 0;
@@ -21,6 +23,7 @@ export class EnemySpawner {
   }
 
   clear(): void {
+    this.encounters.reset();
     this.enemies = [];
     this.bossSpawned = false;
     this.bossPhaseEvents = 0;
@@ -124,9 +127,8 @@ export class EnemySpawner {
     if (effectiveElapsed >= 45) types.push({ type: 'stalker', weight: 0.85 });
     if (effectiveElapsed >= 110) types.push({ type: 'lancer', weight: 0.8 });
     if (effectiveElapsed >= 175) types.push({ type: 'sentinel', weight: 0.65 });
-    // A short recovery window every minute gives players room to collect XP.
-    const recovery = elapsed > 60 && elapsed % 60 < 9 ? 1.65 : 1;
-    spawnInterval *= recovery;
+    // Named encounters replace the ordinary pulse with preparation and recovery.
+    spawnInterval *= getEncounterSpawnPace(elapsed, this.stageDuration);
     const paceScale = 1 + difficulty * 0.12;
     const scaledTypes = types.map(({ type, weight }) => ({
       type,
@@ -242,7 +244,24 @@ export class EnemySpawner {
     }
   }
 
+  private spawnEncounter(event: EncounterEvent, playerX: number, playerY: number, camera: Camera): void {
+    // Approach together from one direction, leaving the opposite side as an exit.
+    const angle = Math.random() * TWO_PI;
+    const radius = Math.max(650, Math.hypot(camera.width, camera.height) / 2 + 180);
+    const count = Math.min(event.count, this.maxEnemies - this.enemies.length);
+    for (let i = 0; i < count; i++) {
+      const heading = angle + (i - (count - 1) / 2) * 0.22;
+      const position = wrapPosition(playerX + Math.cos(heading) * radius, playerY + Math.sin(heading) * radius);
+      this.enemies.push(new Enemy(event.type, position.x, position.y, this.stage,
+        this.spawnOptions(true, { hpScale: 0.85 })));
+    }
+  }
+
   update(dt: number, elapsed: number, playerX: number, playerY: number, camera: Camera): void {
+    const encounter = this.bossSpawned ? null : this.encounters.update(elapsed, this.stageDuration);
+    if (encounter?.kind === 'spawn') {
+      this.spawnEncounter(encounter.event, playerX, playerY, camera);
+    }
     const config = this.getSpawnConfig(elapsed);
     this.spawnTimer += dt;
     const interval = this.bossSpawned ? config.spawnInterval * 2.4 : config.spawnInterval;

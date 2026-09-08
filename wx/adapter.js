@@ -169,12 +169,13 @@
 
   wx.onTouchStart(function (e) {
     activeTouches = e.touches || e.changedTouches || [];
-    doc.dispatchEvent(buildTouchEvent('touchstart', e));
     var t = firstTouch(e);
     if (t) canvas.dispatchEvent({
-      type: 'pointerdown', clientX: normalizeTouch(t).clientX, clientY: normalizeTouch(t).clientY,
+      type: 'pointerdown', pointerType: 'touch', clientX: normalizeTouch(t).clientX, clientY: normalizeTouch(t).clientY,
       preventDefault: function () {}, stopPropagation: function () {},
     });
+    // Match browser ordering so menu taps cannot leak into gameplay controls.
+    doc.dispatchEvent(buildTouchEvent('touchstart', e));
   });
   wx.onTouchMove(function (e) { activeTouches = e.touches || activeTouches; doc.dispatchEvent(buildTouchEvent('touchmove', e)); });
   wx.onTouchEnd(function (e) { activeTouches = e.touches || []; doc.dispatchEvent(buildTouchEvent('touchend', e)); });

@@ -17,6 +17,7 @@ import { formatTime } from './utils';
 import { isTouchDevice } from './input';
 import { PASSIVE_CAPS } from './ids';
 import { rollMutators, type MutatorId } from './mutators';
+import { EncounterDirector, getEncounterMessage } from './encounters';
 
 export enum GameState {
   TITLE = 'title',
@@ -42,6 +43,7 @@ interface ScheduledNotification {
 }
 
 export class Game {
+  private readonly encounters = new EncounterDirector();
   state = GameState.TITLE;
   stage = 1;
   elapsedTime = 0;
@@ -107,6 +109,7 @@ export class Game {
   }
 
   advanceStage(): void {
+    this.encounters.reset();
     this.stage++;
     this.elapsedTime = 0;
     this.bossEngaged = false;
@@ -268,6 +271,16 @@ export class Game {
   }
 
   updateNotifications(dt: number): void {
+    const encounter = this.bossEngaged ? null : this.encounters.update(this.elapsedTime, this.gameDuration);
+    if (encounter) {
+      const warning = encounter.kind === 'warning';
+      this.notifications.push({
+        text: () => getEncounterMessage(encounter.event, warning),
+        timer: warning ? 5.5 : 4,
+        alpha: 1,
+        kind: 'danger',
+      });
+    }
     while (this.scheduled.length > 0 && this.elapsedTime >= this.scheduled[0].atElapsed) {
       const item = this.scheduled.shift()!;
       this.notifications.push({

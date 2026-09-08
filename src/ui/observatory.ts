@@ -3,7 +3,7 @@ import { Player } from '../player';
 import { getLanguage, getUiText, uiFont } from '../i18n';
 import { isTouchDevice, getSafeAreaInsets } from '../input';
 import { loadSettings } from '../storage';
-import { roundedRect, TWO_PI } from '../utils';
+import { roundedRect, TWO_PI, wrappedAngle } from '../utils';
 
 const MINT = '#93f5da';
 
@@ -117,6 +117,14 @@ export function drawObservatoryTitle(ctx: CanvasRenderingContext2D, canvas: HTML
 
 export function drawHudFrame(ctx: CanvasRenderingContext2D, w: number, h: number, left: number, top: number, right: number, player: Player, game: Game): void {
   ctx.save();
+  if (player.lastDamageSource && player.hurtRatio > 0) {
+    const angle = wrappedAngle(player.x, player.y, player.lastDamageSource.x, player.lastDamageSource.y);
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, player.radius + 39, angle - 0.42, angle + 0.42);
+    ctx.strokeStyle = `rgba(255,125,143,${0.8 * player.hurtRatio})`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
   const gradient = ctx.createLinearGradient(0, 0, 0, 115);
   gradient.addColorStop(0, 'rgba(3,12,20,0.94)');
   gradient.addColorStop(1, 'rgba(3,12,20,0)');

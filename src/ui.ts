@@ -1,4 +1,7 @@
 import { drawObservatoryTitle, drawHudFrame } from './ui/observatory';
+import { describeLastHit } from './combat-feedback';
+import { getWeaponEvolution } from './weapons/evolutions';
+import { getEncounterPhase } from './encounters';
 import { Game } from './game';
 import { Player } from './player';
 import { WeaponManager, WEAPON_ORDER } from './weapons';
@@ -130,6 +133,13 @@ export class UI {
     ctx.font = uiFont(11);
     ctx.fillStyle = 'rgba(160, 210, 255, 0.58)';
     ctx.fillText(formatStageLabel(game.stage), leftInset, topInset + 52);
+    if (!game.bossEngaged) {
+      ctx.textAlign = 'center';
+      ctx.font = uiFont(compactHud ? 9 : 10);
+      ctx.fillStyle = '#93caba';
+      ctx.fillText(getEncounterPhase(game.elapsedTime, game.gameDuration).name.toUpperCase(), w / 2, topInset + 52, compactHud ? 140 : 230);
+      ctx.textAlign = 'left';
+    }
 
     if (game.mutators.length > 0) {
       ctx.font = uiFont(10, 'bold');
@@ -261,9 +271,9 @@ export class UI {
       if (weapon) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.74)';
         ctx.fillText(getWeaponName(entry.name), panelX + 26, wy);
-        ctx.fillStyle = 'rgba(110, 205, 255, 0.95)';
+        ctx.fillStyle = getWeaponEvolution(weapon.name, weapon.level) ? '#93f5da' : 'rgba(110, 205, 255, 0.95)';
         ctx.textAlign = 'right';
-        ctx.fillText(formatHudWeaponLevel(weapon.level), panelX + panelW - 10, wy);
+        ctx.fillText(getWeaponEvolution(weapon.name, weapon.level) ? `◆ ${weapon.level}` : formatHudWeaponLevel(weapon.level), panelX + panelW - 10, wy);
         ctx.textAlign = 'left';
       } else {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
@@ -591,7 +601,7 @@ export class UI {
       const choice = game.draftChoices[i];
       if (!choice) continue;
       const isSelected = i === game.selectedDraftIndex;
-      const compact = card.height < 120;
+      const compact = card.height < 150;
       const iconR = compact ? 11 : 14;
       const iconX = card.x + (compact ? 24 : 30);
       const iconY = card.y + (compact ? 24 : 32);
@@ -627,16 +637,25 @@ export class UI {
       ctx.font = uiFont(12, 'bold');
       ctx.fillStyle = choice.kind === 'unlock' ? 'rgba(255, 210, 135, 0.85)' : 'rgba(145, 210, 255, 0.72)';
       ctx.fillText(`${i + 1}`, iconX + (compact ? 20 : 26), card.y + 20);
+      if (choice.kind === 'upgrade' && choice.id.endsWith('-8') && getWeaponEvolution(choice.weaponName, 8)) {
+        ctx.textAlign = 'right';
+        ctx.font = uiFont(9, 'bold');
+        ctx.fillStyle = '#93f5da';
+        ctx.fillText(getLanguage() === 'zh-CN' ? '武器进化' : 'EVOLUTION', card.x + card.width - 16, card.y + 20);
+        ctx.textAlign = 'left';
+      }
 
       const titleSize = compact ? 15 : 18;
       ctx.font = uiFont(titleSize, 'bold');
       ctx.fillStyle = '#ffffff';
       this.drawWrappedText(ctx, choice.title(), card.x + 20, card.y + (compact ? 44 : 58), card.width - 40, compact ? 18 : 22);
 
-      if (!compact) {
-        ctx.font = uiFont(13);
+      {
+        ctx.font = uiFont(compact ? 11 : 13);
         ctx.fillStyle = 'rgba(215, 228, 245, 0.72)';
-        this.drawWrappedText(ctx, choice.description(), card.x + 20, card.y + 92, card.width - 40, 18);
+        const descY = compact ? 65 : 90;
+        const maxLines = Math.max(1, Math.floor((card.height - descY - 27) / 16));
+        this.drawWrappedText(ctx, choice.description(), card.x + 20, card.y + descY, card.width - 40, 16, maxLines);
       }
 
       let chipX = card.x + 20;
@@ -996,6 +1015,25 @@ export class UI {
       badges.push(!!recordResult?.newBestCombo);
     }
     this.drawEndScreen(ctx, canvas, getUiText('gameOver'), [255, 68, 68], [80, 0, 0], stats, prompt, !canRestart, badges);
+    if (player.lastDamageSource) {
+      const { cause, advice } = describeLastHit(player.lastDamageSource);
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const panelW = Math.min(w - 32, 470);
+      const panelY = h / 2 - (h < 500 ? 88 : 82);
+      ctx.save();
+      ctx.beginPath();
+      roundedRect(ctx, (w - panelW) / 2, panelY, panelW, h < 500 ? 48 : 70, 8);
+      ctx.fillStyle = 'rgba(45,17,28,0.85)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,119,140,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = uiFont(h < 560 ? 11 : 13, 'bold');
+      ctx.fillStyle = '#ff9eac';
+      ctx.fillText(`${getLanguage() === 'zh-CN' ? '最后一击' : 'FINAL HIT'}  /  ${cause}`, w / 2, panelY + 21, panelW - 24);
+      ctx.font = uiFont(h < 560 ? 10 : 12);
+      ctx.fillStyle = '#c4b8c1';
+      ctx.fillText(advice, w / 2, panelY + (h < 500 ? 38 : 46), panelW - 24);
+      ctx.restore();
+    }
   }
 
   drawVictory(
@@ -1137,47 +1175,28 @@ export class UI {
     let rerollY = 0;
     let headerY = 0;
 
+    const safe = getSafeAreaInsets();
     if (stacked) {
-      const gap = shortScreen ? 8 : 12;
-      const sidePadding = 16;
-      const headerBlock = shortScreen ? 92 : 118;
-      const rerollBlock = 48;
-      const cardWidth = Math.min(360, w - sidePadding * 2);
-      const cardHeight = Math.max(92, Math.min(144, Math.floor((h - headerBlock - rerollBlock - gap * (count - 1)) / count)));
-      const startX = (w - cardWidth) / 2;
-      const cardY = Math.max(shortScreen ? 84 : 118, Math.round(h * 0.18));
-      headerY = Math.max(shortScreen ? 48 : 70, cardY - (shortScreen ? 52 : 72));
-
+      const gap = 10;
+      const cardWidth = Math.min(380, w - safe.left - safe.right - 32);
+      headerY = Math.max(safe.top + 44, Math.round(h * 0.09));
+      const cardY = headerY + 66;
+      const cardHeight = Math.max(88, Math.min(176, Math.floor((h - safe.bottom - 64 - cardY - gap * (count - 1)) / count)));
       for (let index = 0; index < count; index++) {
-        cards.push({
-          x: startX,
-          y: cardY + index * (cardHeight + gap),
-          width: cardWidth,
-          height: cardHeight,
-        });
+        cards.push({ x: (w - cardWidth) / 2, y: cardY + index * (cardHeight + gap), width: cardWidth, height: cardHeight });
       }
-
-      rerollY = cardY + count * (cardHeight + gap) + 6;
+      rerollY = cardY + count * cardHeight + (count - 1) * gap + 12;
     } else {
-      const gap = 18;
-      const maxCardWidth = 260;
-      const cardWidth = Math.min(maxCardWidth, Math.floor((w - 80 - gap * (count - 1)) / count));
-      const cardHeight = Math.max(150, Math.min(204, h - 150));
+      const gap = shortScreen ? 10 : 18;
+      const cardWidth = Math.min(280, Math.floor((w - safe.left - safe.right - 40 - gap * (count - 1)) / count));
+      headerY = Math.max(safe.top + 38, shortScreen ? 44 : 82);
+      const cardY = shortScreen ? headerY + 38 : Math.max(headerY + 70, h / 2 - 80);
+      const cardHeight = Math.max(100, Math.min(220, h - safe.bottom - cardY - 64));
       const totalWidth = cardWidth * count + gap * (count - 1);
-      const startX = (w - totalWidth) / 2;
-      const cardY = Math.max(shortScreen ? 96 : 168, h / 2 - cardHeight / 2 + 24);
-      headerY = Math.max(shortScreen ? 52 : 82, cardY - (shortScreen ? 58 : 82));
-
       for (let index = 0; index < count; index++) {
-        cards.push({
-          x: startX + index * (cardWidth + gap),
-          y: cardY,
-          width: cardWidth,
-          height: cardHeight,
-        });
+        cards.push({ x: (w - totalWidth) / 2 + index * (cardWidth + gap), y: cardY, width: cardWidth, height: cardHeight });
       }
-
-      rerollY = cardY + cardHeight + (shortScreen ? 10 : 14);
+      rerollY = cardY + cardHeight + 12;
     }
 
     return {
@@ -1258,14 +1277,22 @@ export class UI {
     y: number,
     maxWidth: number,
     lineHeight: number,
+    maxLines = Infinity,
   ): void {
     const tokens = text.includes(' ') ? text.split(/(\s+)/).filter(Boolean) : Array.from(text);
     let line = '';
     let lineY = y;
+    let lineNumber = 1;
 
     for (const token of tokens) {
       const testLine = `${line}${token}`;
       if (ctx.measureText(testLine).width > maxWidth && line) {
+        if (lineNumber >= maxLines) {
+          while (line.length && ctx.measureText(line + '?').width > maxWidth) line = line.slice(0, -1);
+          ctx.fillText(line.trimEnd() + '?', x, lineY);
+          return;
+        }
+        lineNumber++;
         ctx.fillText(line.trimEnd(), x, lineY);
         line = token.trimStart();
         lineY += lineHeight;

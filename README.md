@@ -30,6 +30,12 @@ All weapons fire automatically — your job is positioning, kiting, and dashing 
 2. **Draft mutations** on every level-up: new weapons, weapon upgrades, or passives — with tag-based **Doctrines** that unlock powerful build archetypes.
 3. **Slay the Void Warden** — a 3-phase boss with bullet rings, rotating spiral barrages, summons, and telegraphed charge attacks. Kill it to advance; your build carries into the next, harder stage.
 
+### Polished expedition flow
+- Named elite encounters at 2/4/6/8 minutes, advance warnings and recovery windows
+- Level-8 evolutions: Prismatic Array (split laser), Aegis Lattice (bullet interception), Supernova Repulsor (knockback)
+- Damage direction indicators, final-hit recap and an actionable survival tip
+- Touch gestures remain separate from menu actions; backgrounding and rotation release held inputs
+
 ### Weapons (7)
 - **Laser Beam** — auto-targeting beam with impact flash
 - **Orbit Shield** — rotating satellites that grind anything close

@@ -117,18 +117,6 @@ var require_OutputPass = __commonJS({
   }
 });
 
-// src/ids.ts
-var PASSIVE_CAPS = {
-  hull: Infinity,
-  thrusters: Infinity,
-  nanoforge: Infinity,
-  plating: Infinity,
-  targeting: 6,
-  overclock: 5,
-  vampiric: 5,
-  amplifier: 5
-};
-
 // src/i18n.ts
 var STORAGE_KEY = "universe-eater.language";
 var DEFAULT_LANGUAGE = "en";
@@ -730,6 +718,37 @@ function uiFont(size, weight = "normal") {
   return `${weight} ${size}px ${family}`;
 }
 
+// src/weapons/evolutions.ts
+function getWeaponEvolution(name, level) {
+  if (level < 8) return null;
+  const zh = getLanguage() === "zh-CN";
+  if (name === "Laser Beam") return {
+    name: zh ? "\u68F1\u955C\u9635\u5217" : "Prismatic Array",
+    description: zh ? "\u5411\u53E6\u5916\u4E24\u4E2A\u65B9\u5411\u53D1\u5C04\u7A7F\u900F\u5149\u675F\uFF0C\u5404\u9020\u621045%\u4F24\u5BB3\u3002" : "Two extra piercing rays, each dealing 45% damage."
+  };
+  if (name === "Orbit Shield") return {
+    name: zh ? "\u5B99\u65AF\u76FE\u6676\u683C" : "Aegis Lattice",
+    description: zh ? "\u8F68\u9053\u6676\u4F53\u62E6\u622A\u63A5\u89E6\u7684\u654C\u65B9\u5F39\u4E38\uFF1B\u6BCF0.18\u79D2\u6700\u591A\u62E6\u622A\u4E00\u53D1\u3002" : "Orbitals block shots on contact, up to one every 0.18s."
+  };
+  if (name === "Nova Blast") return {
+    name: zh ? "\u8D85\u65B0\u661F\u51B2\u51FB" : "Supernova Repulsor",
+    description: zh ? "\u6269\u6563\u51B2\u51FB\u6CE2\u5C06\u654C\u4EBA\u5411\u5916\u63A8\u5F00\uFF1B\u9996\u9886\u6297\u51FB\u9000\u3002" : "An expanding shockwave pushes enemies back; bosses resist."
+  };
+  return null;
+}
+
+// src/ids.ts
+var PASSIVE_CAPS = {
+  hull: Infinity,
+  thrusters: Infinity,
+  nanoforge: Infinity,
+  plating: Infinity,
+  targeting: 6,
+  overclock: 5,
+  vampiric: 5,
+  amplifier: 5
+};
+
 // src/upgrades.ts
 var DOCTRINES = [
   {
@@ -845,7 +864,10 @@ function buildUpgradeDraft(wm, upgradeCount, stacks) {
       kind: "upgrade",
       weaponName,
       title: () => getWeaponUpgradeTitle(weaponName, weapon.level + 1),
-      description: () => getWeaponUpgradeDescription(weaponName),
+      description: () => {
+        var _a, _b;
+        return weapon.level === 7 ? (_b = (_a = getWeaponEvolution(weaponName, 8)) == null ? void 0 : _a.description) != null ? _b : getWeaponUpgradeDescription(weaponName) : getWeaponUpgradeDescription(weaponName);
+      },
       label: () => getWeaponUpgradeLabel(weaponName, weapon.level + 1),
       iconName: weaponName,
       tags: [...WEAPON_TAGS[weaponName]]
@@ -1045,6 +1067,7 @@ function easeOutCubic(t) {
 var keys = {};
 var dashKeyQueued = false;
 var dashSuppressUntil = 0;
+var menuTouchPending = false;
 var DASH_SUPPRESS_MS = {
   /** After choosing a draft (Enter/Space/click) — longest, covers levelUp → playing transition */
   DRAFT_CONFIRM: 500,
@@ -1058,18 +1081,21 @@ var DASH_SUPPRESS_MS = {
 function suppressDashFor(ms) {
   dashSuppressUntil = Math.max(dashSuppressUntil, __win.performance.now() + ms);
 }
-function isLevelUp() {
+function currentState() {
   var _a;
   try {
     const r = __win.__universeEater;
-    return ((_a = r == null ? void 0 : r.game) == null ? void 0 : _a.state) === "levelUp";
+    return (_a = r == null ? void 0 : r.game) == null ? void 0 : _a.state;
   } catch (e) {
-    return false;
+    return void 0;
   }
+}
+function isLevelUp() {
+  return currentState() === "levelUp";
 }
 __win.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
-  if (!keys[key]) {
+  if (!keys[key] && !e.repeat) {
     if (key === " " || key === "shift") {
       if (__win.performance.now() < dashSuppressUntil || isLevelUp()) {
       } else {
@@ -1170,6 +1196,12 @@ function vibrate(pattern) {
 }
 function handleTouchStart(e) {
   e.preventDefault();
+  if (menuTouchPending) {
+    menuTouchPending = false;
+    return;
+  }
+  const state = currentState();
+  if (state && state !== "playing") return;
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
     if (isPauseButton(t.clientX, t.clientY)) {
@@ -1177,11 +1209,10 @@ function handleTouchStart(e) {
       continue;
     }
     if (isDashButton(t.clientX, t.clientY)) {
-      if (__win.performance.now() < dashSuppressUntil || isLevelUp()) {
-      } else {
+      if (__win.performance.now() >= dashSuppressUntil && !isLevelUp()) {
         touch.dashTapped = true;
+        vibrate(12);
       }
-      vibrate(12);
       continue;
     }
     if (touch.touchId === -1) {
@@ -1230,7 +1261,10 @@ if (isMobile()) {
   __doc.addEventListener("touchstart", handleTouchStart, { passive: false });
   __doc.addEventListener("touchmove", handleTouchMove, { passive: false });
   __doc.addEventListener("touchend", handleTouchEnd, { passive: false });
-  __doc.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+  __doc.addEventListener("touchcancel", (event) => {
+    handleTouchEnd(event);
+    clearTransientInput();
+  }, { passive: false });
 }
 function consumePauseTap() {
   if (touch.pauseTapped) {
@@ -1272,6 +1306,22 @@ function triggerHaptic(pattern) {
   vibrate(pattern);
 }
 var JOYSTICK_DISPLAY_RADIUS = JOYSTICK_RADIUS;
+function consumeMenuTouch() {
+  menuTouchPending = true;
+}
+function releaseAllInput() {
+  for (const key of Object.keys(keys)) delete keys[key];
+  clearTransientInput();
+  touch.touchId = -1;
+  touch.active = false;
+  touch.dx = 0;
+  touch.dy = 0;
+  menuTouchPending = false;
+}
+__win.addEventListener("blur", releaseAllInput);
+__win.addEventListener("pagehide", releaseAllInput);
+__win.addEventListener("resize", releaseAllInput);
+__doc.addEventListener("visibilitychange", releaseAllInput);
 
 // src/mutators.ts
 var NEUTRAL_SPAWN_MODS = {
@@ -1337,9 +1387,104 @@ function composeSpawnMods(ids) {
   return mods;
 }
 
+// src/encounters.ts
+var ENCOUNTER_WARNING = 6;
+var ENCOUNTER_LENGTH = 22;
+var ENCOUNTER_RECOVERY = 18;
+var ENCOUNTERS = [
+  { at: 120, type: "stalker", count: 2, name: ["Hunter pair", "\u730E\u624B\u53CC\u88AD"], tactic: ["Keep moving; the hunters weave toward you.", "\u6301\u7EED\u79FB\u52A8\uFF0C\u730E\u624B\u4F1A\u66F2\u7EBF\u903C\u8FD1\u3002"] },
+  { at: 240, type: "lancer", count: 2, name: ["Lance patrol", "\u7A81\u51FB\u5DE1\u903B\u961F"], tactic: ["Move sideways when their charge lights up.", "\u770B\u5230\u51B2\u950B\u9884\u8B66\u65F6\u6A2A\u5411\u95EA\u907F\u3002"] },
+  { at: 360, type: "sentinel", count: 2, name: ["Sentinel breach", "\u54E8\u5175\u7A81\u7834"], tactic: ["Watch the volley gaps and keep an exit open.", "\u7A7F\u8FC7\u5F39\u5E55\u7A7A\u9699\uFF0C\u4FDD\u6301\u9000\u8DEF\u3002"] },
+  { at: 480, type: "overlord", count: 1, name: ["Brood sovereign", "\u866B\u7FA4\u9738\u4E3B"], tactic: ["Focus the summoner before its swarm grows.", "\u4F18\u5148\u51FB\u8D25\u53EC\u5524\u8005\uFF0C\u963B\u6B62\u866B\u7FA4\u6269\u5F20\u3002"] }
+];
+var names = [
+  ["First light", "\u521D\u5149"],
+  ["Build momentum", "\u79EF\u84C4\u529B\u91CF"],
+  ["Hostile orbit", "\u5371\u673A\u8F68\u9053"],
+  ["Event horizon", "\u4E8B\u4EF6\u89C6\u754C"],
+  ["Warden approach", "\u5B88\u671B\u8005\u903C\u8FD1"],
+  ["Warden encounter", "\u8FCE\u6218\u5B88\u671B\u8005"]
+];
+var descriptions = [
+  ["Gather XP and establish your first weapon upgrades.", "\u6536\u96C6\u7ECF\u9A8C\uFF0C\u5F3A\u5316\u521D\u59CB\u6B66\u5668\u3002"],
+  ["Shape your build and keep a route through the swarm.", "\u5B8C\u5584\u6D41\u6D3E\uFF0C\u5728\u866B\u7FA4\u4E2D\u7559\u51FA\u9000\u8DEF\u3002"],
+  ["New threats demand movement and focused fire.", "\u65B0\u5A01\u80C1\u51FA\u73B0\uFF0C\u7075\u6D3B\u79FB\u52A8\u5E76\u96C6\u4E2D\u706B\u529B\u3002"],
+  ["Use your evolved arsenal to control the pressure.", "\u5229\u7528\u8FDB\u5316\u6B66\u5668\uFF0C\u638C\u63A7\u6218\u573A\u538B\u529B\u3002"],
+  ["Collect nearby XP and prepare for the Warden.", "\u6536\u96C6\u9644\u8FD1\u7ECF\u9A8C\uFF0C\u51C6\u5907\u8FCE\u6218\u5B88\u671B\u8005\u3002"],
+  ["Read its attack signals and strike between volleys.", "\u89C2\u5BDF\u653B\u51FB\u9884\u8B66\uFF0C\u5728\u5F39\u5E55\u95F4\u9699\u53CD\u51FB\u3002"]
+];
+function expeditionTime(elapsed, duration) {
+  return Math.max(0, elapsed) * 600 / Math.max(1, duration);
+}
+function localized(pair) {
+  return pair[getLanguage() === "zh-CN" ? 1 : 0];
+}
+function getEncounterName(event) {
+  return localized(event.name);
+}
+function getEncounterMessage(event, warning) {
+  return warning ? getLanguage() === "zh-CN" ? `${getEncounterName(event)}\u5373\u5C06\u62B5\u8FBE \xB7 \u51C6\u5907\u8FCE\u6218` : `${getEncounterName(event)} inbound \xB7 prepare` : `${getEncounterName(event)} \xB7 ${localized(event.tactic)}`;
+}
+var EncounterDirector = class {
+  constructor() {
+    this.next = 0;
+    this.armed = false;
+    this.warnedAt = 0;
+  }
+  reset() {
+    this.next = 0;
+    this.armed = false;
+  }
+  update(elapsed, duration = 600) {
+    const time = expeditionTime(elapsed, duration);
+    while (this.next < ENCOUNTERS.length) {
+      const event = ENCOUNTERS[this.next];
+      if (time < event.at - ENCOUNTER_WARNING) return null;
+      if (time < event.at) {
+        if (this.armed) return null;
+        this.armed = true;
+        this.warnedAt = time;
+        return { kind: "warning", event };
+      }
+      this.next++;
+      const shouldSpawn = this.armed && time - this.warnedAt >= 3 && time <= event.at + 3;
+      this.armed = false;
+      if (shouldSpawn) return { kind: "spawn", event };
+    }
+    return null;
+  }
+};
+function getEncounterSpawnPace(elapsed, duration = 600) {
+  const time = expeditionTime(elapsed, duration);
+  for (const event of ENCOUNTERS) {
+    if (time >= event.at - ENCOUNTER_WARNING && time < event.at + ENCOUNTER_LENGTH) return 1.45;
+    if (time >= event.at + ENCOUNTER_LENGTH && time < event.at + ENCOUNTER_LENGTH + ENCOUNTER_RECOVERY) return 2.2;
+  }
+  if (time >= 570 && time < 600) return 1.6;
+  return time > 60 && time % 60 < 9 ? 1.65 : 1;
+}
+function getEncounterPhase(elapsed, duration = 600) {
+  const time = expeditionTime(elapsed, duration);
+  const progress = Math.min(1, time / 600);
+  for (const event of ENCOUNTERS) {
+    if (time >= event.at - ENCOUNTER_WARNING && time < event.at) {
+      return { name: localized(["Elite signal", "\u7CBE\u82F1\u4FE1\u53F7"]), description: getEncounterMessage(event, true), progress };
+    }
+    if (time >= event.at && time < event.at + ENCOUNTER_LENGTH) {
+      return { name: getEncounterName(event), description: localized(event.tactic), progress };
+    }
+    if (time >= event.at + ENCOUNTER_LENGTH && time < event.at + ENCOUNTER_LENGTH + ENCOUNTER_RECOVERY) {
+      return { name: localized(["Gather & regroup", "\u6536\u96C6\u4E0E\u6574\u5907"]), description: localized(["Reinforcements have slowed. Gather XP and find space.", "\u589E\u63F4\u6682\u7F13\u3002\u6536\u96C6\u7ECF\u9A8C\uFF0C\u5BFB\u627E\u5B89\u5168\u7A7A\u95F4\u3002"]), progress };
+    }
+  }
+  const phase = time < 60 ? 0 : time < 180 ? 1 : time < 360 ? 2 : time < 540 ? 3 : time < 600 ? 4 : 5;
+  return { name: localized(names[phase]), description: localized(descriptions[phase]), progress };
+}
+
 // src/game.ts
 var Game = class {
   constructor() {
+    this.encounters = new EncounterDirector();
     this.state = "title" /* TITLE */;
     this.stage = 1;
     this.elapsedTime = 0;
@@ -1400,6 +1545,7 @@ var Game = class {
     });
   }
   advanceStage() {
+    this.encounters.reset();
     this.stage++;
     this.elapsedTime = 0;
     this.bossEngaged = false;
@@ -1540,6 +1686,16 @@ var Game = class {
     }
   }
   updateNotifications(dt) {
+    const encounter = this.bossEngaged ? null : this.encounters.update(this.elapsedTime, this.gameDuration);
+    if (encounter) {
+      const warning = encounter.kind === "warning";
+      this.notifications.push({
+        text: () => getEncounterMessage(encounter.event, warning),
+        timer: warning ? 5.5 : 4,
+        alpha: 1,
+        kind: "danger"
+      });
+    }
     while (this.scheduled.length > 0 && this.elapsedTime >= this.scheduled[0].atElapsed) {
       const item = this.scheduled.shift();
       this.notifications.push({
@@ -1763,6 +1919,14 @@ function drawObservatoryTitle(ctx2, canvas2, age) {
 }
 function drawHudFrame(ctx2, w, h, left, top, right, player, game) {
   ctx2.save();
+  if (player.lastDamageSource && player.hurtRatio > 0) {
+    const angle = wrappedAngle(player.x, player.y, player.lastDamageSource.x, player.lastDamageSource.y);
+    ctx2.beginPath();
+    ctx2.arc(w / 2, h / 2, player.radius + 39, angle - 0.42, angle + 0.42);
+    ctx2.strokeStyle = `rgba(255,125,143,${0.8 * player.hurtRatio})`;
+    ctx2.lineWidth = 3;
+    ctx2.stroke();
+  }
   const gradient = ctx2.createLinearGradient(0, 0, 0, 115);
   gradient.addColorStop(0, "rgba(3,12,20,0.94)");
   gradient.addColorStop(1, "rgba(3,12,20,0)");
@@ -1787,6 +1951,31 @@ function drawHudFrame(ctx2, w, h, left, top, right, player, game) {
     if (game.activeDoctrines.length === 0) label(ctx2, "ESC / II", w - right, top + 54, 9);
   }
   ctx2.restore();
+}
+
+// src/combat-feedback.ts
+var ENEMY_NAMES = {
+  swarmer: ["Swarmer", "\u8702\u7FA4"],
+  drifter: ["Drifter", "\u6F02\u6D41\u8005"],
+  titan: ["Titan", "\u6CF0\u5766"],
+  overlord: ["Overlord", "\u9738\u4E3B"],
+  spitter: ["Spitter", "\u55B7\u5C04\u8005"],
+  splitter: ["Splitter", "\u5206\u88C2\u8005"],
+  bomber: ["Bomber", "\u7206\u7834\u8005"],
+  stalker: ["Stalker", "\u8FFD\u730E\u8005"],
+  sentinel: ["Sentinel", "\u54E8\u5175"],
+  lancer: ["Lancer", "\u67AA\u9A91\u5175"],
+  boss: ["Void Warden", "\u865A\u7A7A\u770B\u5B88\u8005"]
+};
+function describeLastHit(source) {
+  const cn = getLanguage() === "zh-CN";
+  const name = ENEMY_NAMES[source.enemy][cn ? 1 : 0];
+  const cause = cn ? `${name} \xB7 ${source.kind === "contact" ? "\u78B0\u649E" : "\u5F39\u5E55"}` : `${name} / ${source.kind === "contact" ? "collision" : "projectile"}`;
+  let advice = cn ? "\u4FDD\u6301\u79FB\u52A8\uFF0C\u7559\u51FA\u64A4\u9000\u7A7A\u95F4\u3002" : "Keep moving and leave yourself an escape route.";
+  if (source.kind === "projectile") advice = cn ? "\u7B49\u5F85\u5F39\u5E55\u63A5\u8FD1\uFF0C\u518D\u51B2\u523A\u7A7F\u8FC7\u3002" : "Let the volley approach, then dash through it.";
+  if (source.enemy === "drifter" || source.enemy === "lancer") advice = cn ? "\u770B\u5230\u7784\u51C6\u7EBF\u540E\uFF0C\u6A2A\u5411\u95EA\u907F\u51B2\u950B\u3002" : "Dodge sideways when the charge line appears.";
+  if (source.enemy === "bomber") advice = cn ? "\u5F15\u71C3\u540E\u8FC5\u901F\u79BB\u5F00\u7206\u7834\u8005\u3002" : "Create distance as soon as the bomber arms.";
+  return { cause, advice };
 }
 
 // src/weapons/shared.ts
@@ -1851,17 +2040,17 @@ function computeLaserStats(level) {
   };
 }
 function applyBeamDamage(originX, originY, targetX, targetY, enemies, damage, range, width, modifiers) {
-  const angle = wrappedAngle(originX, originY, targetX, targetY);
-  const rangeSq = range * range;
+  const aim = wrappedDelta(originX, originY, targetX, targetY);
+  const length = Math.hypot(aim.x, aim.y);
+  if (length === 0) return;
+  const dx = aim.x / length;
+  const dy = aim.y / length;
   for (const enemy of enemies) {
     if (enemy.dead) continue;
-    const distSq = wrappedDistanceSquared(originX, originY, enemy.x, enemy.y);
-    if (distSq > rangeSq) continue;
-    const dist = Math.sqrt(distSq);
-    const eAngle = wrappedAngle(originX, originY, enemy.x, enemy.y);
-    const diff = Math.abs(eAngle - angle);
-    const normDiff = Math.min(diff, TWO_PI - diff);
-    if (dist * Math.sin(normDiff) < enemy.radius + width) {
+    const delta = wrappedDelta(originX, originY, enemy.x, enemy.y);
+    const along = delta.x * dx + delta.y * dy;
+    if (along < 0 || along > range) continue;
+    if (Math.abs(delta.x * dy - delta.y * dx) < enemy.radius + width) {
       hitEnemySilent(enemy, damage, modifiers);
     }
   }
@@ -1882,7 +2071,7 @@ function drawBeam(ctx2, camera, originWorldX, originWorldY, originRadius, target
   const amplitude = 0.5 + level * 0.6;
   const frequency = 3.5;
   const waveSpeed = 8;
-  const segments = 20;
+  const segments = settings.particleQuality === "low" ? 8 : settings.particleQuality === "medium" ? 12 : 20;
   const points = [];
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
@@ -1992,7 +2181,7 @@ function drawBeam(ctx2, camera, originWorldX, originWorldY, originRadius, target
     ctx2.fillStyle = colors.originInner.replace("VAR", `${0.9 * orbPulse}`);
     ctx2.fill();
   }
-  for (let i = 0; i < stats.particleCount; i++) {
+  for (let i = 0; i < (settings.reducedMotion || settings.particleQuality === "low" ? 0 : stats.particleCount); i++) {
     const t = Math.random();
     const segIdx = Math.floor(t * segments);
     const px = points[segIdx].x + (Math.random() - 0.5) * stats.width * 3;
@@ -2326,6 +2515,7 @@ var LaserBeam = class {
     this.isFiring = false;
     this.targetX = 0;
     this.targetY = 0;
+    this.splitTargets = [];
     this.time = 0;
     this.cachedStats = this.computeStats();
     this.cachedLevel = 1;
@@ -2358,9 +2548,36 @@ var LaserBeam = class {
         this.cooldownTimer = cooldown;
         this.targetX = nearest.x;
         this.targetY = nearest.y;
+        this.splitTargets.length = 0;
         const angle = wrappedAngle(playerX, playerY, nearest.x, nearest.y);
         if (this.onFire) this.onFire(angle);
-        applyBeamDamage(playerX, playerY, nearest.x, nearest.y, enemies, damage, stats.range, stats.width, modifiers);
+        if (this.level >= 8) {
+          const headings = [angle];
+          for (let ray = 0; ray < 2; ray++) {
+            let candidate = null;
+            let best = stats.range * stats.range;
+            for (const enemy of enemies) {
+              if (enemy.dead || enemy === nearest) continue;
+              const heading2 = wrappedAngle(playerX, playerY, enemy.x, enemy.y);
+              if (headings.some((a) => Math.abs(Math.atan2(Math.sin(heading2 - a), Math.cos(heading2 - a))) < 0.3)) continue;
+              const distance = wrappedDistanceSquared(playerX, playerY, enemy.x, enemy.y);
+              if (distance < best) {
+                best = distance;
+                candidate = enemy;
+              }
+            }
+            if (!candidate) break;
+            const heading = wrappedAngle(playerX, playerY, candidate.x, candidate.y);
+            headings.push(heading);
+            this.splitTargets.push({ x: playerX + Math.cos(heading) * stats.range, y: playerY + Math.sin(heading) * stats.range });
+          }
+        }
+        this.targetX = playerX + Math.cos(angle) * stats.range;
+        this.targetY = playerY + Math.sin(angle) * stats.range;
+        applyBeamDamage(playerX, playerY, this.targetX, this.targetY, enemies, damage, stats.range, stats.width, modifiers);
+        for (const target of this.splitTargets) {
+          applyBeamDamage(playerX, playerY, target.x, target.y, enemies, damage * 0.45, stats.range, stats.width * 0.55, modifiers);
+        }
         audio.playShoot();
       }
     }
@@ -2368,6 +2585,12 @@ var LaserBeam = class {
   draw(ctx2, camera, playerX, playerY, playerRadius) {
     if (!this.isFiring) return;
     const stats = this.getStats();
+    if (this.splitTargets.length) {
+      const splitStats = __spreadProps(__spreadValues({}, stats), { width: stats.width * 0.55, glowAlpha: stats.glowAlpha * 0.6, particleCount: 0 });
+      for (const target of this.splitTargets) {
+        drawBeam(ctx2, camera, playerX, playerY, playerRadius, target.x, target.y, splitStats, this.time, 3, LASER_COLORS);
+      }
+    }
     drawBeam(
       ctx2,
       camera,
@@ -2393,6 +2616,8 @@ var OrbitShield = class {
     this.angle = 0;
     this.cachedStats = this.computeStats();
     this.cachedLevel = 1;
+    this.interceptCooldown = 0;
+    this.interceptFlashes = [];
   }
   computeStats() {
     const lvl = this.level;
@@ -2418,10 +2643,26 @@ var OrbitShield = class {
     const stats = this.getStats();
     const damage = stats.damage * modifiers.damageMultiplier;
     this.angle += stats.rotationSpeed * dt;
+    this.interceptCooldown = Math.max(0, this.interceptCooldown - dt);
+    for (let i = 0; i < this.interceptFlashes.length; i++) this.interceptFlashes[i] = Math.max(0, this.interceptFlashes[i] - dt);
     for (let i = 0; i < stats.projectileCount; i++) {
       const a = this.angle + TWO_PI / stats.projectileCount * i;
       const px = playerX + Math.cos(a) * stats.orbitRadius;
       const py = playerY + Math.sin(a) * stats.orbitRadius;
+      if (this.level >= 8 && this.interceptCooldown <= 0) {
+        interception: for (const enemy of enemies) {
+          for (let p = 0; p < enemy.projectiles.length; p++) {
+            const shot = enemy.projectiles[p];
+            const radius = stats.hitRadius + shot.radius;
+            if (shot.lifetime > 0 && wrappedDistanceSquared(px, py, shot.x, shot.y) <= radius * radius) {
+              enemy.projectiles.splice(p, 1);
+              this.interceptCooldown = 0.18;
+              this.interceptFlashes[i] = 0.18;
+              break interception;
+            }
+          }
+        }
+      }
       const hitRadiusSq = stats.hitRadius;
       for (const enemy of enemies) {
         if (enemy.dead) continue;
@@ -2433,6 +2674,7 @@ var OrbitShield = class {
     }
   }
   draw(ctx2, camera, playerX, playerY, _playerRadius) {
+    var _a;
     const stats = this.getStats();
     const screen = camera.worldToScreen(playerX, playerY);
     const settings = loadSettings();
@@ -2443,6 +2685,13 @@ var OrbitShield = class {
       const a = this.angle + TWO_PI / stats.projectileCount * i;
       const px = screen.x + Math.cos(a) * stats.orbitRadius;
       const py = screen.y + Math.sin(a) * stats.orbitRadius;
+      if (((_a = this.interceptFlashes[i]) != null ? _a : 0) > 0) {
+        ctx2.beginPath();
+        ctx2.arc(px, py, stats.hitRadius * (settings.reducedMotion ? 1 : 1.6 - this.interceptFlashes[i] / 0.3), 0, TWO_PI);
+        ctx2.strokeStyle = `rgba(160,255,225,${this.interceptFlashes[i] / 0.18})`;
+        ctx2.lineWidth = 2;
+        ctx2.stroke();
+      }
       for (let t = 1; t <= (settings.reducedMotion || !detailed ? 0 : stats.trailLength); t++) {
         const ta = a - t * 0.15;
         const tx = screen.x + Math.cos(ta) * stats.orbitRadius;
@@ -2522,7 +2771,9 @@ var NovaBlast = class {
     this.cooldownTimer = 0;
     this.blastRadius = 0;
     this.isBlasting = false;
-    this.hasDealtDamage = false;
+    this.hitEnemies = /* @__PURE__ */ new Set();
+    this.blastX = 0;
+    this.blastY = 0;
     this.cachedStats = this.computeStats();
     this.cachedLevel = 1;
   }
@@ -2552,15 +2803,26 @@ var NovaBlast = class {
     const cooldown = stats.cooldown * modifiers.cooldownMultiplier;
     if (this.isBlasting) {
       this.blastRadius += stats.expandSpeed * dt;
-      if (!this.hasDealtDamage) {
-        const maxRadiusSq = stats.maxRadius * stats.maxRadius;
+      {
+        const waveRadius = Math.min(this.blastRadius, stats.maxRadius);
         for (const enemy of enemies) {
-          if (enemy.dead) continue;
-          if (wrappedDistanceSquared(playerX, playerY, enemy.x, enemy.y) < maxRadiusSq) {
+          if (enemy.dead || this.hitEnemies.has(enemy)) continue;
+          const reach = waveRadius + enemy.radius;
+          if (wrappedDistanceSquared(this.blastX, this.blastY, enemy.x, enemy.y) <= reach * reach) {
+            this.hitEnemies.add(enemy);
             hitEnemy(enemy, damage, modifiers);
+            if (this.level >= 8 && !enemy.dead) {
+              const delta = wrappedDelta(this.blastX, this.blastY, enemy.x, enemy.y);
+              const distance = Math.hypot(delta.x, delta.y);
+              if (distance > 0) {
+                const force = enemy.isBoss ? 6 : 36;
+                const position = wrapPosition(enemy.x + delta.x / distance * force, enemy.y + delta.y / distance * force);
+                enemy.x = position.x;
+                enemy.y = position.y;
+              }
+            }
           }
         }
-        this.hasDealtDamage = true;
       }
       if (this.blastRadius >= stats.maxRadius) {
         this.isBlasting = false;
@@ -2572,14 +2834,16 @@ var NovaBlast = class {
       this.isBlasting = true;
       this.cooldownTimer = cooldown;
       this.blastRadius = 0;
-      this.hasDealtDamage = false;
+      this.hitEnemies.clear();
+      this.blastX = playerX;
+      this.blastY = playerY;
       audio.playExplosion(0.8);
     }
   }
-  draw(ctx2, camera, playerX, playerY, _playerRadius) {
+  draw(ctx2, camera, _playerX, _playerY, _playerRadius) {
     if (!this.isBlasting) return;
     const stats = this.getStats();
-    const screen = camera.worldToScreen(playerX, playerY);
+    const screen = camera.worldToScreen(this.blastX, this.blastY);
     const progress = this.blastRadius / stats.maxRadius;
     const alpha = 1 - progress;
     const settings = loadSettings();
@@ -3762,6 +4026,13 @@ var UI = class {
     ctx2.font = uiFont(11);
     ctx2.fillStyle = "rgba(160, 210, 255, 0.58)";
     ctx2.fillText(formatStageLabel(game.stage), leftInset, topInset + 52);
+    if (!game.bossEngaged) {
+      ctx2.textAlign = "center";
+      ctx2.font = uiFont(compactHud ? 9 : 10);
+      ctx2.fillStyle = "#93caba";
+      ctx2.fillText(getEncounterPhase(game.elapsedTime, game.gameDuration).name.toUpperCase(), w / 2, topInset + 52, compactHud ? 140 : 230);
+      ctx2.textAlign = "left";
+    }
     if (game.mutators.length > 0) {
       ctx2.font = uiFont(10, "bold");
       ctx2.fillStyle = "rgba(255, 195, 110, 0.75)";
@@ -3866,9 +4137,9 @@ var UI = class {
       if (weapon) {
         ctx2.fillStyle = "rgba(255, 255, 255, 0.74)";
         ctx2.fillText(getWeaponName(entry.name), panelX + 26, wy);
-        ctx2.fillStyle = "rgba(110, 205, 255, 0.95)";
+        ctx2.fillStyle = getWeaponEvolution(weapon.name, weapon.level) ? "#93f5da" : "rgba(110, 205, 255, 0.95)";
         ctx2.textAlign = "right";
-        ctx2.fillText(formatHudWeaponLevel(weapon.level), panelX + panelW - 10, wy);
+        ctx2.fillText(getWeaponEvolution(weapon.name, weapon.level) ? `\u25C6 ${weapon.level}` : formatHudWeaponLevel(weapon.level), panelX + panelW - 10, wy);
         ctx2.textAlign = "left";
       } else {
         ctx2.fillStyle = "rgba(255, 255, 255, 0.22)";
@@ -4129,7 +4400,7 @@ var UI = class {
       const choice = game.draftChoices[i];
       if (!choice) continue;
       const isSelected = i === game.selectedDraftIndex;
-      const compact = card.height < 120;
+      const compact = card.height < 150;
       const iconR = compact ? 11 : 14;
       const iconX = card.x + (compact ? 24 : 30);
       const iconY = card.y + (compact ? 24 : 32);
@@ -4157,14 +4428,23 @@ var UI = class {
       ctx2.font = uiFont(12, "bold");
       ctx2.fillStyle = choice.kind === "unlock" ? "rgba(255, 210, 135, 0.85)" : "rgba(145, 210, 255, 0.72)";
       ctx2.fillText(`${i + 1}`, iconX + (compact ? 20 : 26), card.y + 20);
+      if (choice.kind === "upgrade" && choice.id.endsWith("-8") && getWeaponEvolution(choice.weaponName, 8)) {
+        ctx2.textAlign = "right";
+        ctx2.font = uiFont(9, "bold");
+        ctx2.fillStyle = "#93f5da";
+        ctx2.fillText(getLanguage() === "zh-CN" ? "\u6B66\u5668\u8FDB\u5316" : "EVOLUTION", card.x + card.width - 16, card.y + 20);
+        ctx2.textAlign = "left";
+      }
       const titleSize = compact ? 15 : 18;
       ctx2.font = uiFont(titleSize, "bold");
       ctx2.fillStyle = "#ffffff";
       this.drawWrappedText(ctx2, choice.title(), card.x + 20, card.y + (compact ? 44 : 58), card.width - 40, compact ? 18 : 22);
-      if (!compact) {
-        ctx2.font = uiFont(13);
+      {
+        ctx2.font = uiFont(compact ? 11 : 13);
         ctx2.fillStyle = "rgba(215, 228, 245, 0.72)";
-        this.drawWrappedText(ctx2, choice.description(), card.x + 20, card.y + 92, card.width - 40, 18);
+        const descY = compact ? 65 : 90;
+        const maxLines = Math.max(1, Math.floor((card.height - descY - 27) / 16));
+        this.drawWrappedText(ctx2, choice.description(), card.x + 20, card.y + descY, card.width - 40, 16, maxLines);
       }
       let chipX = card.x + 20;
       const chipY = card.y + card.height - (compact ? 24 : 26);
@@ -4438,6 +4718,28 @@ var UI = class {
       badges.push(!!(recordResult == null ? void 0 : recordResult.newBestCombo));
     }
     this.drawEndScreen(ctx2, canvas2, getUiText("gameOver"), [255, 68, 68], [80, 0, 0], stats, prompt, !canRestart, badges);
+    if (player.lastDamageSource) {
+      const { cause, advice } = describeLastHit(player.lastDamageSource);
+      const w = canvas2.clientWidth, h = canvas2.clientHeight;
+      const panelW = Math.min(w - 32, 470);
+      const panelY = h / 2 - (h < 500 ? 88 : 82);
+      ctx2.save();
+      ctx2.beginPath();
+      roundedRect(ctx2, (w - panelW) / 2, panelY, panelW, h < 500 ? 48 : 70, 8);
+      ctx2.fillStyle = "rgba(45,17,28,0.85)";
+      ctx2.fill();
+      ctx2.strokeStyle = "rgba(255,119,140,0.35)";
+      ctx2.lineWidth = 1;
+      ctx2.stroke();
+      ctx2.textAlign = "center";
+      ctx2.font = uiFont(h < 560 ? 11 : 13, "bold");
+      ctx2.fillStyle = "#ff9eac";
+      ctx2.fillText(`${getLanguage() === "zh-CN" ? "\u6700\u540E\u4E00\u51FB" : "FINAL HIT"}  /  ${cause}`, w / 2, panelY + 21, panelW - 24);
+      ctx2.font = uiFont(h < 560 ? 10 : 12);
+      ctx2.fillStyle = "#c4b8c1";
+      ctx2.fillText(advice, w / 2, panelY + (h < 500 ? 38 : 46), panelW - 24);
+      ctx2.restore();
+    }
   }
   drawVictory(ctx2, canvas2, player, game, recordResult) {
     this.drawEndScreen(ctx2, canvas2, formatStageClearTitle(game.stage), [68, 255, 136], [80, 60, 0], [
@@ -4545,43 +4847,28 @@ var UI = class {
     const cards = [];
     let rerollY = 0;
     let headerY = 0;
+    const safe = getSafeAreaInsets();
     if (stacked) {
-      const gap = shortScreen ? 8 : 12;
-      const sidePadding = 16;
-      const headerBlock = shortScreen ? 92 : 118;
-      const rerollBlock = 48;
-      const cardWidth = Math.min(360, w - sidePadding * 2);
-      const cardHeight = Math.max(92, Math.min(144, Math.floor((h - headerBlock - rerollBlock - gap * (count - 1)) / count)));
-      const startX = (w - cardWidth) / 2;
-      const cardY = Math.max(shortScreen ? 84 : 118, Math.round(h * 0.18));
-      headerY = Math.max(shortScreen ? 48 : 70, cardY - (shortScreen ? 52 : 72));
+      const gap = 10;
+      const cardWidth = Math.min(380, w - safe.left - safe.right - 32);
+      headerY = Math.max(safe.top + 44, Math.round(h * 0.09));
+      const cardY = headerY + 66;
+      const cardHeight = Math.max(88, Math.min(176, Math.floor((h - safe.bottom - 64 - cardY - gap * (count - 1)) / count)));
       for (let index = 0; index < count; index++) {
-        cards.push({
-          x: startX,
-          y: cardY + index * (cardHeight + gap),
-          width: cardWidth,
-          height: cardHeight
-        });
+        cards.push({ x: (w - cardWidth) / 2, y: cardY + index * (cardHeight + gap), width: cardWidth, height: cardHeight });
       }
-      rerollY = cardY + count * (cardHeight + gap) + 6;
+      rerollY = cardY + count * cardHeight + (count - 1) * gap + 12;
     } else {
-      const gap = 18;
-      const maxCardWidth = 260;
-      const cardWidth = Math.min(maxCardWidth, Math.floor((w - 80 - gap * (count - 1)) / count));
-      const cardHeight = Math.max(150, Math.min(204, h - 150));
+      const gap = shortScreen ? 10 : 18;
+      const cardWidth = Math.min(280, Math.floor((w - safe.left - safe.right - 40 - gap * (count - 1)) / count));
+      headerY = Math.max(safe.top + 38, shortScreen ? 44 : 82);
+      const cardY = shortScreen ? headerY + 38 : Math.max(headerY + 70, h / 2 - 80);
+      const cardHeight = Math.max(100, Math.min(220, h - safe.bottom - cardY - 64));
       const totalWidth = cardWidth * count + gap * (count - 1);
-      const startX = (w - totalWidth) / 2;
-      const cardY = Math.max(shortScreen ? 96 : 168, h / 2 - cardHeight / 2 + 24);
-      headerY = Math.max(shortScreen ? 52 : 82, cardY - (shortScreen ? 58 : 82));
       for (let index = 0; index < count; index++) {
-        cards.push({
-          x: startX + index * (cardWidth + gap),
-          y: cardY,
-          width: cardWidth,
-          height: cardHeight
-        });
+        cards.push({ x: (w - totalWidth) / 2 + index * (cardWidth + gap), y: cardY, width: cardWidth, height: cardHeight });
       }
-      rerollY = cardY + cardHeight + (shortScreen ? 10 : 14);
+      rerollY = cardY + cardHeight + 12;
     }
     return {
       headerY,
@@ -4644,13 +4931,20 @@ var UI = class {
       ]
     };
   }
-  drawWrappedText(ctx2, text, x, y, maxWidth, lineHeight) {
+  drawWrappedText(ctx2, text, x, y, maxWidth, lineHeight, maxLines = Infinity) {
     const tokens = text.includes(" ") ? text.split(/(\s+)/).filter(Boolean) : Array.from(text);
     let line = "";
     let lineY = y;
+    let lineNumber = 1;
     for (const token of tokens) {
       const testLine = `${line}${token}`;
       if (ctx2.measureText(testLine).width > maxWidth && line) {
+        if (lineNumber >= maxLines) {
+          while (line.length && ctx2.measureText(line + "?").width > maxWidth) line = line.slice(0, -1);
+          ctx2.fillText(line.trimEnd() + "?", x, lineY);
+          return;
+        }
+        lineNumber++;
         ctx2.fillText(line.trimEnd(), x, lineY);
         line = token.trimStart();
         lineY += lineHeight;
@@ -4746,6 +5040,9 @@ var Player = class {
     this.xp = 0;
     this.level = 1;
     this.kills = 0;
+    this.lastDamageSource = null;
+    this.damageTaken = 0;
+    this.hitsTaken = 0;
     this.ripples = [];
     this.ghosts = [];
     // Dash state
@@ -4769,6 +5066,7 @@ var Player = class {
     return Math.floor(5 + 3 * n + 0.65 * n * n);
   }
   addXp(amount) {
+    if (!Number.isFinite(amount) || amount < 0) return false;
     this.xp += amount * this.xpGainMultiplier;
     if (this.xp >= this.getXpForNextLevel()) {
       this.xp -= this.getXpForNextLevel();
@@ -4777,18 +5075,21 @@ var Player = class {
     }
     return false;
   }
-  takeDamage(amount) {
-    if (this.invulnTimer > 0 || this.postHitInvuln > 0) return false;
+  takeDamage(amount, source) {
+    if (this.hp <= 0 || this.invulnTimer > 0 || this.postHitInvuln > 0) return false;
     const adjustedAmount = amount * this.damageTakenMultiplier;
-    if (adjustedAmount <= 0) return false;
+    if (!Number.isFinite(adjustedAmount) || adjustedAmount <= 0) return false;
+    this.damageTaken += Math.min(this.hp, adjustedAmount);
+    this.hitsTaken++;
+    this.lastDamageSource = source ? __spreadValues({}, source) : null;
     this.hp = Math.max(0, this.hp - adjustedAmount);
     this.hurtTimer = Math.max(this.hurtTimer, this.hurtDuration);
     this.postHitInvuln = 0.25;
     return true;
   }
-  takeContactHit(amount) {
+  takeContactHit(amount, source) {
     if (this.contactCooldown > 0 || this.invulnTimer > 0) return false;
-    const tookDamage = this.takeDamage(amount);
+    const tookDamage = this.takeDamage(amount, source);
     if (tookDamage) {
       this.contactCooldown = this.contactGraceDuration;
     }
@@ -6607,6 +6908,7 @@ Enemy.BOSS_BASE_HP = BOSS_BASE_HP;
 // src/entities/enemies/spawner.ts
 var EnemySpawner = class {
   constructor() {
+    this.encounters = new EncounterDirector();
     this.enemies = [];
     this.bossSpawned = false;
     this.bossPhaseEvents = 0;
@@ -6622,6 +6924,7 @@ var EnemySpawner = class {
     this.stageDuration = Math.max(1, stageDuration);
   }
   clear() {
+    this.encounters.reset();
     this.enemies = [];
     this.bossSpawned = false;
     this.bossPhaseEvents = 0;
@@ -6719,8 +7022,7 @@ var EnemySpawner = class {
     if (effectiveElapsed >= 45) types.push({ type: "stalker", weight: 0.85 });
     if (effectiveElapsed >= 110) types.push({ type: "lancer", weight: 0.8 });
     if (effectiveElapsed >= 175) types.push({ type: "sentinel", weight: 0.65 });
-    const recovery = elapsed > 60 && elapsed % 60 < 9 ? 1.65 : 1;
-    spawnInterval *= recovery;
+    spawnInterval *= getEncounterSpawnPace(elapsed, this.stageDuration);
     const paceScale = 1 + difficulty * 0.12;
     const scaledTypes = types.map(({ type, weight }) => ({
       type,
@@ -6839,7 +7141,27 @@ var EnemySpawner = class {
       this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite(type))));
     }
   }
+  spawnEncounter(event, playerX, playerY, camera) {
+    const angle = Math.random() * TWO_PI;
+    const radius = Math.max(650, Math.hypot(camera.width, camera.height) / 2 + 180);
+    const count = Math.min(event.count, this.maxEnemies - this.enemies.length);
+    for (let i = 0; i < count; i++) {
+      const heading = angle + (i - (count - 1) / 2) * 0.22;
+      const position = wrapPosition(playerX + Math.cos(heading) * radius, playerY + Math.sin(heading) * radius);
+      this.enemies.push(new Enemy(
+        event.type,
+        position.x,
+        position.y,
+        this.stage,
+        this.spawnOptions(true, { hpScale: 0.85 })
+      ));
+    }
+  }
   update(dt, elapsed, playerX, playerY, camera) {
+    const encounter = this.bossSpawned ? null : this.encounters.update(elapsed, this.stageDuration);
+    if ((encounter == null ? void 0 : encounter.kind) === "spawn") {
+      this.spawnEncounter(encounter.event, playerX, playerY, camera);
+    }
     const config = this.getSpawnConfig(elapsed);
     this.spawnTimer += dt;
     const interval = this.bossSpawned ? config.spawnInterval * 2.4 : config.spawnInterval;
@@ -7439,11 +7761,18 @@ var WorldCombatSystem = class {
     for (const enemy of this.spawner.enemies) {
       if (enemy.dead) continue;
       if (wrappedCirclesOverlap(px, py, pr, enemy.x, enemy.y, enemy.radius)) {
-        this.player.takeContactHit(CONTACT_HIT_DAMAGE * enemy.damageMultiplier);
+        this.player.takeContactHit(
+          CONTACT_HIT_DAMAGE * enemy.damageMultiplier,
+          { enemy: enemy.type, kind: "contact", x: enemy.x, y: enemy.y }
+        );
       }
       for (const projectile of enemy.projectiles) {
+        if (projectile.lifetime <= 0) continue;
         if (wrappedCirclesOverlap(px, py, pr, projectile.x, projectile.y, projectile.radius)) {
-          this.player.takeDamage(projectile.damage);
+          this.player.takeDamage(
+            projectile.damage,
+            { enemy: enemy.type, kind: "projectile", x: enemy.x, y: enemy.y }
+          );
           projectile.lifetime = 0;
         }
       }
@@ -7505,8 +7834,12 @@ var WorldCombatSystem = class {
       } else if (enemy.radius > BIG_KILL_RADIUS) {
         this.camera.shake(enemy.radius * 0.08, 0.15);
       }
-      if (!enemy.noXp && this.player.addXp(enemy.xpDrop)) {
-        levelUps++;
+      if (!enemy.noXp) {
+        let leveled = this.player.addXp(enemy.xpDrop);
+        while (leveled) {
+          levelUps++;
+          leveled = this.player.addXp(0);
+        }
       }
     }
     return { levelUps, kills, bossKilled };
@@ -7709,7 +8042,7 @@ var GameWorld = class {
     this.background = new Background();
     this.geometry = new BackgroundGeometry();
     this.spawner = new EnemySpawner();
-    this.spawner.setStage(1, 300);
+    this.spawner.setStage(1, 600);
     this.particles = new ParticleSystem();
     this.weaponManager = new WeaponManager();
     this.weaponManager.setOnLaserFire((angle) => this.player.addRipple(angle));
@@ -8861,12 +9194,21 @@ var GameRuntime = class {
       (_a = this.entityRenderer) == null ? void 0 : _a.resize(this.viewportWidth, this.viewportHeight, this.renderScale);
     };
     this.handleVisibilityChange = () => {
-      if (__doc.hidden && this.game.state === "playing" /* PLAYING */) {
-        this.game.state = "paused" /* PAUSED */;
-      }
+      this.lastFrameTime = __win.performance.now();
+      releaseAllInput();
+      if (__doc.hidden) this.handleInterruption();
+    };
+    this.handleInterruption = () => {
+      releaseAllInput();
+      suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
+      if (this.game.state === "playing" /* PLAYING */) this.game.state = "paused" /* PAUSED */;
     };
     this.handleKeyDown = (event) => {
       this.unlockAudioOnce();
+      if (this.game.state !== "playing" /* PLAYING */) {
+        releaseAllInput();
+        suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
+      }
       if (this.game.state === "levelUp" /* LEVEL_UP */) {
         if (event.key === "1" || event.key === "2" || event.key === "3") {
           this.game.setDraftSelection(Number(event.key) - 1);
@@ -8911,6 +9253,7 @@ var GameRuntime = class {
       if (event.key === "Escape" || event.key.toLowerCase() === "p") {
         if (this.game.state === "playing" /* PLAYING */) {
           this.game.state = "paused" /* PAUSED */;
+          releaseAllInput();
           return;
         }
       }
@@ -8924,6 +9267,15 @@ var GameRuntime = class {
       }
     };
     this.handlePointerDown = (event) => {
+      const menuGesture = this.game.state !== "playing" /* PLAYING */;
+      if (menuGesture) {
+        releaseAllInput();
+        suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
+      }
+      this.handlePointerAction(event);
+      if (menuGesture && event.pointerType === "touch") consumeMenuTouch();
+    };
+    this.handlePointerAction = (event) => {
       this.unlockAudioOnce();
       const rect = this.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
@@ -9079,6 +9431,8 @@ var GameRuntime = class {
     __win.addEventListener("resize", this.handleResize);
     __win.addEventListener("keydown", this.handleKeyDown);
     __doc.addEventListener("visibilitychange", this.handleVisibilityChange);
+    __win.addEventListener("blur", this.handleInterruption);
+    __win.addEventListener("pagehide", this.handleInterruption);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
   }
   unlockAudioOnce() {
@@ -9171,6 +9525,8 @@ var GameRuntime = class {
   }
   handleTapTransitions() {
     if (consumePauseTap()) {
+      releaseAllInput();
+      suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
       if (this.game.state === "playing" /* PLAYING */) this.game.state = "paused" /* PAUSED */;
       else if (this.game.state === "paused" /* PAUSED */) this.game.state = "playing" /* PLAYING */;
     }
@@ -9194,7 +9550,7 @@ var GameRuntime = class {
     this.restartAllowedAt = 0;
     this.lastRecordResult = null;
     this.lastMilestoneSeen = 0;
-    clearTransientInput();
+    releaseAllInput();
   }
   quitToTitle() {
     var _a;
@@ -9204,7 +9560,7 @@ var GameRuntime = class {
     this.game.state = "title" /* TITLE */;
     this.restartAllowedAt = 0;
     this.lastRecordResult = null;
-    clearTransientInput();
+    releaseAllInput();
     syncDocumentLanguage();
   }
   advanceStage() {

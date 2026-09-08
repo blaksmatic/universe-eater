@@ -1,4 +1,4 @@
-import { wrappedDistanceSquared, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, wrappedDelta, wrapPosition, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import { audio } from '../audio';
@@ -13,7 +13,9 @@ export class NovaBlast implements Weapon {
   private cooldownTimer = 0;
   private blastRadius = 0;
   private isBlasting = false;
-  private hasDealtDamage = false;
+  private hitEnemies = new Set<Enemy>();
+  private blastX = 0;
+  private blastY = 0;
   private cachedStats = this.computeStats();
   private cachedLevel = 1;
 
@@ -55,15 +57,26 @@ export class NovaBlast implements Weapon {
 
     if (this.isBlasting) {
       this.blastRadius += stats.expandSpeed * dt;
-      if (!this.hasDealtDamage) {
-        const maxRadiusSq = stats.maxRadius * stats.maxRadius;
+      {
+        const waveRadius = Math.min(this.blastRadius, stats.maxRadius);
         for (const enemy of enemies) {
-          if (enemy.dead) continue;
-          if (wrappedDistanceSquared(playerX, playerY, enemy.x, enemy.y) < maxRadiusSq) {
+          if (enemy.dead || this.hitEnemies.has(enemy)) continue;
+          const reach = waveRadius + enemy.radius;
+          if (wrappedDistanceSquared(this.blastX, this.blastY, enemy.x, enemy.y) <= reach * reach) {
+            this.hitEnemies.add(enemy);
             hitEnemy(enemy, damage, modifiers);
+            if (this.level >= 8 && !enemy.dead) {
+              const delta = wrappedDelta(this.blastX, this.blastY, enemy.x, enemy.y);
+              const distance = Math.hypot(delta.x, delta.y);
+              if (distance > 0) {
+                const force = enemy.isBoss ? 6 : 36;
+                const position = wrapPosition(enemy.x + delta.x / distance * force, enemy.y + delta.y / distance * force);
+                enemy.x = position.x;
+                enemy.y = position.y;
+              }
+            }
           }
         }
-        this.hasDealtDamage = true;
       }
       if (this.blastRadius >= stats.maxRadius) {
         this.isBlasting = false;
@@ -76,15 +89,17 @@ export class NovaBlast implements Weapon {
       this.isBlasting = true;
       this.cooldownTimer = cooldown;
       this.blastRadius = 0;
-      this.hasDealtDamage = false;
+      this.hitEnemies.clear();
+      this.blastX = playerX;
+      this.blastY = playerY;
       audio.playExplosion(0.8);
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, playerX: number, playerY: number, _playerRadius: number): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, _playerX: number, _playerY: number, _playerRadius: number): void {
     if (!this.isBlasting) return;
     const stats = this.getStats();
-    const screen = camera.worldToScreen(playerX, playerY);
+    const screen = camera.worldToScreen(this.blastX, this.blastY);
     const progress = this.blastRadius / stats.maxRadius;
     const alpha = 1 - progress;
     const settings = loadSettings();

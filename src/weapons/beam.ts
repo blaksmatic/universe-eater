@@ -1,4 +1,4 @@
-import { wrappedAngle, wrappedDelta, wrappedDistanceSquared, TWO_PI } from '../utils';
+import { wrappedDelta, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import type { Enemy } from '../enemies';
 import { hitEnemySilent } from './shared';
@@ -76,17 +76,18 @@ export function applyBeamDamage(
   width: number,
   modifiers: import('./shared').WeaponModifiers,
 ): void {
-  const angle = wrappedAngle(originX, originY, targetX, targetY);
-  const rangeSq = range * range;
+  const aim = wrappedDelta(originX, originY, targetX, targetY);
+  const length = Math.hypot(aim.x, aim.y);
+  if (length === 0) return;
+  const dx = aim.x / length;
+  const dy = aim.y / length;
   for (const enemy of enemies) {
     if (enemy.dead) continue;
-    const distSq = wrappedDistanceSquared(originX, originY, enemy.x, enemy.y);
-    if (distSq > rangeSq) continue;
-    const dist = Math.sqrt(distSq);
-    const eAngle = wrappedAngle(originX, originY, enemy.x, enemy.y);
-    const diff = Math.abs(eAngle - angle);
-    const normDiff = Math.min(diff, TWO_PI - diff);
-    if (dist * Math.sin(normDiff) < enemy.radius + width) {
+    const delta = wrappedDelta(originX, originY, enemy.x, enemy.y);
+    const along = delta.x * dx + delta.y * dy;
+    // A beam is a forward segment, not an infinite line through the ship.
+    if (along < 0 || along > range) continue;
+    if (Math.abs(delta.x * dy - delta.y * dx) < enemy.radius + width) {
       hitEnemySilent(enemy, damage, modifiers);
     }
   }
@@ -120,7 +121,9 @@ export function drawBeam(
   const amplitude = 0.5 + level * 0.6;
   const frequency = 3.5;
   const waveSpeed = 8;
-  const segments = 20;
+  // Evolved arrays can draw three beams; lower quality keeps their collision
+  // geometry and silhouettes while reducing per-segment canvas strokes.
+  const segments = settings.particleQuality === 'low' ? 8 : settings.particleQuality === 'medium' ? 12 : 20;
 
   const points: { x: number; y: number }[] = [];
   for (let i = 0; i <= segments; i++) {
@@ -242,7 +245,7 @@ export function drawBeam(
     ctx.fill();
   }
 
-  for (let i = 0; i < stats.particleCount; i++) {
+  for (let i = 0; i < (settings.reducedMotion || settings.particleQuality === 'low' ? 0 : stats.particleCount); i++) {
     const t = Math.random();
     const segIdx = Math.floor(t * segments);
     const px = points[segIdx].x + (Math.random() - 0.5) * stats.width * 3;

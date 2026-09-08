@@ -16,7 +16,8 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:wx": "npm run build:wx && node scripts/test-wechat.mjs",
-    "test:wx:visual": "npm run build:wx && node scripts/wechat-visual.mjs"
+    "test:wx:visual": "npm run build:wx && node scripts/wechat-visual.mjs",
+    "test:mobile": "npm run build && node scripts/mobile-sprint.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

@@ -12,6 +12,8 @@ export class OrbitShield implements Weapon {
   private angle = 0;
   private cachedStats = this.computeStats();
   private cachedLevel = 1;
+  private interceptCooldown = 0;
+  private interceptFlashes: number[] = [];
 
   private computeStats(): {
     damage: number;
@@ -48,11 +50,29 @@ export class OrbitShield implements Weapon {
     const stats = this.getStats();
     const damage = stats.damage * modifiers.damageMultiplier;
     this.angle += stats.rotationSpeed * dt;
+    this.interceptCooldown = Math.max(0, this.interceptCooldown - dt);
+    for (let i = 0; i < this.interceptFlashes.length; i++) this.interceptFlashes[i] = Math.max(0, this.interceptFlashes[i] - dt);
 
     for (let i = 0; i < stats.projectileCount; i++) {
       const a = this.angle + (TWO_PI / stats.projectileCount) * i;
       const px = playerX + Math.cos(a) * stats.orbitRadius;
       const py = playerY + Math.sin(a) * stats.orbitRadius;
+
+      if (this.level >= 8 && this.interceptCooldown <= 0) {
+        interception: for (const enemy of enemies) {
+          for (let p = 0; p < enemy.projectiles.length; p++) {
+            const shot = enemy.projectiles[p];
+            const radius = stats.hitRadius + shot.radius;
+            if (shot.lifetime > 0 && wrappedDistanceSquared(px, py, shot.x, shot.y) <= radius * radius) {
+              // Remove immediately: the collision pass runs later this frame.
+              enemy.projectiles.splice(p, 1);
+              this.interceptCooldown = 0.18;
+              this.interceptFlashes[i] = 0.18;
+              break interception;
+            }
+          }
+        }
+      }
 
       const hitRadiusSq = stats.hitRadius;
       for (const enemy of enemies) {
@@ -77,6 +97,14 @@ export class OrbitShield implements Weapon {
       const a = this.angle + (TWO_PI / stats.projectileCount) * i;
       const px = screen.x + Math.cos(a) * stats.orbitRadius;
       const py = screen.y + Math.sin(a) * stats.orbitRadius;
+
+      if ((this.interceptFlashes[i] ?? 0) > 0) {
+        ctx.beginPath();
+        ctx.arc(px, py, stats.hitRadius * (settings.reducedMotion ? 1 : 1.6 - this.interceptFlashes[i] / 0.3), 0, TWO_PI);
+        ctx.strokeStyle = `rgba(160,255,225,${this.interceptFlashes[i] / 0.18})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
 
       for (let t = 1; t <= (settings.reducedMotion || !detailed ? 0 : stats.trailLength); t++) {
         const ta = a - t * 0.15;

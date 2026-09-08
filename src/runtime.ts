@@ -1,7 +1,7 @@
 import { Game, GameState } from './game';
 import { setLanguage, syncDocumentLanguage } from './i18n';
 import { UI } from './ui';
-import { consumeAnyTap, consumePauseTap, clearTransientInput, suppressDashFor, triggerHaptic, DASH_SUPPRESS_MS } from './input';
+import { consumeAnyTap, consumePauseTap, clearTransientInput, releaseAllInput, consumeMenuTouch, suppressDashFor, triggerHaptic, DASH_SUPPRESS_MS } from './input';
 import { GameWorld } from './world';
 import { ThreeEntityRenderer } from './three-view';
 import { audio } from './audio';
@@ -51,6 +51,8 @@ export class GameRuntime {
     window.addEventListener('resize', this.handleResize);
     window.addEventListener('keydown', this.handleKeyDown);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('blur', this.handleInterruption);
+    window.addEventListener('pagehide', this.handleInterruption);
     this.canvas.addEventListener('pointerdown', this.handlePointerDown);
   }
 
@@ -67,13 +69,23 @@ export class GameRuntime {
   };
 
   private handleVisibilityChange = (): void => {
-    if (document.hidden && this.game.state === GameState.PLAYING) {
-      this.game.state = GameState.PAUSED;
-    }
+    this.lastFrameTime = performance.now();
+    releaseAllInput();
+    if (document.hidden) this.handleInterruption();
+  };
+
+  private handleInterruption = (): void => {
+    releaseAllInput();
+    suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
+    if (this.game.state === GameState.PLAYING) this.game.state = GameState.PAUSED;
   };
 
   private handleKeyDown = (event: KeyboardEvent): void => {
     this.unlockAudioOnce();
+    if (this.game.state !== GameState.PLAYING) {
+      releaseAllInput();
+      suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
+    }
 
     if (this.game.state === GameState.LEVEL_UP) {
       if (event.key === '1' || event.key === '2' || event.key === '3') {
@@ -121,6 +133,7 @@ export class GameRuntime {
     if (event.key === 'Escape' || event.key.toLowerCase() === 'p') {
       if (this.game.state === GameState.PLAYING) {
         this.game.state = GameState.PAUSED;
+        releaseAllInput();
         return;
       }
     }
@@ -136,6 +149,17 @@ export class GameRuntime {
   };
 
   private handlePointerDown = (event: PointerEvent): void => {
+    const menuGesture = this.game.state !== GameState.PLAYING;
+    if (menuGesture) {
+      releaseAllInput();
+      suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
+    }
+    this.handlePointerAction(event);
+    // Set after actions: restarting can replace the world and clear input.
+    if (menuGesture && event.pointerType === 'touch') consumeMenuTouch();
+  };
+
+  private handlePointerAction = (event: PointerEvent): void => {
     this.unlockAudioOnce();
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
@@ -376,6 +400,8 @@ export class GameRuntime {
 
   private handleTapTransitions(): void {
     if (consumePauseTap()) {
+      releaseAllInput();
+      suppressDashFor(DASH_SUPPRESS_MS.DRAFT_CONFIRM);
       if (this.game.state === GameState.PLAYING) this.game.state = GameState.PAUSED;
       else if (this.game.state === GameState.PAUSED) this.game.state = GameState.PLAYING;
     }
@@ -400,7 +426,7 @@ export class GameRuntime {
     this.restartAllowedAt = 0;
     this.lastRecordResult = null;
     this.lastMilestoneSeen = 0;
-    clearTransientInput();
+    releaseAllInput();
   }
 
   private quitToTitle(): void {
@@ -410,7 +436,7 @@ export class GameRuntime {
     this.game.state = GameState.TITLE;
     this.restartAllowedAt = 0;
     this.lastRecordResult = null;
-    clearTransientInput();
+    releaseAllInput();
     syncDocumentLanguage();
   }
 

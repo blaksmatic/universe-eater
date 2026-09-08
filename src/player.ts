@@ -2,6 +2,7 @@ import { isKeyDown, touch, consumeDashRequest, triggerHaptic } from './input';
 import { MAP_WIDTH, MAP_HEIGHT, TWO_PI } from './utils';
 import { Camera } from './camera';
 import { audio } from './audio';
+import type { DamageSource } from './combat-feedback';
 
 interface Ripple {
   angle: number;
@@ -37,6 +38,9 @@ export class Player {
   xp = 0;
   level = 1;
   kills = 0;
+  lastDamageSource: DamageSource | null = null;
+  damageTaken = 0;
+  hitsTaken = 0;
   ripples: Ripple[] = [];
   ghosts: DashGhost[] = [];
 
@@ -63,6 +67,7 @@ export class Player {
   }
 
   addXp(amount: number): boolean {
+    if (!Number.isFinite(amount) || amount < 0) return false;
     this.xp += amount * this.xpGainMultiplier;
     if (this.xp >= this.getXpForNextLevel()) {
       this.xp -= this.getXpForNextLevel();
@@ -72,19 +77,22 @@ export class Player {
     return false;
   }
 
-  takeDamage(amount: number): boolean {
-    if (this.invulnTimer > 0 || this.postHitInvuln > 0) return false;
+  takeDamage(amount: number, source?: DamageSource): boolean {
+    if (this.hp <= 0 || this.invulnTimer > 0 || this.postHitInvuln > 0) return false;
     const adjustedAmount = amount * this.damageTakenMultiplier;
-    if (adjustedAmount <= 0) return false;
+    if (!Number.isFinite(adjustedAmount) || adjustedAmount <= 0) return false;
+    this.damageTaken += Math.min(this.hp, adjustedAmount);
+    this.hitsTaken++;
+    this.lastDamageSource = source ? { ...source } : null;
     this.hp = Math.max(0, this.hp - adjustedAmount);
     this.hurtTimer = Math.max(this.hurtTimer, this.hurtDuration);
     this.postHitInvuln = 0.25;
     return true;
   }
 
-  takeContactHit(amount: number): boolean {
+  takeContactHit(amount: number, source?: DamageSource): boolean {
     if (this.contactCooldown > 0 || this.invulnTimer > 0) return false;
-    const tookDamage = this.takeDamage(amount);
+    const tookDamage = this.takeDamage(amount, source);
     if (tookDamage) {
       this.contactCooldown = this.contactGraceDuration;
     }
