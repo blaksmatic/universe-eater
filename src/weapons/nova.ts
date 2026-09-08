@@ -4,6 +4,7 @@ import { Enemy } from '../enemies';
 import { audio } from '../audio';
 import type { Weapon, WeaponModifiers } from './shared';
 import { hitEnemy } from './shared';
+import { loadSettings } from '../storage';
 
 export class NovaBlast implements Weapon {
   name: import('../ids').WeaponName = 'Nova Blast';
@@ -86,6 +87,33 @@ export class NovaBlast implements Weapon {
     const screen = camera.worldToScreen(playerX, playerY);
     const progress = this.blastRadius / stats.maxRadius;
     const alpha = 1 - progress;
+    const settings = loadSettings();
+
+    // Solar flares stay on the shock front, leaving its interior readable.
+    if (this.level >= 5 && settings.particleQuality !== 'low') {
+      ctx.save();
+      ctx.translate(screen.x, screen.y);
+      const count = this.level >= 8 ? 16 : 8;
+      const radius = this.blastRadius;
+      ctx.strokeStyle = `rgba(255,232,166,${alpha * 0.65})`;
+      ctx.lineWidth = this.level >= 8 ? 2 : 1;
+      ctx.beginPath();
+      for (let i = 0; i < count; i++) {
+        const a = i * TWO_PI / count + (settings.reducedMotion ? 0 : progress * 0.3);
+        const length = (this.level >= 8 ? 32 : 18) * Math.sin(progress * Math.PI);
+        ctx.moveTo(Math.cos(a) * radius, Math.sin(a) * radius);
+        ctx.lineTo(Math.cos(a + 0.035) * (radius + length), Math.sin(a + 0.035) * (radius + length));
+      }
+      ctx.stroke();
+      if (this.level >= 8) {
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.86, 0, TWO_PI);
+        ctx.strokeStyle = `rgba(255,250,220,${alpha * 0.65})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     if (stats.innerGlow) {
       const gradient = ctx.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, this.blastRadius);

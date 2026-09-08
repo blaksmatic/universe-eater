@@ -26,7 +26,7 @@ All weapons fire automatically — your job is positioning, kiting, and dashing 
 ## Features
 
 ### The loop
-1. **Survive the countdown** (≈5 minutes, shrinking on later stages) against escalating waves.
+1. **Survive the countdown** (10 minutes per stage) against escalating waves.
 2. **Draft mutations** on every level-up: new weapons, weapon upgrades, or passives — with tag-based **Doctrines** that unlock powerful build archetypes.
 3. **Slay the Void Warden** — a 3-phase boss with bullet rings, rotating spiral barrages, summons, and telegraphed charge attacks. Kill it to advance; your build carries into the next, harder stage.
 
@@ -39,7 +39,7 @@ All weapons fire automatically — your job is positioning, kiting, and dashing 
 - **Arc Reactor** — chain lightning that leaps between packs
 - **Singularity** — a thrown gravity well that drags enemies in and collapses
 
-### Enemies (7 + elites + boss)
+### Enemies (10 + elites + boss)
 - **Swarmer** — fast, spawns in packs
 - **Drifter** — telegraphs then charges
 - **Titan** — slow tank with gravitational presence
@@ -47,10 +47,16 @@ All weapons fire automatically — your job is positioning, kiting, and dashing 
 - **Spitter** — keeps range, strafes, fires aimed orbs
 - **Splitter** — bursts into shards on death
 - **Bomber** — arms a fuse next to you, then detonates a bullet ring
+- **Stalker** ? weaves toward you, tightening its approach at close range
+- **Lancer** ? telegraphs a high-speed charge
+- **Sentinel** ? orbits at range, warning before an eight-way projectile burst
 - **Elites** — any type can spawn elite (larger, deadly, bonus XP, violet aura)
 - **Void Warden** — stage boss (see above)
 
 ### Feel & UX
+- Procedural singularity title screen, mint instrument HUD, hull segments and dash recharge meter
+- Steady quadratic leveling curve with fast early upgrades; short recovery windows each minute
+- Cached nebula and star sprites, bounded enemy populations, frame-rate-independent boss barrages
 - Combo chain: rapid kills build a counter with milestone XP bursts
 - Floating damage numbers with crit highlights (toggleable)
 - Off-screen threat arrows for bosses and elites

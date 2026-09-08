@@ -1,9 +1,10 @@
-import { wrappedDistanceSquared, TWO_PI } from '../utils';
+import { wrappedDistanceSquared, wrappedDelta, TWO_PI } from '../utils';
 import { Camera } from '../camera';
 import { Enemy } from '../enemies';
 import { audio } from '../audio';
 import type { Weapon, WeaponModifiers } from './shared';
 import { hitEnemy, getNearestEnemy } from './shared';
+import { loadSettings } from '../storage';
 
 interface ArcSegment {
   fromX: number;
@@ -101,11 +102,13 @@ export class ArcReactor implements Weapon {
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _playerX: number, _playerY: number, _playerRadius: number): void {
+    const detailed = loadSettings().particleQuality !== 'low';
     for (const s of this.segments) {
       const t = s.age / 0.22;
       const alpha = 1 - t;
       const start = camera.worldToScreen(s.fromX, s.fromY);
-      const end = camera.worldToScreen(s.toX, s.toY);
+      const delta = wrappedDelta(s.fromX, s.fromY, s.toX, s.toY);
+      const end = { x: start.x + delta.x, y: start.y + delta.y };
 
       const jaggedPoints: { x: number; y: number }[] = [start];
       const subSegments = 5;
@@ -128,6 +131,22 @@ export class ArcReactor implements Weapon {
         });
       }
       jaggedPoints.push(end);
+
+      if (this.level >= 5 && detailed) {
+        ctx.strokeStyle = `rgba(172,150,255,${alpha * 0.65})`;
+        ctx.lineWidth = this.level >= 8 ? 1.8 : 1;
+        ctx.beginPath();
+        for (let i = 1; i < jaggedPoints.length - 1; i++) {
+          const point = jaggedPoints[i];
+          const dx = end.x - start.x, dy = end.y - start.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const fork = (i % 2 ? 1 : -1) * (this.level >= 8 ? 22 : 12);
+          ctx.moveTo(point.x, point.y);
+          ctx.lineTo(point.x - dy / length * fork, point.y + dx / length * fork);
+          ctx.lineTo(point.x - dy / length * fork + dx / length * 9, point.y + dx / length * fork + dy / length * 9);
+        }
+        ctx.stroke();
+      }
 
       const trace = (): void => {
         ctx.beginPath();
@@ -153,6 +172,13 @@ export class ArcReactor implements Weapon {
       ctx.beginPath();
       ctx.arc(end.x, end.y, tipR * 2, 0, TWO_PI);
       ctx.fill();
+      if (this.level >= 8) {
+        ctx.beginPath();
+        ctx.arc(end.x, end.y, 8 + t * 22, 0, TWO_PI);
+        ctx.strokeStyle = `rgba(181,164,255,${alpha * 0.7})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
   }
 }

@@ -73,9 +73,9 @@ export class Game {
     },
   ];
 
-  /** Survival countdown before the Warden arrives; shrinks on later stages. */
+  /** Ten-minute expedition before the Warden arrives. */
   get gameDuration(): number {
-    return Math.max(180, 300 - (this.stage - 1) * 20);
+    return 600;
   }
 
   get timeRemaining(): number {

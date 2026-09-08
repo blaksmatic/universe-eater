@@ -4,6 +4,7 @@ import { Enemy } from '../enemies';
 import { audio } from '../audio';
 import type { Weapon, WeaponModifiers } from './shared';
 import { hitEnemy, getNearestEnemy } from './shared';
+import { loadSettings } from '../storage';
 
 interface Missile {
   x: number;
@@ -195,18 +196,22 @@ export class SeekerSwarm implements Weapon {
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _playerX: number, _playerY: number, _playerRadius: number): void {
+    const settings = loadSettings();
+    const evolved = this.level >= 5;
+    const ascended = this.level >= 8;
+    const detailed = settings.particleQuality !== 'low';
     for (const m of this.missiles) {
       const screen = camera.worldToScreen(m.x, m.y);
 
-      for (let i = 1; i < m.trail.length; i++) {
+      for (let i = 1; !settings.reducedMotion && detailed && i < m.trail.length; i++) {
         const p0 = camera.worldToScreen(m.trail[i - 1].x, m.trail[i - 1].y);
         const p1 = camera.worldToScreen(m.trail[i].x, m.trail[i].y);
         const t = i / m.trail.length;
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
         ctx.lineTo(p1.x, p1.y);
-        ctx.strokeStyle = `rgba(255, ${140 + t * 60}, 80, ${t * 0.5})`;
-        ctx.lineWidth = 1 + t * 2.2;
+        ctx.strokeStyle = ascended ? `rgba(255, 155, 95, ${t * 0.65})` : `rgba(255, ${140 + t * 60}, 80, ${t * 0.5})`;
+        ctx.lineWidth = 1 + t * (ascended ? 4 : 2.2);
         ctx.stroke();
       }
 
@@ -214,8 +219,26 @@ export class SeekerSwarm implements Weapon {
       ctx.save();
       ctx.translate(screen.x, screen.y);
       ctx.rotate(angle);
+      if (evolved) {
+        ctx.beginPath();
+        ctx.moveTo(-3, -2);
+        ctx.lineTo(-3, 2);
+        ctx.lineTo(settings.reducedMotion ? -13 : -19, 0);
+        ctx.closePath();
+        ctx.fillStyle = ascended ? 'rgba(255,118,80,0.65)' : 'rgba(255,185,95,0.5)';
+        ctx.fill();
+        // Swept fins make the upgraded swarm read as a fleet of interceptors.
+        ctx.beginPath();
+        ctx.moveTo(3, 0);
+        ctx.lineTo(-7, 7);
+        ctx.lineTo(-5, 0);
+        ctx.lineTo(-7, -7);
+        ctx.closePath();
+        ctx.fillStyle = ascended ? '#ff886e' : '#efb875';
+        ctx.fill();
+      }
       ctx.beginPath();
-      ctx.moveTo(6, 0);
+      ctx.moveTo(evolved ? 11 : 6, 0);
       ctx.lineTo(-4, 3);
       ctx.lineTo(-4, -3);
       ctx.closePath();
@@ -225,6 +248,14 @@ export class SeekerSwarm implements Weapon {
       ctx.arc(-3, 0, 2.2, 0, TWO_PI);
       ctx.fillStyle = 'rgba(255, 160, 90, 0.9)';
       ctx.fill();
+      if (ascended) {
+        ctx.beginPath();
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(7, 0);
+        ctx.strokeStyle = '#fff6d8';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -240,6 +271,20 @@ export class SeekerSwarm implements Weapon {
       ctx.arc(screen.x, screen.y, ex.radius * t * 0.8, 0, TWO_PI);
       ctx.fillStyle = `rgba(255, 230, 180, ${(1 - t) * 0.25})`;
       ctx.fill();
+      if (evolved && detailed && !settings.reducedMotion) {
+        ctx.beginPath();
+        const rays = ascended ? 8 : 4;
+        for (let i = 0; i < rays; i++) {
+          const a = i * TWO_PI / rays + ex.x * 0.01;
+          const inner = ex.radius * (0.35 + t * 0.45);
+          const outer = ex.radius * (0.65 + t * 0.5);
+          ctx.moveTo(screen.x + Math.cos(a) * inner, screen.y + Math.sin(a) * inner);
+          ctx.lineTo(screen.x + Math.cos(a) * outer, screen.y + Math.sin(a) * outer);
+        }
+        ctx.strokeStyle = `rgba(255,215,155,${(1 - t) * 0.6})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }
   }
 }

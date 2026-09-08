@@ -4,6 +4,7 @@ import { Enemy } from '../enemies';
 import { audio } from '../audio';
 import type { Weapon, WeaponModifiers } from './shared';
 import { hitEnemy, hitEnemySilent, getNearestEnemy } from './shared';
+import { loadSettings } from '../storage';
 
 type SingularityState =
   | { mode: 'idle' }
@@ -139,6 +140,11 @@ export class Singularity implements Weapon {
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _playerX: number, _playerY: number, _playerRadius: number): void {
     const stats = this.getStats();
+    const settings = loadSettings();
+    const evolved = this.level >= 5;
+    const ascended = this.level >= 8;
+    const detailed = settings.particleQuality !== 'low';
+    const spin = settings.reducedMotion ? 0 : this.spin;
 
     if (this.state.mode === 'flying') {
       const screen = camera.worldToScreen(this.state.x, this.state.y);
@@ -153,6 +159,13 @@ export class Singularity implements Weapon {
       ctx.strokeStyle = 'rgba(160, 90, 255, 0.4)';
       ctx.lineWidth = 3;
       ctx.stroke();
+      if (evolved) {
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y, ascended ? 19 : 14, 6, -0.4, 0, TWO_PI);
+        ctx.strokeStyle = ascended ? '#ffd3ff' : '#be9aff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       return;
     }
 
@@ -170,8 +183,8 @@ export class Singularity implements Weapon {
       ctx.arc(screen.x, screen.y, radius, 0, TWO_PI);
       ctx.fill();
 
-      for (let i = 0; i < 4; i++) {
-        const arcAngle = this.spin * (i % 2 === 0 ? 1 : -1.4) + i * 1.57;
+      for (let i = 0; i < (detailed ? 4 : 2); i++) {
+        const arcAngle = spin * (i % 2 === 0 ? 1 : -1.4) + i * 1.57;
         ctx.beginPath();
         ctx.arc(screen.x, screen.y, radius * (0.34 + i * 0.17), arcAngle, arcAngle + 1.6);
         ctx.strokeStyle = `rgba(${190 - i * 25}, ${110 - i * 18}, 255, ${0.5 - i * 0.09})`;
@@ -179,7 +192,7 @@ export class Singularity implements Weapon {
         ctx.stroke();
       }
 
-      const coreR = 11 * (1 + Math.sin(this.spin * 4) * 0.08);
+      const coreR = (ascended ? 19 : evolved ? 15 : 11) * (1 + Math.sin(spin * 4) * 0.08);
       const core = ctx.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, coreR * 2);
       core.addColorStop(0, 'rgba(10, 0, 20, 0.98)');
       core.addColorStop(0.6, 'rgba(70, 20, 130, 0.85)');
@@ -189,8 +202,38 @@ export class Singularity implements Weapon {
       ctx.arc(screen.x, screen.y, coreR * 2, 0, TWO_PI);
       ctx.fill();
 
-      for (let i = 0; i < 5; i++) {
-        const sparkAngle = this.spin * 2.2 + i * 1.256;
+      if (evolved) {
+        // An accretion disk and opaque event horizon give the vortex real depth.
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y, coreR * 3.8, coreR * 0.9, -0.35, 0, TWO_PI);
+        ctx.strokeStyle = 'rgba(178,106,255,0.3)';
+        ctx.lineWidth = ascended ? 9 : 6;
+        ctx.stroke();
+        ctx.strokeStyle = ascended ? 'rgba(255,212,255,0.85)' : 'rgba(215,173,255,0.8)';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, coreR, 0, TWO_PI);
+        ctx.fillStyle = '#080510';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(230,195,255,0.75)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        if (ascended && detailed) {
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const a = -spin * 0.35 + i * TWO_PI / 3;
+            ctx.moveTo(screen.x + Math.cos(a) * radius * 0.8, screen.y + Math.sin(a) * radius * 0.8);
+            ctx.arc(screen.x, screen.y, radius * 0.8, a, a + 0.75);
+          }
+          ctx.strokeStyle = 'rgba(250,179,255,0.28)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      for (let i = 0; detailed && !settings.reducedMotion && i < 5; i++) {
+        const sparkAngle = spin * 2.2 + i * 1.256;
         const outerR = radius * 0.9;
         const innerR = radius * 0.42;
         ctx.beginPath();
@@ -216,6 +259,13 @@ export class Singularity implements Weapon {
       ctx.arc(screen.x, screen.y, radius * (0.2 + t * 0.6), 0, TWO_PI);
       ctx.fillStyle = `rgba(255, 240, 255, ${(1 - t) * 0.28})`;
       ctx.fill();
+      if (evolved && detailed && !settings.reducedMotion) {
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y, radius * (0.4 + t), radius * (0.12 + t * 0.3), -0.35, 0, TWO_PI);
+        ctx.strokeStyle = `rgba(255,210,255,${(1 - t) * 0.7})`;
+        ctx.lineWidth = ascended ? 3 : 1.5;
+        ctx.stroke();
+      }
     }
   }
 }

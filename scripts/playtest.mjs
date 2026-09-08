@@ -69,6 +69,9 @@ async function wiggle(page, ms, godmode = true) {
     if (godmode) {
       await page.evaluate(() => {
         const rt = window.__universeEater;
+        if (rt.game.state === 'levelUp') {
+          rt.game.chooseDraft(0, rt.world.weaponManager, rt.world.player);
+        }
         if (rt.game.state === 'playing') rt.world.player.hp = rt.world.player.maxHp;
       });
     }
@@ -86,6 +89,9 @@ async function fpsSample(page, ms) {
     let frames = 0;
     const start = performance.now();
     const tick = () => {
+      const rt = window.__universeEater;
+      if (rt.game.state === 'levelUp') rt.game.chooseDraft(0, rt.world.weaponManager, rt.world.player);
+      if (rt.game.state === 'playing') rt.world.player.hp = rt.world.player.maxHp;
       frames++;
       if (performance.now() - start < duration) requestAnimationFrame(tick);
       else resolve(Math.round(frames / ((performance.now() - start) / 1000)));
@@ -146,11 +152,12 @@ async function scenarioCombat(page) {
     const rt = window.__universeEater;
     for (let i = 0; i < 6; i++) {
       rt.world.player.addXp(rt.world.player.getXpForNextLevel());
+      rt.game.queueLevelUps(1, rt.world.weaponManager);
       if (rt.game.draftChoices.length) {
         rt.game.chooseDraft(Math.floor(Math.random() * rt.game.draftChoices.length), rt.world.weaponManager, rt.world.player);
       }
     }
-    rt.game.elapsedTime = 160;
+    rt.game.elapsedTime = rt.game.gameDuration * 0.8;
   });
   const pre = await getState(page);
   console.log('   [diag] post-setup:', JSON.stringify(pre));
@@ -159,7 +166,8 @@ async function scenarioCombat(page) {
   console.log('   [diag] post-wiggle:', JSON.stringify(s));
   record('combat: enemies spawning', s.enemies > 0, `${s.enemies} alive`);
   record('combat: player leveling', s.level >= 2, `lvl=${s.level}`);
-  record('combat: multiple weapons possible', s.weapons.length >= 1, s.weapons.join(','));
+  record('combat: simulation stays active', s.state === 'playing' || s.state === 'levelUp', s.state);
+  record('combat: population stays bounded', s.enemies <= 180, `${s.enemies} alive`);
   const fps = await fpsSample(page, 4000);
   recordPerf('combat: fps >= 40 under load', fps >= 40, `${fps}fps, ${s.enemies} enemies`);
   await page.screenshot({ path: `${OUT}/05-combat-heavy.png` });
@@ -172,12 +180,13 @@ async function scenarioBoss(page) {
     const rt = window.__universeEater;
     for (let i = 0; i < 5; i++) {
       rt.world.player.addXp(rt.world.player.getXpForNextLevel());
+      rt.game.queueLevelUps(1, rt.world.weaponManager);
       if (rt.game.draftChoices.length) {
         rt.game.chooseDraft(Math.floor(Math.random() * rt.game.draftChoices.length), rt.world.weaponManager, rt.world.player);
       }
     }
     rt.world.player.heal(500);
-    rt.game.elapsedTime = 299;
+    rt.game.elapsedTime = rt.game.gameDuration - 1;
   });
   // Wait for boss spawn
   let s = null;

@@ -54,6 +54,9 @@ const BASE_RADII: Record<EnemyType, number> = {
   splitter: 24,
   bomber: 14,
   boss: 68,
+  stalker: 13,
+  sentinel: 28,
+  lancer: 18,
 };
 
 const GEOMETRY = {
@@ -144,6 +147,9 @@ function createEnemyPool(): Record<EnemyType, EnemyVisual[]> {
     splitter: [],
     bomber: [],
     boss: [],
+    stalker: [],
+    sentinel: [],
+    lancer: [],
   };
 }
 
@@ -657,6 +663,26 @@ export class ThreeEntityRenderer {
         return detail === 'lite' ? this.createLiteSplitterVisual(seed) : this.createSplitterVisual(seed);
       case 'bomber':
         return this.createBomberVisual(seed);
+      case 'stalker':
+      case 'sentinel':
+      case 'lancer': {
+        const group = new THREE.Group();
+        const color = type === 'stalker' ? 0x4ae6ff : type === 'sentinel' ? 0xffcd70 : 0x968cff;
+        const material = makeMaterial(color);
+        const core = createMesh(GEOMETRY.bomberHull, material);
+        core.scale.setScalar(type === 'sentinel' ? 1.6 : 0.8);
+        group.add(core);
+        const count = type === 'sentinel' ? 6 : type === 'stalker' ? 3 : 2;
+        for (let i = 0; i < count; i++) {
+          const fin = createMesh(GEOMETRY.drifterFrill, material);
+          const angle = i * Math.PI * 2 / count;
+          const radius = type === 'sentinel' ? 22 : 12;
+          fin.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+          fin.rotation.z = angle - Math.PI / 2;
+          group.add(fin);
+        }
+        return { type, detail, group, materials: [material], seed };
+      }
       case 'boss':
         return this.createBossVisual(seed);
     }

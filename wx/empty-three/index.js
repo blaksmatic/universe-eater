@@ -27,6 +27,7 @@ module.exports = {
   OctahedronGeometry: StubCtor,
   OrthographicCamera: StubCtor,
   Scene: StubCtor,
+  SphereGeometry: StubCtor,
   WebGLRenderer: StubCtor,
   SRGBColorSpace: 'srgb',
 };

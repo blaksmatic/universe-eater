@@ -2,6 +2,7 @@ import { wrappedAngle, wrappedDelta, wrappedDistanceSquared, TWO_PI } from '../u
 import { Camera } from '../camera';
 import type { Enemy } from '../enemies';
 import { hitEnemySilent } from './shared';
+import { loadSettings } from '../storage';
 
 export interface LaserStats {
   damage: number;
@@ -104,6 +105,8 @@ export function drawBeam(
   level: number,
   colors: BeamVisualColors,
 ): void {
+  const settings = loadSettings();
+  if (settings.reducedMotion) time = 0;
   const screen = camera.worldToScreen(originWorldX, originWorldY);
   const delta = wrappedDelta(originWorldX, originWorldY, targetWorldX, targetWorldY);
   const endX = screen.x + delta.x;
@@ -138,6 +141,39 @@ export function drawBeam(
 
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+
+  // Two contained plasma filaments give evolved beams a distinct double helix.
+  if (level >= 5 && settings.particleQuality !== 'low') {
+    const turns = level >= 8 ? 4 : 2;
+    const spread = stats.width * (level >= 8 ? 1.8 : 1.2);
+    ctx.lineWidth = level >= 8 ? 1.8 : 1;
+    ctx.strokeStyle = `rgba(${colors.glow}, 0.65)`;
+    for (const sign of [-1, 1]) {
+      ctx.beginPath();
+      for (let i = 0; i <= 32; i++) {
+        const t = i / 32;
+        const offset = Math.sin(t * TWO_PI * turns - time * 5) * spread * Math.sin(t * Math.PI) * sign;
+        const x = originX + Math.cos(beamAngle) * t * beamLength + perpX * offset;
+        const y = originY + Math.sin(beamAngle) * t * beamLength + perpY * offset;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  if (level >= 8) {
+    ctx.save();
+    ctx.translate(endX, endY);
+    ctx.rotate(time * 0.8);
+    ctx.strokeStyle = `rgba(${colors.glow},0.75)`;
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, stats.width * 3 + 12, i * Math.PI / 2, i * Math.PI / 2 + 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   if (level >= 3) {
     drawWavyPath();

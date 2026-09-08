@@ -1,36 +1,67 @@
-# Universe Eater — WeChat Mini Game build
+# Universe Eater ? WeChat Mini Game
 
-## 一次性构建
+The `wx/` directory is a ready-to-import Mini Game project. It uses the existing
+AppID in `project.config.json` and runs in portrait orientation.
 
-```bash
-npm run build:wx     # 单次构建,产出 wx/bundle.js
-npm run watch:wx     # 监听 src/ 修改并重新打包
+## Build
+
+From the repository root:
+
+```powershell
+npm install
+npm run build:wx
+npm run test:wx
 ```
 
-## 在微信开发者工具中打开
+`build:wx` generates `wx/bundle.js`. Use `npm run watch:wx` while editing the game.
+No npm build step is needed inside WeChat DevTools: dependencies are bundled.
 
-1. 打开 **微信开发者工具**,选择 **小游戏** 项目类型
-2. 目录选择本 `wx/` 目录(不是仓库根)
-3. AppID 选 **测试号** 即可(`project.config.json` 里写的是 `touristappid`)
-4. 进入后点 **编译**,游戏会在模拟器里启动
+## Open in WeChat DevTools
 
-## 当前已知差异 / 待办
+1. Import a **Mini Game** project from `E:\universe-eater\wx` (not the repository root).
+2. Use the AppID already stored in `project.config.json` and sign in with an account
+   that has access to that project. This configuration is not a tourist/test AppID.
+3. Click **Compile** to launch the portrait simulator.
+4. Use **Preview** and scan its QR code with WeChat to test on your phone.
 
-- **3D 渲染层禁用**:`three.js` 在小游戏环境下需要专门适配
-  (`threejs-miniprogram`),当前 build 用空 stub 替换,运行时自动回落到
-  纯 2D 渲染(`runtime.ts` 的 try/catch 会接住)
-- **键盘输入禁用**:小游戏没有键盘事件,所有操作走触摸摇杆
-- **HUD 位置**:暂未针对刘海屏/底部安全区做适配,顶部按钮可能被状态栏遮挡
-- **字体**:目前依赖系统字体,中文应该正常显示;若有缺字可后续打包字体文件
+The project remains pinned to the configured base library `3.4.0`.
+Building locally does not upload or publish the game.
 
-## 文件结构
+## Platform support
 
-```
-wx/
-  game.js              — 小游戏入口(微信运行时会自动加载这个)
-  game.json            — 小游戏配置(方向、状态栏等)
-  project.config.json  — 开发者工具项目配置
-  adapter.js           — 浏览器 API polyfill(document/window/touch 等)
-  bundle.js            — 由 src/ 构建出的游戏代码(勿手改)
-  empty-three.js       — three.js 的空 stub
-```
+- All gameplay, ten-minute stages, enemies, upgrades, and evolved weapon effects.
+- Canvas 2D entity bodies on WeChat; the browser's Three.js models and bloom are
+  not included in this target. The singularity title and weapon graphics remain.
+- Native touch joystick, dash, pause, haptics, and persistent settings/records.
+- Safe-area and native menu capsule clearance for HUD controls.
+- Window resize handling and automatic pause/touch cancellation when hidden.
+- Procedural sound through native WebAudio when available; silence is a safe
+  fallback on runtimes without that API. Audio suspends when the app is hidden.
+- Cached background sprites use native offscreen canvases when available;
+  the starfield still works without them.
+
+The adapter uses the APIs described in [Tencent's official Mini Game API
+reference types](https://github.com/wechat-miniprogram/minigame-api-typings).
+
+## Verification
+
+`npm run test:wx` loads the actual adapter and generated bundle in an isolated,
+browser-free runtime with mocked WeChat APIs. It checks launch, drawing calls,
+touch controls, safe-area layout, lifecycle, resize, and storage integration.
+`npm run test:wx:visual` also renders the actual WeChat bundle through real
+Canvas 2D in Playwright, saving title/gameplay screenshots to `test-artifacts/`.
+It emulates the native API bridge; it is not WeChat DevTools. Neither check
+replaces real-device visual, audio, and performance testing.
+
+On a phone, check: title/start, movement while dashing, draft selection, pause,
+background/return, audio toggles, and a later-stage upgraded arsenal. Confirm
+that controls stay below the native menu and above the home indicator.
+
+## Files
+
+- `game.js`: entry point; loads the adapter before the game bundle.
+- `game.json`: portrait orientation and runtime options.
+- `project.config.json`: DevTools project and existing AppID.
+- `adapter.js`: native API bridge used by the generated bundle.
+- `bundle.js`: generated game; edit `src/` instead.
+- `empty-three/`: build-time stubs for the browser-only 3D renderer.

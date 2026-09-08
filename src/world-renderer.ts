@@ -5,7 +5,7 @@ import { BackgroundGeometry } from './geometry';
 import { ParticleSystem } from './particles';
 import { Player } from './player';
 import { WeaponManager } from './weapons';
-import { TWO_PI } from './utils';
+import { TWO_PI, wrappedAngle } from './utils';
 
 type WorldRenderDeps = {
   background: Background;
@@ -28,6 +28,23 @@ export class WorldRenderer {
   private drawThreatAuras(ctx: CanvasRenderingContext2D, time: number): void {
     for (const enemy of this.deps.spawner.enemies) {
       if (enemy.dead) continue;
+      if (enemy.fuseRatio > 0 && this.deps.camera.isVisible(enemy.x, enemy.y, 700)) {
+        const screen = this.deps.camera.worldToScreen(enemy.x, enemy.y);
+        ctx.save();
+        ctx.strokeStyle = `rgba(255, 192, 121, ${0.25 + enemy.fuseRatio * 0.5})`;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 7]);
+        ctx.beginPath();
+        if (enemy.type === 'lancer' || enemy.type === 'drifter' || enemy.isBoss) {
+          const angle = wrappedAngle(enemy.x, enemy.y, this.deps.player.x, this.deps.player.y);
+          ctx.moveTo(screen.x, screen.y);
+          ctx.lineTo(screen.x + Math.cos(angle) * 450, screen.y + Math.sin(angle) * 450);
+        } else {
+          ctx.arc(screen.x, screen.y, enemy.radius + 18 + enemy.fuseRatio * 28, 0, TWO_PI);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
       if (!enemy.isBoss && !enemy.isElite) continue;
       const screen = this.deps.camera.worldToScreen(enemy.x, enemy.y);
       if (!this.deps.camera.isVisible(enemy.x, enemy.y, enemy.radius + 120)) continue;
@@ -79,6 +96,17 @@ export class WorldRenderer {
       this.deps.spawner.drawProjectiles(ctx, this.deps.camera);
     }
     this.drawThreatAuras(ctx, time);
+    // A quiet navigation ring keeps the player legible inside dense weapon effects.
+    const pilot = this.deps.camera.worldToScreen(this.deps.player.x, this.deps.player.y);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(147,245,218,0.35)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(pilot.x, pilot.y, this.deps.player.radius + 15, i * Math.PI / 2 + 0.15, i * Math.PI / 2 + 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
     this.deps.particles.draw(ctx, this.deps.camera);
     this.deps.weaponManager.draw(ctx, this.deps.camera, this.deps.player.x, this.deps.player.y, this.deps.player.radius);
     if (renderEntityBodies) {

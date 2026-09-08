@@ -4,7 +4,7 @@ export type Language = 'zh-CN' | 'en';
 export type TextResolver = () => string;
 
 const STORAGE_KEY = 'universe-eater.language';
-const DEFAULT_LANGUAGE: Language = 'zh-CN';
+const DEFAULT_LANGUAGE: Language = 'en';
 
 const UI_TEXT = {
   'zh-CN': {

@@ -5,24 +5,25 @@ import { createEmptyPassiveStacks } from './upgrades';
 import { PASSIVE_CAPS } from './ids';
 
 describe('Game - timing', () => {
-  it('gameDuration shrinks 20s per stage, floors at 180', () => {
+  it('each stage provides a full ten-minute expedition', () => {
     const g = new Game();
     g.stage = 1;
-    expect(g.gameDuration).toBe(300);
+    expect(g.gameDuration).toBe(600);
     g.stage = 2;
-    expect(g.gameDuration).toBe(280);
+    expect(g.gameDuration).toBe(600);
     g.stage = 7;
-    expect(g.gameDuration).toBe(180); // 300-120=180
+    expect(g.gameDuration).toBe(600);
     g.stage = 10;
-    expect(g.gameDuration).toBe(180); // clamped
+    expect(g.gameDuration).toBe(600);
   });
 
   it('timeRemaining is duration - elapsed, clamped to 0', () => {
     const g = new Game();
-    g.stage = 1; // 300s
+    g.stage = 1;
     g.elapsedTime = 100;
-    expect(g.timeRemaining).toBe(200);
-    g.elapsedTime = 400;
+    expect(g.timeRemaining).toBe(500);
+    expect(g.timeRemainingFormatted).toBe('8:20');
+    g.elapsedTime = 601;
     expect(g.timeRemaining).toBe(0);
   });
 

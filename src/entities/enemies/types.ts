@@ -17,7 +17,7 @@ export interface EnemyTypeConfig {
   damageMultiplier: number;
 }
 
-export type EnemyType = 'swarmer' | 'drifter' | 'titan' | 'overlord' | 'spitter' | 'splitter' | 'bomber' | 'boss';
+export type EnemyType = 'swarmer' | 'drifter' | 'titan' | 'overlord' | 'spitter' | 'splitter' | 'bomber' | 'stalker' | 'sentinel' | 'lancer' | 'boss';
 
 export const ENEMY_TYPES: Record<EnemyType, EnemyTypeConfig> = {
   swarmer: {
@@ -47,6 +47,18 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeConfig> = {
   bomber: {
     baseRadius: 14, radiusVariation: 2, speed: 185, baseHp: 46,
     color: [212, 255, 79], outlineColor: '#d5ff4f', xpDrop: 3, damageMultiplier: 1.2,
+  },
+  stalker: {
+    baseRadius: 13, radiusVariation: 2, speed: 165, baseHp: 65,
+    color: [74, 230, 255], outlineColor: '#4ae6ff', xpDrop: 4, damageMultiplier: 1.1,
+  },
+  sentinel: {
+    baseRadius: 28, radiusVariation: 3, speed: 52, baseHp: 250,
+    color: [255, 205, 112], outlineColor: '#ffcd70', xpDrop: 9, damageMultiplier: 1.5,
+  },
+  lancer: {
+    baseRadius: 18, radiusVariation: 2, speed: 100, baseHp: 110,
+    color: [150, 140, 255], outlineColor: '#968cff', xpDrop: 6, damageMultiplier: 1.4,
   },
   boss: {
     baseRadius: 68, radiusVariation: 0, speed: 55, baseHp: BOSS_BASE_HP,

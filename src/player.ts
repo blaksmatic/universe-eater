@@ -15,7 +15,7 @@ interface DashGhost {
   age: number;
 }
 
-const LEVEL_XP_SCALE = 0.7;
+// Fast first discoveries, then a steady curve without exponential late-run stalls.
 const DASH_COOLDOWN = 2.4;
 const DASH_DURATION = 0.16;
 const DASH_DISTANCE = 250;
@@ -58,7 +58,8 @@ export class Player {
   contactGraceDuration = 0.35;
 
   getXpForNextLevel(): number {
-    return Math.max(1, Math.floor(8 * Math.pow(1.35, this.level - 1) * LEVEL_XP_SCALE));
+    const n = Math.max(0, this.level - 1);
+    return Math.floor(5 + 3 * n + 0.65 * n * n);
   }
 
   addXp(amount: number): boolean {

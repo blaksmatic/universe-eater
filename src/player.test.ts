@@ -12,9 +12,11 @@ describe('Player - XP', () => {
     const lvl5 = p.getXpForNextLevel();
     expect(lvl2).toBeGreaterThan(lvl1);
     expect(lvl5).toBeGreaterThan(lvl2);
-    // Formula: floor(8 * 1.35^(lvl-1) * 0.7)
-    p.level = 1;
-    expect(p.getXpForNextLevel()).toBe(Math.floor(8 * Math.pow(1.35, 0) * 0.7));
+    // Keep the opening discoveries fast and late-run requirements polynomial.
+    for (const [level, required] of [[1, 5], [2, 8], [5, 27], [10, 84], [20, 296]]) {
+      p.level = level;
+      expect(p.getXpForNextLevel()).toBe(required);
+    }
   });
 
   it('addXp levels up when threshold met and respects amplifier', () => {

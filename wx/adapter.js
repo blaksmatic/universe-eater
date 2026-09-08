@@ -7,10 +7,24 @@
 // code talks to these shim objects directly.
 
 (function () {
-  var systemInfo = wx.getSystemInfoSync();
+  function readWindowInfo() {
+    if (typeof wx.getWindowInfo === 'function') return wx.getWindowInfo();
+    return wx.getSystemInfoSync();
+  }
+  var systemInfo = readWindowInfo();
   var screenWidth = systemInfo.windowWidth;
   var screenHeight = systemInfo.windowHeight;
   var pixelRatio = systemInfo.pixelRatio || 1;
+  var menuBottom = 0;
+  function refreshMenuBounds() {
+    menuBottom = 0;
+    if (typeof wx.getMenuButtonBoundingClientRect !== 'function') return;
+    try {
+      var menu = wx.getMenuButtonBoundingClientRect();
+      if (menu && menu.height > 0) menuBottom = menu.bottom + 4;
+    } catch (_) {}
+  }
+  refreshMenuBounds();
 
   var canvas = wx.createCanvas();
   canvas.width = Math.round(screenWidth * pixelRatio);
@@ -42,8 +56,8 @@
   // does not on some iOS runtimes. UI layout code uses CSS-pixel dimensions,
   // so expose the logical viewport size separately from the backing buffer.
   try {
-    Object.defineProperty(canvas, 'clientWidth', { value: screenWidth, configurable: true });
-    Object.defineProperty(canvas, 'clientHeight', { value: screenHeight, configurable: true });
+    Object.defineProperty(canvas, 'clientWidth', { get: function () { return screenWidth; }, configurable: true });
+    Object.defineProperty(canvas, 'clientHeight', { get: function () { return screenHeight; }, configurable: true });
   } catch (_) {
     canvas.clientWidth = screenWidth;
     canvas.clientHeight = screenHeight;
@@ -68,6 +82,10 @@
     innerHeight: screenHeight,
     devicePixelRatio: pixelRatio,
     ontouchstart: null,
+    matchMedia: function (query) {
+      return { matches: query.indexOf('pointer: coarse') >= 0, media: query,
+        addEventListener: function () {}, removeEventListener: function () {} };
+    },
     localStorage: {
       getItem: function (key) {
         try { var v = wx.getStorageSync(key); return v === '' ? null : v; } catch (_) { return null; }
@@ -81,9 +99,46 @@
   };
   makeListenable(win);
 
-  var nav = { maxTouchPoints: 5, userAgent: 'wechat-minigame' };
+  var nav = { maxTouchPoints: 5, userAgent: 'wechat-minigame', vibrate: function () {
+    if (typeof wx.vibrateShort === 'function') wx.vibrateShort({ type: 'light', fail: function () {} });
+    return true;
+  } };
 
-  function gcs() { return { getPropertyValue: function () { return '0'; } }; }
+  function gcs() { return { getPropertyValue: function (name) {
+    var safe = systemInfo.safeArea;
+    var screenTop = systemInfo.screenTop || 0;
+    var inset = 0;
+    if (safe) {
+      if (name === '--safe-area-top') inset = safe.top - screenTop;
+      if (name === '--safe-area-left') inset = safe.left;
+      if (name === '--safe-area-right') inset = screenWidth - safe.right;
+      if (name === '--safe-area-bottom') inset = screenHeight - (safe.bottom - screenTop);
+    }
+    // Keep game controls below WeChat's native menu capsule as well as the notch.
+    if (name === '--safe-area-top' && menuBottom) inset = Math.max(inset, menuBottom - screenTop);
+    return Math.max(0, inset || 0) + 'px';
+  } }; }
+
+  // Reuse the game's procedural WebAudio engine when the native API is available.
+  var audioContexts = [];
+  if (typeof wx.createWebAudioContext === 'function') {
+    win.AudioContext = function () {
+      var context = wx.createWebAudioContext();
+      audioContexts.push(context);
+      return context;
+    };
+  }
+
+  function suspendAudio() {
+    audioContexts.forEach(function (context) {
+      try { Promise.resolve(context.suspend()).catch(function () {}); } catch (_) {}
+    });
+  }
+  function resumeAudio() {
+    audioContexts.forEach(function (context) {
+      try { Promise.resolve(context.resume()).catch(function () {}); } catch (_) {}
+    });
+  }
 
   // Expose shims on the global so the rewritten bundle can reach them.
   GameGlobal.__doc = doc;
@@ -93,11 +148,19 @@
 
   // ---- Touch event routing ----
   // input.ts listens on document; runtime.ts listens for 'pointerdown' on canvas.
+  var activeTouches = [];
+  function normalizeTouch(t) {
+    return {
+      identifier: t.identifier,
+      clientX: typeof t.clientX === 'number' ? t.clientX : t.x,
+      clientY: typeof t.clientY === 'number' ? t.clientY : t.y,
+    };
+  }
   function buildTouchEvent(type, e) {
     return {
       type: type,
-      changedTouches: e.changedTouches || e.touches || [],
-      touches: e.touches || [],
+      changedTouches: (e.changedTouches || e.touches || []).map(normalizeTouch),
+      touches: (e.touches || []).map(normalizeTouch),
       preventDefault: function () {},
       stopPropagation: function () {},
     };
@@ -105,18 +168,36 @@
   function firstTouch(e) { return (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]); }
 
   wx.onTouchStart(function (e) {
+    activeTouches = e.touches || e.changedTouches || [];
     doc.dispatchEvent(buildTouchEvent('touchstart', e));
     var t = firstTouch(e);
     if (t) canvas.dispatchEvent({
-      type: 'pointerdown', clientX: t.clientX, clientY: t.clientY,
+      type: 'pointerdown', clientX: normalizeTouch(t).clientX, clientY: normalizeTouch(t).clientY,
       preventDefault: function () {}, stopPropagation: function () {},
     });
   });
-  wx.onTouchMove(function (e) { doc.dispatchEvent(buildTouchEvent('touchmove', e)); });
-  wx.onTouchEnd(function (e) { doc.dispatchEvent(buildTouchEvent('touchend', e)); });
-  wx.onTouchCancel(function (e) { doc.dispatchEvent(buildTouchEvent('touchcancel', e)); });
+  wx.onTouchMove(function (e) { activeTouches = e.touches || activeTouches; doc.dispatchEvent(buildTouchEvent('touchmove', e)); });
+  wx.onTouchEnd(function (e) { activeTouches = e.touches || []; doc.dispatchEvent(buildTouchEvent('touchend', e)); });
+  wx.onTouchCancel(function (e) { activeTouches = e.touches || []; doc.dispatchEvent(buildTouchEvent('touchcancel', e)); });
+
+  function cancelTouches() {
+    doc.dispatchEvent(buildTouchEvent('touchcancel', { changedTouches: activeTouches, touches: [] }));
+    activeTouches = [];
+  }
+
+  if (typeof wx.onWindowResize === 'function') wx.onWindowResize(function (event) {
+    cancelTouches();
+    systemInfo = readWindowInfo();
+    refreshMenuBounds();
+    screenWidth = event.windowWidth || systemInfo.windowWidth;
+    screenHeight = event.windowHeight || systemInfo.windowHeight;
+    win.innerWidth = screenWidth;
+    win.innerHeight = screenHeight;
+    win.devicePixelRatio = systemInfo.pixelRatio || pixelRatio;
+    win.dispatchEvent({ type: 'resize' });
+  });
 
   // ---- Lifecycle ----
-  wx.onHide(function () { doc.hidden = true; doc.dispatchEvent({ type: 'visibilitychange' }); });
-  wx.onShow(function () { doc.hidden = false; doc.dispatchEvent({ type: 'visibilitychange' }); });
+  wx.onHide(function () { cancelTouches(); suspendAudio(); doc.hidden = true; doc.dispatchEvent({ type: 'visibilitychange' }); });
+  wx.onShow(function () { resumeAudio(); doc.hidden = false; doc.dispatchEvent({ type: 'visibilitychange' }); });
 })();

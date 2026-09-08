@@ -10,12 +10,14 @@ export class EnemySpawner {
   private bossPhaseEvents = 0;
   private spawnTimer = -2.2;
   private stage = 1;
+  private stageDuration = 600;
+  readonly maxEnemies = 180;
   private spawnMods: EnemySpawnMods = NEUTRAL_SPAWN_MODS;
 
   setStage(stage: number, stageDuration: number, spawnMods: EnemySpawnMods = NEUTRAL_SPAWN_MODS): void {
     this.stage = Math.max(1, stage);
     this.spawnMods = spawnMods;
-    void stageDuration;
+    this.stageDuration = Math.max(1, stageDuration);
   }
 
   clear(): void {
@@ -56,7 +58,7 @@ export class EnemySpawner {
 
   handleDeathEffects(enemy: Enemy): void {
     if (enemy.noXp) return;
-    if (enemy.type === 'splitter') {
+    if (enemy.type === 'splitter' && this.enemies.length < this.maxEnemies - 3) {
       const shards = 3;
       for (let i = 0; i < shards; i++) {
         const gp = wrapPosition(enemy.x + randomRange(-26, 26), enemy.y + randomRange(-26, 26));
@@ -67,7 +69,7 @@ export class EnemySpawner {
 
   private getSpawnConfig(elapsed: number): { spawnInterval: number; types: SpawnWeight[] } {
     const difficulty = this.stage - 1;
-    const effectiveElapsed = elapsed + difficulty * 60;
+    const effectiveElapsed = elapsed * 300 / this.stageDuration + difficulty * 45;
     let spawnInterval: number;
     let types: SpawnWeight[];
 
@@ -119,6 +121,12 @@ export class EnemySpawner {
       ];
     }
 
+    if (effectiveElapsed >= 45) types.push({ type: 'stalker', weight: 0.85 });
+    if (effectiveElapsed >= 110) types.push({ type: 'lancer', weight: 0.8 });
+    if (effectiveElapsed >= 175) types.push({ type: 'sentinel', weight: 0.65 });
+    // A short recovery window every minute gives players room to collect XP.
+    const recovery = elapsed > 60 && elapsed % 60 < 9 ? 1.65 : 1;
+    spawnInterval *= recovery;
     const paceScale = 1 + difficulty * 0.12;
     const scaledTypes = types.map(({ type, weight }) => ({
       type,
@@ -147,6 +155,10 @@ export class EnemySpawner {
         return baseWeight * (1 + difficulty * 0.22);
       case 'overlord':
         return baseWeight * (1 + difficulty * 0.28);
+      case 'stalker':
+      case 'sentinel':
+      case 'lancer':
+        return baseWeight * (1 + difficulty * 0.12);
       case 'boss':
         return 0;
     }
@@ -163,7 +175,7 @@ export class EnemySpawner {
   }
 
   private getSwarmerCount(elapsed: number): number {
-    const effectiveElapsed = elapsed + (this.stage - 1) * 50;
+    const effectiveElapsed = elapsed * 300 / this.stageDuration + (this.stage - 1) * 50;
     const extra = Math.floor((this.stage - 1) / 2);
     if (effectiveElapsed < 20) return Math.floor(randomRange(1, 3)) + extra;
     if (effectiveElapsed < 45) return Math.floor(randomRange(2, 4)) + extra;
@@ -213,7 +225,8 @@ export class EnemySpawner {
 
     if (type === 'swarmer') {
       const count = this.getSwarmerCount(elapsed);
-      const packCount = this.bossSpawned ? Math.max(1, Math.ceil(count / 2)) : count;
+      const packCount = Math.min(this.maxEnemies - this.enemies.length,
+        this.bossSpawned ? Math.max(1, Math.ceil(count / 2)) : count);
       for (let i = 0; i < packCount; i++) {
         const gp = wrapPosition(pos.x + randomRange(-40, 40), pos.y + randomRange(-40, 40));
         this.enemies.push(new Enemy('swarmer', gp.x, gp.y, this.stage, this.spawnOptions(this.maybeElite('swarmer'))));
@@ -221,7 +234,9 @@ export class EnemySpawner {
     } else if (type === 'drifter' && elapsed > 75 && Math.random() < Math.min(0.7, 0.35 + (this.stage - 1) * 0.06)) {
       this.enemies.push(new Enemy('drifter', pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite('drifter'))));
       const dp = wrapPosition(pos.x + randomRange(-30, 30), pos.y + randomRange(-30, 30));
-      this.enemies.push(new Enemy('drifter', dp.x, dp.y, this.stage));
+      if (this.enemies.length < this.maxEnemies) {
+        this.enemies.push(new Enemy('drifter', dp.x, dp.y, this.stage, this.spawnOptions(this.maybeElite('drifter'))));
+      }
     } else {
       this.enemies.push(new Enemy(type, pos.x, pos.y, this.stage, this.spawnOptions(this.maybeElite(type))));
     }
@@ -231,7 +246,7 @@ export class EnemySpawner {
     const config = this.getSpawnConfig(elapsed);
     this.spawnTimer += dt;
     const interval = this.bossSpawned ? config.spawnInterval * 2.4 : config.spawnInterval;
-    if (this.spawnTimer >= interval) {
+    if (this.spawnTimer >= interval && this.enemies.length < this.maxEnemies - 8) {
       this.spawnTimer = 0;
       this.spawnEnemy(this.pickType(config.types), camera, elapsed);
     }
@@ -241,7 +256,7 @@ export class EnemySpawner {
 
     for (const summoner of this.enemies) {
       if (summoner.dead) continue;
-      if (summoner.consumeSummon()) {
+      if (summoner.consumeSummon() && this.enemies.length < this.maxEnemies - 4) {
         const isBoss = summoner.isBoss;
         const count = isBoss ? 4 : Math.floor(randomRange(2, 4));
         for (let i = 0; i < count; i++) {

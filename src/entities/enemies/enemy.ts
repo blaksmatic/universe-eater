@@ -52,6 +52,8 @@ export class Enemy {
   private spiralWindow = 0;
   private spiralGap = 0;
   private spiralAngle = 0;
+  private spiralShotTimer = 0;
+  private attackAge = 0;
   private chargeTimer = 0;
   private isCharging = false;
   private chargeWindup = 0;
@@ -112,7 +114,7 @@ export class Enemy {
     if (type === 'spitter') {
       this.shootTimer = randomRange(Math.max(1.2, 2.4 - difficulty * 0.1), Math.max(1.8, 3.0 - difficulty * 0.12));
     }
-    if (type === 'drifter') {
+    if (type === 'drifter' || type === 'lancer') {
       this.chargeTimer = randomRange(
         Math.max(1.8, 3 - difficulty * 0.2),
         Math.max(3.8, 6 - difficulty * 0.25),
@@ -167,6 +169,9 @@ export class Enemy {
     }
 
     if (this.chargeWindup > 0) {
+      // Keep the warning line aimed at the same target used when the dash starts.
+      this.chargeVx = Math.cos(angle) * chargeSpeed;
+      this.chargeVy = Math.sin(angle) * chargeSpeed;
       this.chargeWindup -= dt;
       this.fuseRatio = 1 - Math.max(0, this.chargeWindup) / 0.55;
       if (this.chargeWindup <= 0) {
@@ -200,6 +205,7 @@ export class Enemy {
     const distToPlayer = wrappedDistance(this.x, this.y, playerX, playerY);
 
     switch (this.type) {
+      case 'lancer':
       case 'drifter':
         this.updateDrifterCharge(dt, angle, playerX, playerY, CHARGE_SPEED);
         break;
@@ -221,10 +227,32 @@ export class Enemy {
         }
         this.x += vx * dt;
         this.y += vy * dt;
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+          this.shootTimer += Math.max(1.2, 2.6 - (this.stage - 1) * 0.12);
+          this.fireProjectile(angle, 190, 7, 4, 3.2);
+        }
+        break;
+      }
+
+      case 'overlord': {
+        this.x += Math.cos(angle) * this.speed * dt;
+        this.y += Math.sin(angle) * this.speed * dt;
+        this.summonTimer -= dt;
+        if (this.summonTimer <= 0) {
+          this.summonTimer += Math.max(1.6, 3 - (this.stage - 1) * 0.16);
+          this.canSummon = true;
+        }
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+          this.shootTimer += Math.max(1.1, 2 - (this.stage - 1) * 0.12);
+          for (let i = -1; i <= 1; i++) this.fireProjectile(angle + i * 0.24, 165, 8, 4, 3.2);
+        }
         break;
       }
 
       case 'splitter':
+        this.strafePhase += dt;
         this.x += Math.cos(angle + Math.sin(this.strafePhase * 1.7 + this.wobblePhase) * 0.6) * this.speed * dt;
         this.y += Math.sin(angle + Math.sin(this.strafePhase * 1.7 + this.wobblePhase) * 0.6) * this.speed * dt;
         break;
@@ -249,6 +277,25 @@ export class Enemy {
         break;
       }
 
+      case 'stalker': {
+        this.strafePhase += dt * 2.4;
+        const heading = angle + Math.sin(this.strafePhase) * (distToPlayer < 100 ? 0.2 : 0.95);
+        this.x += Math.cos(heading) * this.speed * dt;
+        this.y += Math.sin(heading) * this.speed * dt;
+        break;
+      }
+      case 'sentinel': {
+        this.attackAge += dt;
+        const heading = angle + (distToPlayer < 290 ? Math.PI / 2 : 0);
+        this.x += Math.cos(heading) * this.speed * dt;
+        this.y += Math.sin(heading) * this.speed * dt;
+        this.fuseRatio = Math.max(0, (this.attackAge - 2.6) / 0.8);
+        if (this.attackAge >= 3.4) {
+          this.attackAge = 0;
+          for (let i = 0; i < 8; i++) this.fireProjectile(angle + i * TWO_PI / 8, 145, 7, 4, 3);
+        }
+        break;
+      }
       case 'boss':
         this.updateBoss(dt, angle, playerX, playerY, distToPlayer);
         break;
@@ -319,8 +366,12 @@ export class Enemy {
         this.spiralWindow -= dt;
         this.spiralAngle += dt * 2.6;
         const arms = this.bossPhase === 3 ? 4 : 3;
-        for (let i = 0; i < arms; i++) {
-          this.fireProjectile(this.spiralAngle + (i / arms) * TWO_PI, 205, 8, 4, 3.4);
+        this.spiralShotTimer -= dt;
+        while (this.spiralShotTimer <= 0) {
+          this.spiralShotTimer += 0.09;
+          for (let i = 0; i < arms; i++) {
+            this.fireProjectile(this.spiralAngle + (i / arms) * TWO_PI, 205, 8, 4, 3.4);
+          }
         }
         if (this.spiralWindow <= 0) {
           this.spiralActive = false;
@@ -419,6 +470,9 @@ export class Enemy {
       case 'spitter': this.drawSpitter(ctx, time); break;
       case 'splitter': this.drawSplitter(ctx, time); break;
       case 'bomber': this.drawBomber(ctx, time); break;
+      case 'stalker': this.drawSwarmer(ctx, time); break;
+      case 'lancer': this.drawDrifter(ctx, time); break;
+      case 'sentinel': this.drawTitan(ctx, time); break;
       case 'boss': this.drawBoss(ctx, time); break;
     }
 

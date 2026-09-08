@@ -1,10 +1,11 @@
+import { drawObservatoryTitle, drawHudFrame } from './ui/observatory';
 import { Game } from './game';
 import { Player } from './player';
 import { WeaponManager, WEAPON_ORDER } from './weapons';
 import { Enemy } from './enemies';
 import { mutatorShort } from './mutators';
-import { Language, formatBossTitle, formatCombo, formatHudWeaponLevel, formatHullLabel, formatKillsStat, formatLevelReachedStat, formatLockedCount, formatNextStageStat, formatReachedStageStat, formatRestartCountdown, formatRerollLabel, formatStageClearTitle, formatStageLabel, formatSurvivedStat, formatTotalKillsStat, formatXpLabel, getGameTitleLines, getLanguage, getLanguageButtonLabel, getTagLabel, getUiText, getWeaponName, uiFont } from './i18n';
-import { loadRecords, loadSettings, saveSettings, RecordUpdateResult } from './storage';
+import { Language, formatBossTitle, formatCombo, formatHudWeaponLevel, formatHullLabel, formatKillsStat, formatLevelReachedStat, formatLockedCount, formatNextStageStat, formatReachedStageStat, formatRestartCountdown, formatRerollLabel, formatStageClearTitle, formatStageLabel, formatSurvivedStat, formatTotalKillsStat, formatXpLabel, getLanguage, getLanguageButtonLabel, getTagLabel, getUiText, getWeaponName, uiFont } from './i18n';
+import { loadSettings, saveSettings, RecordUpdateResult } from './storage';
 import { audio } from './audio';
 import { wrappedDelta } from './utils';
 import { formatTime, TWO_PI, easeOutCubic, roundedRect } from './utils';
@@ -92,6 +93,7 @@ export class UI {
     const bottomInset = safe.bottom + margin;
 
     // ── Timer (or SLAY prompt during boss fight)
+    drawHudFrame(ctx, w, h, leftInset, topInset, rightInset, player, game);
     ctx.save();
     ctx.textAlign = 'center';
     if (game.bossEngaged) {
@@ -122,7 +124,7 @@ export class UI {
     if (hpRatio < 0.35) {
       ctx.fillStyle = 'rgba(255, 120, 120, 0.65)';
       ctx.font = uiFont(12);
-      ctx.fillText(getUiText('critical'), leftInset, topInset + 36);
+      ctx.fillText(getUiText('critical'), leftInset, topInset + 84);
     }
 
     ctx.font = uiFont(11);
@@ -226,7 +228,7 @@ export class UI {
   ): void {
     const owned = WEAPON_ORDER.filter(entry => wm.hasWeapon(entry.name));
     const lockedCount = WEAPON_ORDER.length - owned.length;
-    const rows = compactHud ? owned.length : WEAPON_ORDER.length;
+    const rows = owned.length;
     const rowH = 19;
     const panelH = 22 + rows * rowH + (compactHud && lockedCount > 0 ? 16 : 10);
     const panelW = compactHud ? 168 : 196;
@@ -249,7 +251,7 @@ export class UI {
     let wy = panelY + 34;
     for (const entry of WEAPON_ORDER) {
       const weapon = wm.getWeapon(entry.name);
-      if (!weapon && compactHud) continue;
+      if (!weapon) continue;
 
       const drawIcon = WEAPON_SHAPES[entry.name];
       if (drawIcon) {
@@ -507,89 +509,7 @@ export class UI {
   }
 
   drawTitleScreen(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const cx = w / 2;
-    const cy = h / 2;
-    const t = this.stateAge;
-
-    const titleAlpha = Math.min(1, t * 2);
-
-    const glowPulse = 0.6 + 0.4 * Math.sin(t * 1.5);
-    const titleGrad = ctx.createRadialGradient(cx, cy - 40, 0, cx, cy - 40, 300);
-    titleGrad.addColorStop(0, `rgba(80, 160, 255, ${0.06 * glowPulse * titleAlpha})`);
-    titleGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = titleGrad;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.textAlign = 'center';
-    const compactTitle = w < 500;
-    const titleSize = compactTitle
-      ? Math.max(24, Math.min(34, Math.floor(w * 0.09)))
-      : Math.max(30, Math.min(52, Math.floor(w * 0.13)));
-    ctx.font = uiFont(titleSize, 'bold');
-
-    const titleLines = getGameTitleLines(compactTitle);
-    if (titleLines.length === 2) {
-      ctx.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
-      ctx.fillText(titleLines[0], cx, cy - 44);
-      ctx.fillText(titleLines[1], cx, cy - 6);
-      ctx.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
-      ctx.fillText(titleLines[0], cx + 1, cy - 43);
-      ctx.fillText(titleLines[1], cx + 1, cy - 5);
-      ctx.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
-      ctx.fillText(titleLines[0], cx, cy - 44);
-      ctx.fillText(titleLines[1], cx, cy - 6);
-    } else {
-      ctx.fillStyle = `rgba(80, 180, 255, ${0.12 * titleAlpha})`;
-      ctx.fillText(titleLines[0], cx, cy - 30);
-      ctx.fillStyle = `rgba(80, 180, 255, ${0.08 * titleAlpha})`;
-      ctx.fillText(titleLines[0], cx + 1, cy - 29);
-      ctx.fillStyle = `rgba(255, 255, 255, ${titleAlpha})`;
-      ctx.fillText(titleLines[0], cx, cy - 30);
-    }
-
-    const subAlpha = Math.max(0, Math.min(1, (t - 0.5) * 2));
-    ctx.font = uiFont(w < 500 ? 12 : 14);
-    ctx.fillStyle = `rgba(255, 120, 140, ${subAlpha * 0.75})`;
-    ctx.fillText(getUiText('titleSubtitle'), cx, cy + Math.max(0, titleSize * 0.55 - 18));
-
-    const promptAlpha = Math.max(0, Math.min(1, (t - 1) * 2));
-    const rm = loadSettings().reducedMotion;
-    const breathe = rm ? 0.75 : 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3));
-    ctx.font = uiFont(w < 500 ? 14 : 16);
-    ctx.fillStyle = `rgba(255, 255, 255, ${promptAlpha * breathe})`;
-    const startMsg = isTouchDevice() ? getUiText('tapToStart') : getUiText('pressAnyKeyToStart');
-    ctx.fillText(startMsg, cx, cy + 60);
-
-    const helpAlpha = Math.max(0, Math.min(1, (t - 1.3) * 2));
-    const isTouch = isTouchDevice();
-    ctx.font = uiFont(w < 500 ? (isTouch ? 12 : 11) : 13);
-    ctx.fillStyle = `rgba(160, 200, 255, ${helpAlpha * 0.5})`;
-    ctx.fillText(getUiText(isTouch ? 'titleHintPrimaryMobile' : 'titleHintPrimary'), cx, cy + (w < 500 ? 88 : 95));
-    if (w < 500) {
-      ctx.fillText(getUiText('titleHintSecondaryCompact'), cx, cy + 106);
-    } else {
-      ctx.fillText(getUiText('titleHintSecondaryWide'), cx, cy + 116);
-    }
-
-    // Records strip (hidden on short/landscape viewports to avoid collisions)
-    const records = loadRecords();
-    if (records.runsPlayed > 0 && h >= 500) {
-      const recAlpha = Math.max(0, Math.min(1, (t - 1.6) * 2));
-      ctx.font = uiFont(11);
-      ctx.fillStyle = `rgba(255, 215, 130, ${recAlpha * 0.55})`;
-      const recordLine = `${getUiText('bestStageStat')} ${records.bestStage}   •   ${getUiText('bestComboStat')} ${records.bestCombo}   •   ${getUiText('runsStat')} ${records.runsPlayed}`;
-      ctx.fillText(recordLine, cx, h - 96);
-    }
-
-    // Version tag
-    ctx.font = uiFont(10);
-    ctx.fillStyle = 'rgba(160, 200, 255, 0.3)';
-    ctx.textAlign = 'right';
-    ctx.fillText(getUiText('versionTag'), w - 12, 18);
-    ctx.textAlign = 'center';
-
+    drawObservatoryTitle(ctx, canvas, this.stateAge);
     this.drawLanguageSelector(ctx, canvas);
   }
 
@@ -599,9 +519,9 @@ export class UI {
     const canvasWidth = canvas.clientWidth;
 
     ctx.textAlign = 'center';
-    for (let i = 0; i < notifications.length; i++) {
+    for (let i = 0; i < Math.min(3, notifications.length); i++) {
       const n = notifications[i];
-      const y = 86 + i * 42;
+      const y = getSafeAreaInsets().top + getTouchUiMargin() + 112 + i * 38;
       const isUnlock = n.kind === 'unlock';
       const isDanger = n.kind === 'danger';
       const accent = isUnlock
@@ -677,13 +597,13 @@ export class UI {
       const iconY = card.y + (compact ? 24 : 32);
 
       ctx.beginPath();
-      roundedRect(ctx, card.x, card.y, card.width, card.height, 14);
+      roundedRect(ctx, card.x, card.y, card.width, card.height, 8);
       ctx.fillStyle = isSelected
-        ? choice.kind === 'unlock' ? 'rgba(54, 38, 16, 0.94)' : 'rgba(20, 28, 54, 0.94)'
+        ? choice.kind === 'unlock' ? 'rgba(54, 38, 16, 0.94)' : 'rgba(13, 43, 49, 0.97)'
         : choice.kind === 'unlock' ? 'rgba(40, 30, 14, 0.88)' : 'rgba(14, 20, 38, 0.88)';
       ctx.fill();
       ctx.strokeStyle = isSelected
-        ? choice.kind === 'unlock' ? 'rgba(255, 210, 135, 0.9)' : 'rgba(170, 220, 255, 0.85)'
+        ? choice.kind === 'unlock' ? 'rgba(255, 210, 135, 0.9)' : 'rgba(115, 245, 215, 0.9)'
         : choice.kind === 'unlock' ? 'rgba(255, 195, 110, 0.45)' : 'rgba(120, 190, 255, 0.35)';
       ctx.lineWidth = isSelected ? 2.5 : 1.5;
       ctx.stroke();

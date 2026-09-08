@@ -1,4 +1,5 @@
 import { Player } from './player';
+import { wrappedDelta } from './utils';
 
 export class WorldMotionTracker {
   private prevPlayerX: number;
@@ -26,8 +27,7 @@ export class WorldMotionTracker {
 
   sample(player: Player, dt: number): void {
     if (dt > 0) {
-      const dx = player.x - this.prevPlayerX;
-      const dy = player.y - this.prevPlayerY;
+      const { x: dx, y: dy } = wrappedDelta(this.prevPlayerX, this.prevPlayerY, player.x, player.y);
       this.playerVx = dx / dt;
       this.playerVy = dy / dt;
       this.playerSpeed = Math.sqrt(this.playerVx * this.playerVx + this.playerVy * this.playerVy);

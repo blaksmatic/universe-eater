@@ -1,285 +1,187 @@
-import { MAP_WIDTH, MAP_HEIGHT, randomRange, TWO_PI } from './utils';
+﻿import { MAP_WIDTH, MAP_HEIGHT, randomRange, TWO_PI } from './utils';
 import { Camera } from './camera';
 import { loadSettings } from './storage';
 
-const PARALLAX_FACTORS = [0.2, 0.5, 0.8] as const;
+const PARALLAX = [0.2, 0.5, 0.8];
+const TINTS = ['225,240,255', '130,185,255', '255,223,177', '194,169,255', '139,241,222'];
+const NEBULA_TINTS = ['103,60,204', '35,102,171', '78,66,155', '25,142,150'];
+const wrap = (value: number, span: number): number => ((value % span) + span) % span;
+type SpriteCanvas = HTMLCanvasElement | OffscreenCanvas;
 
-interface Star {
-  x: number;
-  y: number;
-  layer: number;
-  size: number;
-  brightness: number;
-  twinkleSpeed: number;
-  twinkleOffset: number;
-  tint: [number, number, number];
+/** Never use wx.createCanvas(): its first canvas may be the visible game surface. */
+function createSprite(size: number): SpriteCanvas | null {
+  try {
+    if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(size, size);
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      return canvas;
+    }
+    const runtime = (globalThis as unknown as {
+      wx?: { createOffscreenCanvas?: (options: { type: string; width: number; height: number }) => SpriteCanvas };
+    }).wx;
+    return runtime?.createOffscreenCanvas?.({ type: '2d', width: size, height: size }) ?? null;
+  } catch {
+    return null;
+  }
 }
 
-interface Nebula {
-  x: number;
-  y: number;
-  radius: number;
-  color: [number, number, number];
-  alpha: number;
-}
-
-interface DustParticle {
-  x: number;
-  y: number;
-  size: number;
-  alpha: number;
-  vx: number;
-  vy: number;
-}
-
-const STAR_TINTS: [number, number, number][] = [
-  [235, 242, 255],  // ice white
-  [170, 205, 255],  // blue
-  [255, 230, 190],  // warm
-  [210, 180, 255],  // violet
-  [160, 255, 235],  // teal
-];
-
-function createStar(layer: number): Star {
-  return {
-    x: Math.random() * MAP_WIDTH,
-    y: Math.random() * MAP_HEIGHT,
-    layer,
-    size: layer === 0 ? randomRange(0.5, 1) : layer === 1 ? randomRange(1, 2) : randomRange(1.5, 3),
-    brightness: randomRange(0.35, 1.0),
-    twinkleSpeed: randomRange(0.5, 2.0),
-    twinkleOffset: Math.random() * TWO_PI,
-    tint: STAR_TINTS[Math.floor(Math.random() * STAR_TINTS.length)],
-  };
-}
-
-function createNebula(): Nebula {
-  const colors: [number, number, number][] = [
-    [120, 60, 220],    // violet
-    [40, 110, 230],    // azure
-    [220, 60, 160],    // magenta
-    [30, 180, 200],    // teal
-    [90, 60, 255],     // deep indigo
-  ];
-  return {
-    x: Math.random() * MAP_WIDTH,
-    y: Math.random() * MAP_HEIGHT,
-    radius: randomRange(320, 900),
-    color: colors[Math.floor(Math.random() * colors.length)],
-    alpha: randomRange(0.05, 0.11),
-  };
-}
-
-function createDust(): DustParticle {
-  return {
-    x: Math.random() * MAP_WIDTH,
-    y: Math.random() * MAP_HEIGHT,
-    size: randomRange(0.5, 1.5),
-    alpha: randomRange(0.1, 0.3),
-    vx: randomRange(-5, 5),
-    vy: randomRange(-5, 5),
-  };
+function glowSprite(tint: string, nebula: boolean): SpriteCanvas | null {
+  const size = nebula ? 384 : 48;
+  const canvas = createSprite(size);
+  if (!canvas) return null;
+  try {
+    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    if (!ctx) return null;
+    const clouds = nebula ? [[0.48, 0.51, 0.46], [0.32, 0.4, 0.28], [0.65, 0.58, 0.26]] : [[0.5, 0.5, 0.5]];
+    for (const [x, y, radius] of clouds) {
+      const gradient = ctx.createRadialGradient(x * size, y * size, 0, x * size, y * size, radius * size);
+      gradient.addColorStop(0, `rgba(${tint},${nebula ? 0.7 : 0.65})`);
+      gradient.addColorStop(0.35, `rgba(${tint},${nebula ? 0.28 : 0.12})`);
+      gradient.addColorStop(1, `rgba(${tint},0)`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+    }
+    return canvas;
+  } catch {
+    return null;
+  }
 }
 
 export class Background {
-  private stars: Star[] = [];
-  private nebulae: Nebula[] = [];
-  private dust: DustParticle[] = [];
+  private starGlows = TINTS.map(tint => glowSprite(tint, false));
+  private nebulaGlows = NEBULA_TINTS.map(tint => glowSprite(tint, true));
+  private stars = Array.from({ length: 380 }, (_, i) => ({
+    x: Math.random() * MAP_WIDTH,
+    y: Math.random() * MAP_HEIGHT,
+    layer: i < 220 ? 0 : i < 330 ? 1 : 2,
+    size: i < 220 ? randomRange(0.45, 0.85) : i < 330 ? randomRange(0.8, 1.4) : randomRange(1.3, 2.2),
+    brightness: randomRange(0.22, 0.72),
+    twinkleSpeed: randomRange(0.3, 1.2),
+    phase: Math.random() * TWO_PI,
+    tint: Math.floor(Math.random() * TINTS.length),
+  }));
+  private nebulae = Array.from({ length: 7 }, (_, i) => ({
+    x: (i * 0.618 + 0.25) % 1,
+    y: (i * 0.382 + 0.35) % 1,
+    radius: randomRange(400, 720),
+    tint: i % NEBULA_TINTS.length,
+    alpha: randomRange(0.17, 0.26),
+  }));
+  private dust = Array.from({ length: 36 }, () => ({
+    x: Math.random() * MAP_WIDTH,
+    y: Math.random() * MAP_HEIGHT,
+    size: randomRange(0.4, 1),
+    alpha: randomRange(0.06, 0.18),
+    vx: randomRange(-3, 3),
+    vy: randomRange(-3, 3),
+  }));
   private driftIntensity = 0;
   private velocityX = 0;
   private velocityY = 0;
 
-  constructor() {
-    for (let i = 0; i < 300; i++) this.stars.push(createStar(0));
-    for (let i = 0; i < 150; i++) this.stars.push(createStar(1));
-    for (let i = 0; i < 90; i++) this.stars.push(createStar(2));
-    for (let i = 0; i < 8; i++) this.nebulae.push(createNebula());
-    for (let i = 0; i < 60; i++) this.dust.push(createDust());
-  }
-
   update(dt: number, playerSpeed = 0, vx = 0, vy = 0): void {
-    // Smoothly ramp drift intensity up when idle, down when moving
-    const targetDrift = playerSpeed < 10 ? 1 : 0;
-    const rampSpeed = 3; // transitions over ~0.3 seconds
-    this.driftIntensity += (targetDrift - this.driftIntensity) * Math.min(1, rampSpeed * dt);
-
-    // Smooth velocity tracking for star streaking
-    const smoothing = Math.min(1, 8 * dt);
-    this.velocityX += (vx - this.velocityX) * smoothing;
-    this.velocityY += (vy - this.velocityY) * smoothing;
-
+    this.driftIntensity += ((playerSpeed < 10 ? 1 : 0) - this.driftIntensity) * Math.min(1, 3 * dt);
+    this.velocityX += (vx - this.velocityX) * Math.min(1, 8 * dt);
+    this.velocityY += (vy - this.velocityY) * Math.min(1, 8 * dt);
+    if (loadSettings().reducedMotion) return;
     for (const d of this.dust) {
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
-      if (d.x < 0) d.x += MAP_WIDTH;
-      if (d.x >= MAP_WIDTH) d.x -= MAP_WIDTH;
-      if (d.y < 0) d.y += MAP_HEIGHT;
-      if (d.y >= MAP_HEIGHT) d.y -= MAP_HEIGHT;
+      d.x = wrap(d.x + d.vx * dt, MAP_WIDTH);
+      d.y = wrap(d.y + d.vy * dt, MAP_HEIGHT);
     }
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
-    // Nebulae (furthest back) — fewer when on low quality for fill-rate saving
-    let nebulaeCount = this.nebulae.length;
-    try {
-      const q = loadSettings().particleQuality;
-      if (q === 'low') nebulaeCount = 4;
-      else if (q === 'medium') nebulaeCount = 6;
-    } catch { /* ignore */ }
-    for (let ni = 0; ni < nebulaeCount; ni++) {
-      const n = this.nebulae[ni];
-      const px = n.x - camera.x * 0.3;
-      const py = n.y - camera.y * 0.3;
-      // Quick viewport cull for nebulae
-      if (px < -n.radius || px > camera.width + n.radius || py < -n.radius || py > camera.height + n.radius) continue;
-      const gradient = ctx.createRadialGradient(px, py, 0, px, py, n.radius);
-      gradient.addColorStop(0, `rgba(${n.color[0]}, ${n.color[1]}, ${n.color[2]}, ${n.alpha})`);
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(px - n.radius, py - n.radius, n.radius * 2, n.radius * 2);
+    if (camera.width <= 0 || camera.height <= 0) return;
+    const { particleQuality: quality, reducedMotion: reduced } = loadSettings();
+    const count = quality === 'low' ? 3 : quality === 'medium' ? 5 : this.nebulae.length;
+    ctx.save();
+    for (let i = 0; i < count; i++) {
+      const n = this.nebulae[i];
+      const spanX = camera.width + n.radius * 2;
+      const spanY = camera.height + n.radius * 2;
+      // Viewport tiling keeps clouds visible throughout the enormous world.
+      const x = wrap(n.x * spanX - camera.x * 0.06, spanX) - n.radius;
+      const y = wrap(n.y * spanY - camera.y * 0.06, spanY) - n.radius;
+      const sprite = this.nebulaGlows[n.tint];
+      if (sprite) {
+        ctx.globalAlpha = n.alpha;
+        ctx.drawImage(sprite, x - n.radius, y - n.radius * 0.65, n.radius * 2, n.radius * 1.3);
+      }
     }
-
-    // Stars with parallax, perspective scaling, and motion streaking
-    const parallaxFactors = PARALLAX_FACTORS;
+    ctx.globalAlpha = 1;
+    const speed = reduced ? 0 : Math.hypot(this.velocityX, this.velocityY);
+    const oscillation = reduced ? 0 : Math.sin(time * 0.4) * 0.5 + 0.5;
     const cx = camera.width / 2;
     const cy = camera.height / 2;
-    const speed = Math.sqrt(this.velocityX * this.velocityX + this.velocityY * this.velocityY);
-    const streakFactors = [0, 0.03, 0.07]; // far stars don't streak, close ones do
-
-    // Quality gate — skip faintest layer on low, reduce halos
-    let quality: string = 'high';
-    let reduced = false;
-    try {
-      const s = loadSettings();
-      quality = s.particleQuality;
-      reduced = s.reducedMotion;
-    } catch { /* ignore */ }
-    const skipFarLayer = quality === 'low';
-    const skipGlow = quality === 'low' || reduced;
-
+    const streakFactors = [0, 0.012, 0.025];
+    const driftFactors = [3, 7, 12];
+    ctx.lineCap = 'round';
     for (const star of this.stars) {
-      if (skipFarLayer && star.layer === 0) continue;
-      const factor = parallaxFactors[star.layer];
-      const sx = star.x - camera.x * factor;
-      const sy = star.y - camera.y * factor;
-      let screenX = ((sx % camera.width) + camera.width) % camera.width;
-      let screenY = ((sy % camera.height) + camera.height) % camera.height;
-
-      // Perspective scaling: skip sqrt on low quality (flat size)
-      let drawSize: number;
-      let offX = 0;
-      let offY = 0;
-      if (quality === 'low') {
-        drawSize = star.size;
-      } else {
-        offX = (screenX - cx) / cx; // -1..1
-        offY = (screenY - cy) / cy;
-        const edgeDist = Math.sqrt(offX * offX + offY * offY); // 0 at center, ~1.4 at corners
-        const perspScale = 1 + edgeDist * 0.075 * (star.layer * 0.5);
-        drawSize = star.size * perspScale;
+      if (quality === 'low' && star.layer === 0) continue;
+      let x = wrap(star.x - camera.x * PARALLAX[star.layer], camera.width);
+      let y = wrap(star.y - camera.y * PARALLAX[star.layer], camera.height);
+      const drift = driftFactors[star.layer] * oscillation * this.driftIntensity;
+      x += ((x - cx) / cx) * drift;
+      y += ((y - cy) / cy) * drift;
+      const twinkle = reduced ? 0.8 : 0.8 + 0.2 * Math.sin(time * star.twinkleSpeed + star.phase);
+      const alpha = star.brightness * twinkle * (star.layer === 0 ? 0.65 : 1);
+      const tint = TINTS[star.tint];
+      const glow = this.starGlows[star.tint];
+      if (quality !== 'low' && star.layer === 2 && glow) {
+        const radius = star.size * 5;
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.drawImage(glow, x - radius, y - radius, radius * 2, radius * 2);
+        ctx.globalAlpha = 1;
       }
-
-      // Idle star drift — disabled on reducedMotion
-      if (!reduced && this.driftIntensity > 0.01) {
-        // Compute offX/offY if we skipped them above
-        if (quality === 'low') {
-          offX = (screenX - cx) / cx;
-          offY = (screenY - cy) / cy;
-        }
-        const driftFactor = [5, 12, 20][star.layer];
-        const oscillation = Math.sin(time * 0.4) * 0.5 + 0.5;
-        screenX += offX * driftFactor * oscillation * this.driftIntensity;
-        screenY += offY * driftFactor * oscillation * this.driftIntensity;
-      }
-
-      const twinkle = 0.55 + 0.45 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
-      const alpha = star.brightness * twinkle;
-
-      // Depth-of-field: far layer stars are softer
-      const dofAlpha = star.layer === 0 ? alpha * 0.55 : alpha;
-      const [tr, tg, tb] = star.tint;
-
-      // Colored glow halo for foreground stars — skip on low/reduced for fill-rate
-      if (!skipGlow && star.layer === 2 && star.size > 1.8) {
-        const glowR = drawSize * 4;
-        const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, glowR);
-        glow.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha * 0.4})`);
-        glow.addColorStop(1, `rgba(${tr}, ${tg}, ${tb}, 0)`);
-        ctx.fillStyle = glow;
+      const streak = Math.min(12, speed * streakFactors[star.layer]);
+      if (streak > 1) {
+        const dx = this.velocityX / speed * streak;
+        const dy = this.velocityY / speed * streak;
+        ctx.strokeStyle = `rgba(${tint},${alpha * 0.75})`;
+        ctx.lineWidth = star.size * 0.8;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, glowR, 0, TWO_PI);
-        ctx.fill();
-      }
-
-      // Motion streaking: elongate stars in velocity direction when moving
-      const streakLen = speed * streakFactors[star.layer];
-      if (streakLen > 1) {
-        const nx = this.velocityX / speed;
-        const ny = this.velocityY / speed;
-        ctx.beginPath();
-        ctx.moveTo(screenX - nx * streakLen, screenY - ny * streakLen);
-        ctx.lineTo(screenX + nx * streakLen, screenY + ny * streakLen);
-        ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha * 0.75})`;
-        ctx.lineWidth = drawSize * 0.8;
-        ctx.lineCap = 'round';
+        ctx.moveTo(x - dx, y - dy);
+        ctx.lineTo(x + dx, y + dy);
         ctx.stroke();
       } else {
-        ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${dofAlpha})`;
+        ctx.fillStyle = `rgba(${tint},${alpha})`;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, drawSize, 0, TWO_PI);
+        ctx.arc(x, y, star.size, 0, TWO_PI);
         ctx.fill();
       }
     }
-
-    // Cosmic dust — skip on low quality (saves worldToScreen per dust)
-    const drawDust = quality !== 'low';
-    if (drawDust) {
+    if (quality !== 'low') {
       for (const d of this.dust) {
-        const screen = camera.worldToScreen(d.x, d.y);
-        if (screen.x < -10 || screen.x > camera.width + 10 ||
-            screen.y < -10 || screen.y > camera.height + 10) continue;
-        ctx.fillStyle = `rgba(150, 190, 255, ${d.alpha})`;
-        ctx.beginPath();
-        ctx.arc(screen.x, screen.y, d.size, 0, TWO_PI);
-        ctx.fill();
+        const x = wrap(d.x - camera.x * 0.65, camera.width + 20) - 10;
+        const y = wrap(d.y - camera.y * 0.65, camera.height + 20) - 10;
+        ctx.fillStyle = `rgba(140,185,210,${d.alpha})`;
+        ctx.fillRect(x, y, d.size, d.size);
       }
     }
+    ctx.restore();
   }
 
   drawWrapZone(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const padding = 200;
-
-    if (camera.x < padding) {
-      const w = padding - camera.x;
-      const gradient = ctx.createLinearGradient(0, 0, w, 0);
-      gradient.addColorStop(0, 'rgba(30, 0, 60, 0.4)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    const edges = [
+      [0, 0, Math.max(0, padding - camera.x), camera.height],
+      [Math.max(0, MAP_WIDTH - padding - camera.x), 0, Math.max(0, camera.x + camera.width - MAP_WIDTH + padding), camera.height],
+      [0, 0, camera.width, Math.max(0, padding - camera.y)],
+      [0, Math.max(0, MAP_HEIGHT - padding - camera.y), camera.width, Math.max(0, camera.y + camera.height - MAP_HEIGHT + padding)],
+    ];
+    ctx.save();
+    for (let i = 0; i < edges.length; i++) {
+      const [x, y, w, h] = edges[i];
+      if (w <= 0 || h <= 0) continue;
+      const vertical = i >= 2;
+      const reverse = i % 2 === 1;
+      const gradient = ctx.createLinearGradient(x, y, vertical ? x : x + w, vertical ? y + h : y);
+      gradient.addColorStop(reverse ? 1 : 0, 'rgba(63,91,155,0.18)');
+      gradient.addColorStop(reverse ? 0 : 1, 'rgba(20,30,60,0)');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, w, camera.height);
+      ctx.fillRect(x, y, w, h);
     }
-    if (camera.x + camera.width > MAP_WIDTH - padding) {
-      const start = Math.max(0, camera.width - (camera.x + camera.width - (MAP_WIDTH - padding)));
-      const gradient = ctx.createLinearGradient(camera.width, 0, start, 0);
-      gradient.addColorStop(0, 'rgba(30, 0, 60, 0.4)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(start, 0, camera.width - start, camera.height);
-    }
-    if (camera.y < padding) {
-      const h = padding - camera.y;
-      const gradient = ctx.createLinearGradient(0, 0, 0, h);
-      gradient.addColorStop(0, 'rgba(30, 0, 60, 0.4)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, camera.width, h);
-    }
-    if (camera.y + camera.height > MAP_HEIGHT - padding) {
-      const start = Math.max(0, camera.height - (camera.y + camera.height - (MAP_HEIGHT - padding)));
-      const gradient = ctx.createLinearGradient(0, camera.height, 0, start);
-      gradient.addColorStop(0, 'rgba(30, 0, 60, 0.4)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, start, camera.width, camera.height - start);
-    }
+    ctx.restore();
   }
 }
